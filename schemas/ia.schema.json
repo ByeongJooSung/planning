@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "nodes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "systemCode": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+          },
+          "parentId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "MENU",
+              "PAGE",
+              "POPUP",
+              "LAYER",
+              "TAB",
+              "EXTERNAL"
+            ]
+          },
+          "loginRequired": {
+            "default": false,
+            "type": "boolean"
+          },
+          "roles": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "change": {
+            "default": "NEW",
+            "type": "string",
+            "enum": [
+              "NEW",
+              "CHANGED",
+              "DELETED",
+              "KEPT"
+            ]
+          },
+          "changeReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "systemCode",
+          "name",
+          "kind"
+        ]
+      }
+    },
+    "retiredIds": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

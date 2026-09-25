@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "requirements": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "originalId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "type": {
+            "default": "FUNCTIONAL",
+            "type": "string",
+            "enum": [
+              "FUNCTIONAL",
+              "NON_FUNCTIONAL",
+              "POLICY",
+              "CONTENT",
+              "CONSTRAINT"
+            ]
+          },
+          "priority": {
+            "default": "MUST",
+            "type": "string",
+            "enum": [
+              "MUST",
+              "SHOULD",
+              "COULD"
+            ]
+          },
+          "sources": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                },
+                "locator": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sourceId"
+              ]
+            }
+          },
+          "status": {
+            "default": "ACTIVE",
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "EXCLUDED",
+              "DELETED"
+            ]
+          },
+          "excludeReason": {
+            "type": "string"
+          },
+          "ambiguous": {
+            "default": false,
+            "type": "boolean"
+          },
+          "tasks": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "systemCode": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+                },
+                "actor": {
+                  "default": "",
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "after": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "transition": {
+                  "type": "object",
+                  "properties": {
+                    "stateSetId": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "to"
+                  ]
+                },
+                "noScreenReason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "systemCode",
+                "action"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      }
+    }
+  }
+}

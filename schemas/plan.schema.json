@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "sections": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "type": "string"
+          },
+          "requirementIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      }
+    },
+    "features": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "systemCode": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "taskIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "change": {
+            "default": "NEW",
+            "type": "string",
+            "enum": [
+              "NEW",
+              "CHANGED",
+              "DELETED",
+              "KEPT"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "systemCode"
+        ]
+      }
+    }
+  }
+}

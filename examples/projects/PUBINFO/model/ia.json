@@ -1,0 +1,164 @@
+{
+  "nodes": [
+    {
+      "id": "M-PUB-INF",
+      "systemCode": "PUB",
+      "parentId": null,
+      "name": "정보공개",
+      "kind": "MENU",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [],
+      "change": "NEW"
+    },
+    {
+      "id": "PUB_INF_LST_010",
+      "systemCode": "PUB",
+      "parentId": "M-PUB-INF",
+      "name": "정보공개 목록",
+      "kind": "PAGE",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T05"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "PUB_INF_DTL_010",
+      "systemCode": "PUB",
+      "parentId": "M-PUB-INF",
+      "name": "정보공개 상세",
+      "kind": "PAGE",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T05"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "PUB_MAIN_HOME_010",
+      "systemCode": "PUB",
+      "parentId": null,
+      "name": "메인",
+      "kind": "PAGE",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [],
+      "change": "NEW"
+    },
+    {
+      "id": "M-CVL-MEM",
+      "systemCode": "CVL",
+      "parentId": null,
+      "name": "회원",
+      "kind": "MENU",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [],
+      "change": "NEW"
+    },
+    {
+      "id": "CVL_MEM_JOIN_010",
+      "systemCode": "CVL",
+      "parentId": "M-CVL-MEM",
+      "name": "회원가입",
+      "kind": "PAGE",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [
+        "SFR-001-T01"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "CVL_MEM_LOGIN_010",
+      "systemCode": "CVL",
+      "parentId": "M-CVL-MEM",
+      "name": "로그인",
+      "kind": "PAGE",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [
+        "SFR-001-T02"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "M-CVL-INF",
+      "systemCode": "CVL",
+      "parentId": null,
+      "name": "정보공개",
+      "kind": "MENU",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [],
+      "change": "NEW"
+    },
+    {
+      "id": "CVL_INF_REG_010",
+      "systemCode": "CVL",
+      "parentId": "M-CVL-INF",
+      "name": "정보공개 자료 등록",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T01"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "CVL_INF_STS_010",
+      "systemCode": "CVL",
+      "parentId": "M-CVL-INF",
+      "name": "처리 현황",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T04"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "M-ADM-INF",
+      "systemCode": "ADM",
+      "parentId": null,
+      "name": "정보공개 심사",
+      "kind": "MENU",
+      "loginRequired": false,
+      "roles": [],
+      "taskIds": [],
+      "change": "NEW"
+    },
+    {
+      "id": "ADM_INF_REV_010",
+      "systemCode": "ADM",
+      "parentId": "M-ADM-INF",
+      "name": "심사 목록·상세",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T02"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "ADM_INF_REV_010_P01",
+      "systemCode": "ADM",
+      "parentId": "ADM_INF_REV_010",
+      "name": "승인·반려 처리",
+      "kind": "POPUP",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "SFR-002-T03"
+      ],
+      "change": "NEW"
+    }
+  ],
+  "retiredIds": []
+}

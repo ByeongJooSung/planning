@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "code": "SHOPMY",
+  "name": "쇼핑몰 주문 내역 개선",
+  "serviceType": "EXISTING",
+  "changeScope": "MODIFY",
+  "channels": [
+    "PC_WEB"
+  ],
+  "submissionTemplate": "GENERAL",
+  "screenIdRule": {
+    "pattern": "{system}_{d1}_{d2}_{seq}",
+    "seqStart": 10,
+    "seqStep": 10,
+    "seqDigits": 3,
+    "popupSuffix": "_P{nn}"
+  },
+  "requirementIdMode": "GENERATED",
+  "version": "0.1",
+  "stages": {
+    "S0": "CONFIRMED",
+    "S0A": "CONFIRMED",
+    "S1": "CONFIRMED",
+    "S2": "SKIPPED",
+    "S3": "NOT_STARTED",
+    "S4": "DRAFTED",
+    "S5": "NOT_STARTED"
+  },
+  "createdAt": "2026-09-25T09:00:00.000Z",
+  "updatedAt": "2026-09-25T09:00:00.000Z"
+}

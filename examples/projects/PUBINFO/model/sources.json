@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "id": "SRC-001",
+      "kind": "FILE",
+      "title": "제안요청서(RFP)",
+      "location": "sources/rfp.pdf",
+      "addedAt": "2026-09-25T09:00:00.000Z"
+    }
+  ]
+}

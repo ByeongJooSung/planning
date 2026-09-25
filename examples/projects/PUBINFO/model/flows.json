@@ -1,0 +1,155 @@
+{
+  "flows": [
+    {
+      "id": "PF-01",
+      "kind": "PROCESS",
+      "title": "정보공개 처리 프로세스",
+      "lanes": [
+        {
+          "id": "L-CVL",
+          "label": "민원포털 · 민원인",
+          "systemCode": "CVL"
+        },
+        {
+          "id": "L-ADM",
+          "label": "심사자 시스템 · 심사자",
+          "systemCode": "ADM"
+        },
+        {
+          "id": "L-PUB",
+          "label": "대국민 포털",
+          "systemCode": "PUB"
+        },
+        {
+          "id": "L-EXT",
+          "label": "외부 연계",
+          "systemCode": "EXT"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "n1",
+          "shape": "TERMINATOR",
+          "label": "시작",
+          "lane": "L-CVL",
+          "taskIds": [],
+          "change": "NEW"
+        },
+        {
+          "id": "n2",
+          "shape": "PROCESS",
+          "label": "자료 등록·공개 신청",
+          "lane": "L-CVL",
+          "screenId": "CVL_INF_REG_010",
+          "taskIds": [
+            "SFR-002-T01"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n3",
+          "shape": "PROCESS",
+          "label": "내용 검토",
+          "lane": "L-ADM",
+          "screenId": "ADM_INF_REV_010",
+          "taskIds": [
+            "SFR-002-T02"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n4",
+          "shape": "DECISION",
+          "label": "승인?",
+          "lane": "L-ADM",
+          "taskIds": [
+            "SFR-002-T03"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n5",
+          "shape": "PROCESS",
+          "label": "보완 후 재신청",
+          "lane": "L-CVL",
+          "screenId": "CVL_INF_STS_010",
+          "taskIds": [
+            "SFR-002-T04"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n6",
+          "shape": "PROCESS",
+          "label": "대국민 공개",
+          "lane": "L-PUB",
+          "screenId": "PUB_INF_LST_010",
+          "taskIds": [
+            "SFR-002-T05"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n7",
+          "shape": "IO",
+          "label": "정보공개 포털 전송",
+          "lane": "L-EXT",
+          "taskIds": [
+            "SFR-002-T06"
+          ],
+          "change": "NEW"
+        },
+        {
+          "id": "n8",
+          "shape": "TERMINATOR",
+          "label": "종료",
+          "lane": "L-PUB",
+          "taskIds": [],
+          "change": "NEW"
+        }
+      ],
+      "edges": [
+        {
+          "from": "n1",
+          "to": "n2",
+          "label": ""
+        },
+        {
+          "from": "n2",
+          "to": "n3",
+          "label": ""
+        },
+        {
+          "from": "n3",
+          "to": "n4",
+          "label": ""
+        },
+        {
+          "from": "n4",
+          "to": "n6",
+          "label": "승인"
+        },
+        {
+          "from": "n4",
+          "to": "n5",
+          "label": "반려"
+        },
+        {
+          "from": "n5",
+          "to": "n3",
+          "label": "재신청"
+        },
+        {
+          "from": "n6",
+          "to": "n7",
+          "label": ""
+        },
+        {
+          "from": "n7",
+          "to": "n8",
+          "label": ""
+        }
+      ]
+    }
+  ]
+}

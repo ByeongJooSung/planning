@@ -1,0 +1,44 @@
+{
+  "reviews": [],
+  "notes": {},
+  "history": [
+    {
+      "requirementId": "REQ-001",
+      "at": "2026-09-25T09:00:00.000Z",
+      "kind": "ADDED",
+      "detail": "주문 내역 기간 조회 필터 추가"
+    },
+    {
+      "requirementId": "REQ-001",
+      "at": "2026-09-25T09:00:00.000Z",
+      "kind": "TASKS_CHANGED",
+      "detail": "REQ-001-T01 추가 [USR] 기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회"
+    },
+    {
+      "requirementId": "REQ-002",
+      "at": "2026-09-25T09:00:00.000Z",
+      "kind": "ADDED",
+      "detail": "관리자 주문 검색 기간 조건 추가"
+    },
+    {
+      "requirementId": "REQ-002",
+      "at": "2026-09-25T09:00:00.000Z",
+      "kind": "TASKS_CHANGED",
+      "detail": "REQ-002-T01 추가 [ADM] 주문 검색에 기간 조건 적용"
+    },
+    {
+      "requirementId": "REQ-003",
+      "at": "2026-09-25T09:00:00.000Z",
+      "crId": "CR-001",
+      "kind": "ADDED",
+      "detail": "주문 내역 엑셀 다운로드"
+    },
+    {
+      "requirementId": "REQ-003",
+      "at": "2026-09-25T09:00:00.000Z",
+      "crId": "CR-001",
+      "kind": "TASKS_CHANGED",
+      "detail": "REQ-003-T01 추가 [USR] 조회 결과를 엑셀로 다운로드"
+    }
+  ]
+}

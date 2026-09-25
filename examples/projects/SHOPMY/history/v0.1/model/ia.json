@@ -1,0 +1,44 @@
+{
+  "nodes": [
+    {
+      "id": "USR_MY_ORD_010",
+      "systemCode": "USR",
+      "parentId": null,
+      "name": "주문 내역",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "REQ-001-T01"
+      ],
+      "change": "CHANGED",
+      "changeReason": "기간 필터 추가"
+    },
+    {
+      "id": "USR_MY_ORD_020",
+      "systemCode": "USR",
+      "parentId": null,
+      "name": "주문 상세",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [],
+      "change": "KEPT"
+    },
+    {
+      "id": "ADM_ORD_SRCH_010",
+      "systemCode": "ADM",
+      "parentId": null,
+      "name": "주문 검색",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "REQ-002-T01"
+      ],
+      "change": "CHANGED",
+      "changeReason": "기간 조건 추가"
+    }
+  ],
+  "retiredIds": []
+}

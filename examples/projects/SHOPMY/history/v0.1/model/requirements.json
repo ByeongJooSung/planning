@@ -1,0 +1,42 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "주문 내역 기간 조회 필터 추가",
+      "description": "",
+      "type": "FUNCTIONAL",
+      "priority": "MUST",
+      "sources": [],
+      "status": "ACTIVE",
+      "ambiguous": false,
+      "tasks": [
+        {
+          "id": "REQ-001-T01",
+          "systemCode": "USR",
+          "actor": "회원",
+          "action": "기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회",
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "title": "관리자 주문 검색 기간 조건 추가",
+      "description": "",
+      "type": "FUNCTIONAL",
+      "priority": "MUST",
+      "sources": [],
+      "status": "ACTIVE",
+      "ambiguous": false,
+      "tasks": [
+        {
+          "id": "REQ-002-T01",
+          "systemCode": "ADM",
+          "actor": "운영 관리자",
+          "action": "주문 검색에 기간 조건 적용",
+          "after": []
+        }
+      ]
+    }
+  ]
+}

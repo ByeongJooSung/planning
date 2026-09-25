@@ -1,0 +1,92 @@
+{
+  "screens": [
+    {
+      "screenId": "CVL_INF_REG_010",
+      "systemCode": "CVL",
+      "title": "정보공개 자료 등록",
+      "taskIds": [],
+      "components": [
+        {
+          "no": 1,
+          "label": "제목",
+          "kind": "text-input",
+          "planner": "공개 목록에 그대로 노출되는 제목. 저장 시 앞뒤 공백 제거",
+          "customer": "등록할 자료의 제목을 입력한다",
+          "validation": {
+            "required": true,
+            "minLength": 2,
+            "maxLength": 100,
+            "timing": [
+              "ON_BLUR",
+              "ON_SUBMIT"
+            ],
+            "messages": [
+              {
+                "condition": "미입력",
+                "text": "제목을 입력해 주세요."
+              },
+              {
+                "condition": "100자 초과",
+                "text": "제목은 100자 이내로 입력해 주세요."
+              }
+            ]
+          }
+        },
+        {
+          "no": 2,
+          "label": "공개 구분",
+          "kind": "radio",
+          "planner": "부분공개 선택 시 비공개 사유 입력란 노출",
+          "customer": "자료를 어느 범위까지 공개할지 선택한다",
+          "options": {
+            "values": [
+              "전체공개",
+              "부분공개"
+            ],
+            "default": "전체공개"
+          },
+          "validation": {
+            "required": true,
+            "timing": [
+              "ON_SUBMIT"
+            ],
+            "messages": []
+          }
+        }
+      ],
+      "status": "DRAFT"
+    },
+    {
+      "screenId": "CVL_INF_STS_010",
+      "systemCode": "CVL",
+      "title": "처리 현황",
+      "taskIds": [],
+      "components": [],
+      "status": "DRAFT"
+    },
+    {
+      "screenId": "ADM_INF_REV_010",
+      "systemCode": "ADM",
+      "title": "심사 목록·상세",
+      "taskIds": [],
+      "components": [],
+      "status": "DRAFT"
+    },
+    {
+      "screenId": "PUB_INF_LST_010",
+      "systemCode": "PUB",
+      "title": "정보공개 목록",
+      "taskIds": [],
+      "components": [],
+      "status": "DRAFT"
+    },
+    {
+      "screenId": "PUB_INF_DTL_010",
+      "systemCode": "PUB",
+      "title": "정보공개 상세",
+      "taskIds": [],
+      "components": [],
+      "status": "DRAFT"
+    }
+  ]
+}

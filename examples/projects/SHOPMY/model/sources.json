@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "id": "SRC-001",
+      "kind": "EMAIL",
+      "title": "추가 요청 메일(2026-09-24)",
+      "location": "sources/cr-001.eml",
+      "addedAt": "2026-09-25T09:00:00.000Z"
+    }
+  ]
+}

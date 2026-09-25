@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "default": 1,
+      "type": "number",
+      "const": 1
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{2,40}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "serviceType": {
+      "type": "string",
+      "enum": [
+        "NEW",
+        "EXISTING"
+      ]
+    },
+    "changeScope": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "NEW_MENU",
+            "MODIFY",
+            "RENEWAL"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "channels": {
+      "default": [
+        "PC_WEB"
+      ],
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "PC_WEB",
+          "MOBILE_WEB",
+          "APP",
+          "ADMIN_WEB"
+        ]
+      }
+    },
+    "submissionTemplate": {
+      "default": "GENERAL",
+      "type": "string",
+      "enum": [
+        "GENERAL",
+        "PUBLIC"
+      ]
+    },
+    "screenIdRule": {
+      "default": {
+        "pattern": "{system}_{d1}_{d2}_{seq}",
+        "seqStart": 10,
+        "seqStep": 10,
+        "seqDigits": 3,
+        "popupSuffix": "_P{nn}"
+      },
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "default": "{system}_{d1}_{d2}_{seq}",
+          "type": "string"
+        },
+        "seqStart": {
+          "default": 10,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "seqStep": {
+          "default": 10,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "seqDigits": {
+          "default": 3,
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "popupSuffix": {
+          "default": "_P{nn}",
+          "type": "string"
+        }
+      }
+    },
+    "requirementIdMode": {
+      "default": "GENERATED",
+      "type": "string",
+      "enum": [
+        "GENERATED",
+        "ORIGINAL"
+      ]
+    },
+    "version": {
+      "default": "0.1",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "stages": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "S0",
+          "S0A",
+          "S1",
+          "S2",
+          "S3",
+          "S4",
+          "S5"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "NOT_STARTED",
+          "COLLECTING",
+          "GATE_PASSED",
+          "DRAFTED",
+          "IN_REVIEW",
+          "CONFIRMED",
+          "SKIPPED",
+          "NEEDS_UPDATE"
+        ]
+      }
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "serviceType",
+    "createdAt",
+    "updatedAt"
+  ]
+}

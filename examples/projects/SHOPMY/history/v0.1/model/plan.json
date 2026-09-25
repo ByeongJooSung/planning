@@ -1,0 +1,15 @@
+{
+  "sections": [
+    {
+      "id": "PS-01",
+      "title": "개선 개요",
+      "body": "",
+      "requirementIds": [
+        "REQ-001",
+        "REQ-002"
+      ],
+      "taskIds": []
+    }
+  ],
+  "features": []
+}

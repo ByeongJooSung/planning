@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "systems": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "users": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "channels": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PC_WEB",
+                "MOBILE_WEB",
+                "APP",
+                "ADMIN_WEB"
+              ]
+            }
+          },
+          "screenIdPrefix": {
+            "type": "string"
+          },
+          "color": {
+            "default": "#64748B",
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "hasScreens": {
+            "default": true,
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      }
+    }
+  }
+}

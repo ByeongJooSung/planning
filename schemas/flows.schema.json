@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "flows": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PROCESS",
+              "USER"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "systemCode": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+          },
+          "lanes": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "systemCode": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ]
+            }
+          },
+          "nodes": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "shape": {
+                  "type": "string",
+                  "enum": [
+                    "TERMINATOR",
+                    "PROCESS",
+                    "DECISION",
+                    "DOCUMENT",
+                    "IO",
+                    "SCREEN",
+                    "CONNECTOR"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "lane": {
+                  "type": "string"
+                },
+                "screenId": {
+                  "type": "string"
+                },
+                "taskIds": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "change": {
+                  "default": "NEW",
+                  "type": "string",
+                  "enum": [
+                    "NEW",
+                    "CHANGED",
+                    "DELETED",
+                    "KEPT"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "shape",
+                "label"
+              ]
+            }
+          },
+          "edges": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "label": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title"
+        ]
+      }
+    }
+  }
+}

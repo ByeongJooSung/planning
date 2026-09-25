@@ -1,0 +1,30 @@
+{
+  "name": "planning-studio",
+  "version": "0.1.0",
+  "description": "서비스 기획 산출물(기획안·IA·다이어그램·스토리보드·프로토타입) 프로젝트 관리 도구",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "planning": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "planning": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:schema": "tsx scripts/gen-schema.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

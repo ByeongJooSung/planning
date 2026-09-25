@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "code": "PUBINFO",
+  "name": "정보공개 통합 서비스 구축",
+  "serviceType": "NEW",
+  "changeScope": null,
+  "channels": [
+    "PC_WEB"
+  ],
+  "submissionTemplate": "PUBLIC",
+  "screenIdRule": {
+    "pattern": "{system}_{d1}_{d2}_{seq}",
+    "seqStart": 10,
+    "seqStep": 10,
+    "seqDigits": 3,
+    "popupSuffix": "_P{nn}"
+  },
+  "requirementIdMode": "ORIGINAL",
+  "version": "0.1",
+  "stages": {
+    "S0": "CONFIRMED",
+    "S1": "DRAFTED",
+    "S2": "DRAFTED",
+    "S3": "DRAFTED",
+    "S4": "DRAFTED",
+    "S5": "NOT_STARTED"
+  },
+  "createdAt": "2026-09-25T09:00:00.000Z",
+  "updatedAt": "2026-09-25T09:00:00.000Z"
+}

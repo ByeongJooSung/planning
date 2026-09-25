@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "CR-001",
+      "title": "주문 내역 엑셀 다운로드 추가",
+      "receivedAt": "2026-09-25T09:00:00.000Z",
+      "sourceIds": [
+        "SRC-001"
+      ],
+      "requirementIds": [
+        "REQ-003"
+      ],
+      "status": "APPLYING",
+      "summary": ""
+    }
+  ]
+}

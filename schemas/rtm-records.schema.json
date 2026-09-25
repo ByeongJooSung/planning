@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string"
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "reviewedAt": {
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "reviewer",
+          "reviewedAt"
+        ]
+      }
+    },
+    "notes": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "history": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requirementId": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "crId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ADDED",
+              "CHANGED",
+              "DELETED",
+              "EXCLUDED",
+              "TASKS_CHANGED"
+            ]
+          },
+          "detail": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirementId",
+          "at",
+          "kind"
+        ]
+      }
+    }
+  }
+}

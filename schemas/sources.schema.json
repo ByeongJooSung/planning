@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "sources": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^SRC-\\d{3,}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "FILE",
+              "TEXT",
+              "EMAIL",
+              "URL",
+              "REPOSITORY"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "location": {
+            "default": "",
+            "type": "string"
+          },
+          "addedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "addedAt"
+        ]
+      }
+    }
+  }
+}

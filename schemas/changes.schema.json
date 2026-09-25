@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "items": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^CR-\\d{3,}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requirementIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "default": "RECEIVED",
+            "type": "string",
+            "enum": [
+              "RECEIVED",
+              "ANALYZED",
+              "APPLYING",
+              "APPLIED",
+              "REJECTED"
+            ]
+          },
+          "summary": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "receivedAt"
+        ]
+      }
+    }
+  }
+}

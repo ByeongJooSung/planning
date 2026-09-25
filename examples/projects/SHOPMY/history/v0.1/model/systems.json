@@ -1,0 +1,32 @@
+{
+  "systems": [
+    {
+      "code": "USR",
+      "name": "사용자 서비스",
+      "users": [
+        "회원",
+        "비회원"
+      ],
+      "channels": [
+        "PC_WEB",
+        "MOBILE_WEB"
+      ],
+      "color": "#2563EB",
+      "hasScreens": true,
+      "description": ""
+    },
+    {
+      "code": "ADM",
+      "name": "관리자",
+      "users": [
+        "운영 관리자"
+      ],
+      "channels": [
+        "ADMIN_WEB"
+      ],
+      "color": "#D97706",
+      "hasScreens": true,
+      "description": ""
+    }
+  ]
+}

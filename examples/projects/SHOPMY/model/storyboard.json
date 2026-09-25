@@ -1,0 +1,29 @@
+{
+  "screens": [
+    {
+      "screenId": "USR_MY_ORD_010",
+      "systemCode": "USR",
+      "title": "주문 내역",
+      "taskIds": [],
+      "status": "DRAFT",
+      "components": [
+        {
+          "no": 1,
+          "label": "조회 기간",
+          "kind": "segmented",
+          "planner": "기본 1개월. 직접입력은 최대 12개월",
+          "customer": "원하는 기간을 눌러 주문 내역을 좁혀 본다",
+          "options": {
+            "values": [
+              "1개월",
+              "3개월",
+              "6개월",
+              "직접입력"
+            ],
+            "default": "1개월"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "project": {
+    "code": "SHOPMY",
+    "name": "쇼핑몰 주문 내역 개선",
+    "version": "0.2"
+  },
+  "generatedAt": "2026-09-25T14:39:48.812Z",
+  "systems": [
+    {
+      "code": "USR",
+      "name": "사용자 서비스"
+    },
+    {
+      "code": "ADM",
+      "name": "관리자"
+    }
+  ],
+  "rows": [
+    {
+      "requirementId": "REQ-001",
+      "title": "주문 내역 기간 조회 필터 추가",
+      "type": "FUNCTIONAL",
+      "priority": "MUST",
+      "sources": [],
+      "status": "DESIGNED",
+      "tasks": [
+        {
+          "taskId": "REQ-001-T01",
+          "requirementId": "REQ-001",
+          "systemCode": "USR",
+          "actor": "회원",
+          "action": "기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회",
+          "screenless": false,
+          "planSections": [
+            "PS-01"
+          ],
+          "features": [],
+          "screens": [
+            "USR_MY_ORD_010"
+          ],
+          "flowNodes": [],
+          "storyboard": [
+            "USR_MY_ORD_010"
+          ],
+          "prototype": [],
+          "status": "DESIGNED"
+        }
+      ],
+      "crIds": []
+    },
+    {
+      "requirementId": "REQ-002",
+      "title": "관리자 주문 검색 기간 조건 추가",
+      "type": "FUNCTIONAL",
+      "priority": "MUST",
+      "sources": [],
+      "status": "IN_DESIGN",
+      "tasks": [
+        {
+          "taskId": "REQ-002-T01",
+          "requirementId": "REQ-002",
+          "systemCode": "ADM",
+          "actor": "운영 관리자",
+          "action": "주문 검색에 기간 조건 적용",
+          "screenless": false,
+          "planSections": [
+            "PS-01"
+          ],
+          "features": [],
+          "screens": [
+            "ADM_ORD_SRCH_010"
+          ],
+          "flowNodes": [],
+          "storyboard": [],
+          "prototype": [],
+          "status": "IN_DESIGN"
+        }
+      ],
+      "crIds": []
+    },
+    {
+      "requirementId": "REQ-003",
+      "title": "주문 내역 엑셀 다운로드",
+      "type": "FUNCTIONAL",
+      "priority": "MUST",
+      "sources": [
+        "SRC-001 본문 1문단"
+      ],
+      "status": "DESIGNED",
+      "tasks": [
+        {
+          "taskId": "REQ-003-T01",
+          "requirementId": "REQ-003",
+          "systemCode": "USR",
+          "actor": "회원",
+          "action": "조회 결과를 엑셀로 다운로드",
+          "screenless": false,
+          "planSections": [],
+          "features": [],
+          "screens": [
+            "USR_MY_ORD_010"
+          ],
+          "flowNodes": [],
+          "storyboard": [
+            "USR_MY_ORD_010"
+          ],
+          "prototype": [],
+          "status": "DESIGNED"
+        }
+      ],
+      "crIds": [
+        "CR-001"
+      ]
+    }
+  ],
+  "matrix": {
+    "REQ-001": {
+      "USR": {
+        "taskIds": [
+          "REQ-001-T01"
+        ],
+        "screens": [
+          "USR_MY_ORD_010"
+        ],
+        "screenless": false,
+        "status": "DESIGNED"
+      },
+      "ADM": {
+        "taskIds": [],
+        "screens": [],
+        "screenless": false,
+        "status": null
+      }
+    },
+    "REQ-002": {
+      "USR": {
+        "taskIds": [],
+        "screens": [],
+        "screenless": false,
+        "status": null
+      },
+      "ADM": {
+        "taskIds": [
+          "REQ-002-T01"
+        ],
+        "screens": [
+          "ADM_ORD_SRCH_010"
+        ],
+        "screenless": false,
+        "status": "IN_DESIGN"
+      }
+    },
+    "REQ-003": {
+      "USR": {
+        "taskIds": [
+          "REQ-003-T01"
+        ],
+        "screens": [
+          "USR_MY_ORD_010"
+        ],
+        "screenless": false,
+        "status": "DESIGNED"
+      },
+      "ADM": {
+        "taskIds": [],
+        "screens": [],
+        "screenless": false,
+        "status": null
+      }
+    }
+  },
+  "reverse": {
+    "USR_MY_ORD_010": {
+      "systemCode": "USR",
+      "name": "주문 내역",
+      "requirementIds": [
+        "REQ-001",
+        "REQ-003"
+      ],
+      "taskIds": [
+        "REQ-001-T01",
+        "REQ-003-T01"
+      ]
+    },
+    "USR_MY_ORD_020": {
+      "systemCode": "USR",
+      "name": "주문 상세",
+      "requirementIds": [],
+      "taskIds": []
+    },
+    "ADM_ORD_SRCH_010": {
+      "systemCode": "ADM",
+      "name": "주문 검색",
+      "requirementIds": [
+        "REQ-002"
+      ],
+      "taskIds": [
+        "REQ-002-T01"
+      ]
+    }
+  },
+  "coverage": {
+    "requirements": {
+      "NOT_STARTED": 0,
+      "IN_DESIGN": 1,
+      "DESIGNED": 2,
+      "REVIEWED": 0,
+      "EXCLUDED": 0,
+      "total": 3
+    },
+    "tasks": {
+      "NOT_STARTED": 0,
+      "IN_DESIGN": 1,
+      "DESIGNED": 2,
+      "REVIEWED": 0,
+      "EXCLUDED": 0,
+      "total": 3
+    },
+    "bySystem": {
+      "USR": {
+        "total": 2,
+        "designed": 2,
+        "rate": 100
+      },
+      "ADM": {
+        "total": 1,
+        "designed": 0,
+        "rate": 0
+      }
+    },
+    "designedRate": 66.7
+  },
+  "gaps": [
+    {
+      "stage": "S1",
+      "kind": "NO_PLAN",
+      "ref": "REQ-003-T01",
+      "message": "REQ-003-T01 기획안(섹션·기능)에 반영되지 않았습니다"
+    },
+    {
+      "stage": "S4",
+      "kind": "NO_STORYBOARD",
+      "ref": "REQ-002-T01",
+      "message": "REQ-002-T01 스토리보드 미작성 화면: ADM_ORD_SRCH_010"
+    }
+  ],
+  "orphans": []
+}
