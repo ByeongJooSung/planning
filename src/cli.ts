@@ -514,9 +514,9 @@ program
   .option("--closed-signup", "초대받은 이메일만 가입 (첫 가입자는 예외)")
   .action(async (o) => {
     const { root } = program.opts<{ root: string }>();
-    const { createApp } = await import("./server/app.js");
+    const { createLocalApp } = await import("./server/app.js");
     const key = process.env.ANTHROPIC_API_KEY;
-    const app = await createApp({
+    const app = await createLocalApp({
       root,
       secret: process.env.PLANNING_SECRET,
       openSignup: !(o.closedSignup || process.env.PLANNING_SIGNUP === "closed"),

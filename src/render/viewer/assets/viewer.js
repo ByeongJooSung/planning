@@ -1546,7 +1546,7 @@
   var SOURCE_LABEL = { project: "프로젝트 설정", personal: "내 개인 설정", server: "서버 기본 설정" };
   function enc(s) { return encodeURIComponent(s); }
   function api(method, url, body, signal) {
-    return fetch(url, { method: method, credentials: "same-origin", signal: signal, headers: { "content-type": "application/json", "x-planning": "1" }, body: body === undefined ? undefined : JSON.stringify(body) })
+    return fetch(url, { method: method, credentials: "same-origin", signal: signal, headers: { "content-type": "application/json", "x-planning": "1" }, body: method === "GET" ? undefined : JSON.stringify(body === undefined ? {} : body) })
       .then(function (res) {
         return res.text().then(function (t) {
           var j;
@@ -1746,11 +1746,12 @@
     "kb-upload": function () {
       var p = P();
       openForm({
-        eyebrow: "참조자료", title: "자료 올리기", submit: "올리기", intro: "올린 문서는 이 프로젝트의 지식이 됩니다. 지원: " + esc((CFG.uploadExt || []).join(", ")) + ". 그 밖의 형식은 보관만 합니다. 한 번에 30MB까지.",
+        eyebrow: "참조자료", title: "자료 올리기", submit: "올리기", intro: "올린 문서는 이 프로젝트의 지식이 됩니다. 지원: " + esc((CFG.uploadExt || []).join(", ")) + ". 그 밖의 형식은 보관만 합니다. 한 번에 " + (CFG.maxUploadMb || 22) + "MB까지.",
         fields: [{ name: "files", label: "파일", type: "file", required: true }],
         onSubmit: function (v) {
           var total = v.files.reduce(function (a, f) { return a + f.size; }, 0);
-          if (total > 22 * 1024 * 1024) throw new Error("한 번에 22MB까지 올릴 수 있습니다. 나눠서 올려 주세요");
+          var max = CFG.maxUploadMb || 22;
+          if (total > max * 1024 * 1024) throw new Error("한 번에 " + max + "MB까지 올릴 수 있습니다. 나눠서 올려 주세요");
           return Promise.all(v.files.map(function (f) { return readB64(f).then(function (d) { return { name: f.name, data: d }; }); })).then(function (files) {
             return api("POST", "/api/projects/" + enc(p.model.project.code) + "/sources", { files: files });
           }).then(function (r) { setProject(r.project); rebuild(); render(); toast(r.message); });

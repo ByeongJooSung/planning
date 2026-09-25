@@ -1,17 +1,22 @@
 /**
  * 서비스 계정 저장소 — 회원·세션·프로젝트 멤버·초대·AI 설정.
- * <root>/.service/service.json 한 파일에 두고 메모리에 올려 쓴다(작은 팀용). 쓰기는 임시 파일 → 이름 바꾸기로 원자적으로 한다.
+ * 키-값 저장소(Kv) 위에 둔다. 요청마다 저장소에서 새로 읽으므로 서버리스(여러 인스턴스)에서도 맞는 값을 본다.
+ *
+ * 키 (접두어 acc:)
+ *  user:{id} → User · email:{email} → id · users (집합)
+ *  sess:{토큰 해시} → 세션 (만료 30일)
+ *  members:{프로젝트} (해시 userId → Member) · uproj:{userId} (집합)
+ *  inv:{id} → Invite (만료 14일) · invtok:{토큰 해시} → id · pinv:{프로젝트} · einv:{email} (집합)
+ *  pai:{프로젝트} → 프로젝트 AI 설정
  *
  * 권한 (PRD §4.11)
  *  OWNER  운영자 — 프로젝트를 만든 사람. 멤버 초대·권한 변경·삭제, 프로젝트 AI 설정, 프로젝트 삭제
  *  EDITOR 작업자 — 요구사항·Task·산출물 편집, AI 생성
  *  VIEWER 열람자 — 보기, 디자인 댓글
  */
-import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import { decrypt, deriveKey, encrypt, hashPassword, newId, newToken, sha256, verifyPassword } from "./crypto.js";
+import type { Kv } from "./kv.js";
 
 export const ROLES = ["OWNER", "EDITOR", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
@@ -42,7 +47,6 @@ const User = z.object({
 });
 export type User = z.infer<typeof User>;
 
-const Session = z.object({ tokenHash: z.string(), userId: z.string(), createdAt: z.string(), expiresAt: z.string() });
 const Member = z.object({
   project: z.string(),
   userId: z.string(),
@@ -57,21 +61,12 @@ const Invite = z.object({
   tokenHash: z.string(),
   project: z.string(),
   email: z.string(),
-  role: z.enum(["EDITOR", "VIEWER", "OWNER"]),
+  role: z.enum(ROLES),
   invitedBy: z.string(),
   createdAt: z.string(),
   expiresAt: z.string(),
 });
 export type Invite = z.infer<typeof Invite>;
-
-const ServiceData = z.object({
-  users: z.array(User).default([]),
-  sessions: z.array(Session).default([]),
-  members: z.array(Member).default([]),
-  invites: z.array(Invite).default([]),
-  projectAi: z.record(z.string(), AiStored).default({}),
-});
-type ServiceData = z.infer<typeof ServiceData>;
 
 /** API로 내보내는 AI 설정. 키는 절대 담지 않는다 */
 export interface AiPublic {
@@ -90,10 +85,18 @@ export interface AiResolved {
   baseUrl?: string;
   apiKey?: string;
 }
+export interface AiInput {
+  provider: AiProvider;
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  clearKey?: boolean;
+}
 
 const SESSION_DAYS = 30;
 const INVITE_DAYS = 14;
-export const normEmail = (e: string) => e.trim().toLowerCase();
+const DAY = 86400;
+export const normEmail = (e: string) => String(e ?? "").trim().toLowerCase();
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class HttpError extends Error {
@@ -103,90 +106,79 @@ export class HttpError extends Error {
 }
 
 export interface AccountsOptions {
-  /** AI 키 암호화 비밀값. 없으면 <root>/.service/secret.key 를 만들어 쓴다 */
-  secret?: string;
+  /** AI 키 암호화 비밀값 (32바이트 키로 변환) */
+  secret: string;
   /** 서버 기본 AI (환경변수 ANTHROPIC_API_KEY 등) — 프로젝트·개인 설정이 없을 때 */
   serverAi?: Omit<AiResolved, "source"> | null;
   now?: () => Date;
 }
 
+const K = {
+  user: (id: string) => `acc:user:${id}`,
+  email: (e: string) => `acc:email:${e}`,
+  users: "acc:users",
+  sess: (h: string) => `acc:sess:${h}`,
+  members: (p: string) => `acc:members:${p}`,
+  uproj: (u: string) => `acc:uproj:${u}`,
+  inv: (id: string) => `acc:inv:${id}`,
+  invtok: (h: string) => `acc:invtok:${h}`,
+  pinv: (p: string) => `acc:pinv:${p}`,
+  einv: (e: string) => `acc:einv:${e}`,
+  pai: (p: string) => `acc:pai:${p}`,
+};
+
 export class Accounts {
-  private data!: ServiceData;
-  private key!: Buffer;
-  private writing: Promise<void> = Promise.resolve();
-  readonly dir: string;
+  private key: Buffer;
   private now: () => Date;
 
-  constructor(root: string, private opts: AccountsOptions = {}) {
-    this.dir = path.join(root, ".service");
+  constructor(private kv: Kv, private opts: AccountsOptions) {
+    this.key = deriveKey(opts.secret);
     this.now = opts.now ?? (() => new Date());
-  }
-
-  async init(): Promise<void> {
-    await mkdir(this.dir, { recursive: true });
-    const f = path.join(this.dir, "service.json");
-    this.data = ServiceData.parse(existsSync(f) ? JSON.parse(await readFile(f, "utf8")) : {});
-    if (this.opts.secret) this.key = deriveKey(this.opts.secret);
-    else {
-      const kf = path.join(this.dir, "secret.key");
-      if (!existsSync(kf)) {
-        await writeFile(kf, newToken(), { mode: 0o600 });
-        await chmod(kf, 0o600);
-      }
-      this.key = deriveKey((await readFile(kf, "utf8")).trim());
-    }
-    this.purge();
-  }
-
-  private save(): Promise<void> {
-    const snapshot = JSON.stringify(this.data, null, 1);
-    this.writing = this.writing.then(async () => {
-      const f = path.join(this.dir, "service.json");
-      const tmp = `${f}.${process.pid}.tmp`;
-      await writeFile(tmp, snapshot, { mode: 0o600 });
-      await rename(tmp, f);
-    });
-    return this.writing;
   }
 
   private iso(offsetDays = 0) {
     return new Date(this.now().getTime() + offsetDays * 864e5).toISOString();
   }
-  private purge() {
-    const now = this.iso();
-    this.data.sessions = this.data.sessions.filter((s) => s.expiresAt > now);
-    this.data.invites = this.data.invites.filter((i) => i.expiresAt > now);
+  private async json<T>(key: string, schema: z.ZodType<T>): Promise<T | undefined> {
+    const s = await this.kv.get(key);
+    return s ? schema.parse(JSON.parse(s)) : undefined;
   }
 
   // ── 회원 ─────────────────────────────────────
-  userCount() {
-    return this.data.users.length;
+  async userCount() {
+    return (await this.kv.smembers(K.users)).length;
   }
   getUser(id: string) {
-    return this.data.users.find((u) => u.id === id);
+    return this.json(K.user(id), User);
   }
-  findByEmail(email: string) {
-    return this.data.users.find((u) => u.email === normEmail(email));
+  private async putUser(u: User) {
+    await this.kv.set(K.user(u.id), JSON.stringify(u));
+  }
+  async findByEmail(email: string) {
+    const id = await this.kv.get(K.email(normEmail(email)));
+    return id ? this.getUser(id) : undefined;
   }
   publicUser(u: User) {
     return { id: u.id, email: u.email, name: u.name, createdAt: u.createdAt };
   }
 
-  async signup(input: { email: string; name: string; password: string }): Promise<User> {
-    const email = normEmail(input.email ?? "");
-    const name = (input.name ?? "").trim();
+  /** 가입. first=true면 이 서버의 첫 가입자다 */
+  async signup(input: { email: string; name: string; password: string }): Promise<{ user: User; first: boolean }> {
+    const email = normEmail(input.email);
+    const name = String(input.name ?? "").trim();
     if (!EMAIL.test(email)) throw new HttpError(400, "이메일 형식이 아닙니다");
     if (!name) throw new HttpError(400, "이름을 입력하세요");
-    if ((input.password ?? "").length < 8) throw new HttpError(400, "비밀번호는 8자 이상이어야 합니다");
-    if (this.findByEmail(email)) throw new HttpError(409, "이미 가입한 이메일입니다");
+    if (String(input.password ?? "").length < 8) throw new HttpError(400, "비밀번호는 8자 이상이어야 합니다");
     const user: User = { id: newId("u"), email, name: name.slice(0, 60), passHash: hashPassword(input.password), createdAt: this.iso() };
-    this.data.users.push(user);
-    await this.save();
-    return user;
+    if (!(await this.kv.set(K.email(email), user.id, { nx: true }))) throw new HttpError(409, "이미 가입한 이메일입니다");
+    await this.putUser(user);
+    await this.kv.sadd(K.users, user.id);
+    const first = await this.kv.set("acc:first", user.id, { nx: true });
+    return { user, first };
   }
 
-  login(email: string, password: string): User {
-    const u = this.findByEmail(email ?? "");
+  async login(email: string, password: string): Promise<User> {
+    const u = await this.findByEmail(email ?? "");
     // 없는 계정도 같은 시간이 걸리도록 해시를 한 번 계산한다
     const ok = u ? verifyPassword(password ?? "", u.passHash) : (verifyPassword(password ?? "", hashPassword("x")), false);
     if (!u || !ok) throw new HttpError(401, "이메일 또는 비밀번호가 맞지 않습니다");
@@ -194,152 +186,168 @@ export class Accounts {
   }
 
   async changePassword(userId: string, current: string, next: string) {
-    const u = this.getUser(userId)!;
+    const u = (await this.getUser(userId))!;
     if (!verifyPassword(current ?? "", u.passHash)) throw new HttpError(400, "현재 비밀번호가 맞지 않습니다");
-    if ((next ?? "").length < 8) throw new HttpError(400, "새 비밀번호는 8자 이상이어야 합니다");
+    if (String(next ?? "").length < 8) throw new HttpError(400, "새 비밀번호는 8자 이상이어야 합니다");
     u.passHash = hashPassword(next);
-    await this.save();
+    await this.putUser(u);
+  }
+
+  /** 로그인 시도 제한: 15분에 10번 */
+  async loginAttempt(key: string) {
+    const n = await this.kv.incr(`acc:rl:${sha256(key)}`, 15 * 60);
+    if (n > 10) throw new HttpError(429, "로그인 시도가 많습니다. 15분 뒤 다시 시도하세요");
   }
 
   // ── 세션 ─────────────────────────────────────
   async createSession(userId: string): Promise<string> {
     const token = newToken();
-    this.purge();
-    this.data.sessions.push({ tokenHash: sha256(token), userId, createdAt: this.iso(), expiresAt: this.iso(SESSION_DAYS) });
-    await this.save();
+    await this.kv.set(K.sess(sha256(token)), userId, { ttlSec: SESSION_DAYS * DAY });
     return token;
   }
-  sessionUser(token: string | undefined): User | undefined {
+  async sessionUser(token: string | undefined): Promise<User | undefined> {
     if (!token) return undefined;
-    const h = sha256(token);
-    const s = this.data.sessions.find((x) => x.tokenHash === h && x.expiresAt > this.iso());
-    return s ? this.getUser(s.userId) : undefined;
+    const id = await this.kv.get(K.sess(sha256(token)));
+    return id ? this.getUser(id) : undefined;
   }
   async endSession(token: string | undefined) {
-    if (!token) return;
-    const h = sha256(token);
-    this.data.sessions = this.data.sessions.filter((s) => s.tokenHash !== h);
-    await this.save();
+    if (token) await this.kv.del(K.sess(sha256(token)));
   }
 
   // ── 프로젝트 멤버 ────────────────────────────
-  roleOf(project: string, userId: string): Role | null {
-    return this.data.members.find((m) => m.project === project && m.userId === userId)?.role ?? null;
+  async membership(project: string, userId: string): Promise<Member | undefined> {
+    const all = await this.kv.hgetall(K.members(project));
+    return all[userId] ? Member.parse(JSON.parse(all[userId]!)) : undefined;
   }
-  membership(project: string, userId: string) {
-    return this.data.members.find((m) => m.project === project && m.userId === userId);
+  async roleOf(project: string, userId: string): Promise<Role | null> {
+    return (await this.membership(project, userId))?.role ?? null;
   }
-  projectsOf(userId: string) {
-    return this.data.members.filter((m) => m.userId === userId);
+  async projectsOf(userId: string): Promise<string[]> {
+    return (await this.kv.smembers(K.uproj(userId))).sort();
   }
-  hasOwner(project: string) {
-    return this.data.members.some((m) => m.project === project && m.role === "OWNER");
+  private async memberList(project: string): Promise<Member[]> {
+    return Object.values(await this.kv.hgetall(K.members(project))).map((s) => Member.parse(JSON.parse(s)));
   }
-  members(project: string) {
-    return this.data.members
-      .filter((m) => m.project === project)
-      .map((m) => {
-        const u = this.getUser(m.userId);
-        return { userId: m.userId, name: u?.name ?? "(탈퇴)", email: u?.email ?? "", role: m.role, addedAt: m.addedAt };
-      })
+  async hasOwner(project: string) {
+    return (await this.memberList(project)).some((m) => m.role === "OWNER");
+  }
+  async members(project: string) {
+    const list = await this.memberList(project);
+    const users = await Promise.all(list.map((m) => this.getUser(m.userId)));
+    return list
+      .map((m, i) => ({ userId: m.userId, name: users[i]?.name ?? "(탈퇴)", email: users[i]?.email ?? "", role: m.role, addedAt: m.addedAt }))
       .sort((a, b) => RANK[b.role] - RANK[a.role] || a.addedAt.localeCompare(b.addedAt));
   }
+  private async putMember(m: Member) {
+    await this.kv.hset(K.members(m.project), m.userId, JSON.stringify(m));
+    await this.kv.sadd(K.uproj(m.userId), m.project);
+  }
   async addMember(project: string, userId: string, role: Role) {
-    const m = this.membership(project, userId);
+    const m = await this.membership(project, userId);
     if (m) {
-      if (RANK[role] > RANK[m.role]) m.role = role;
-    } else this.data.members.push({ project, userId, role, addedAt: this.iso(), usePersonalAi: false });
-    await this.save();
+      if (RANK[role] > RANK[m.role]) await this.putMember({ ...m, role });
+    } else await this.putMember({ project, userId, role, addedAt: this.iso(), usePersonalAi: false });
   }
   async setRole(project: string, userId: string, role: Role) {
-    const m = this.membership(project, userId);
+    const m = await this.membership(project, userId);
     if (!m) throw new HttpError(404, "멤버가 아닙니다");
-    if (m.role === "OWNER" && role !== "OWNER" && this.ownerCount(project) === 1) throw new HttpError(400, "운영자가 한 명뿐이라 권한을 낮출 수 없습니다. 다른 멤버를 먼저 운영자로 지정하세요");
-    m.role = role;
-    await this.save();
+    if (m.role === "OWNER" && role !== "OWNER" && (await this.ownerCount(project)) === 1)
+      throw new HttpError(400, "운영자가 한 명뿐이라 권한을 낮출 수 없습니다. 다른 멤버를 먼저 운영자로 지정하세요");
+    await this.putMember({ ...m, role });
   }
   async removeMember(project: string, userId: string) {
-    const m = this.membership(project, userId);
+    const m = await this.membership(project, userId);
     if (!m) throw new HttpError(404, "멤버가 아닙니다");
-    if (m.role === "OWNER" && this.ownerCount(project) === 1) throw new HttpError(400, "마지막 운영자는 나갈 수 없습니다");
-    this.data.members = this.data.members.filter((x) => x !== m);
-    await this.save();
+    if (m.role === "OWNER" && (await this.ownerCount(project)) === 1) throw new HttpError(400, "마지막 운영자는 나갈 수 없습니다");
+    await this.kv.hdel(K.members(project), userId);
+    await this.kv.srem(K.uproj(userId), project);
   }
   async setUsePersonalAi(project: string, userId: string, on: boolean) {
-    const m = this.membership(project, userId);
+    const m = await this.membership(project, userId);
     if (!m) throw new HttpError(404, "멤버가 아닙니다");
-    m.usePersonalAi = on;
-    await this.save();
+    await this.putMember({ ...m, usePersonalAi: on });
   }
-  private ownerCount(project: string) {
-    return this.data.members.filter((m) => m.project === project && m.role === "OWNER").length;
+  private async ownerCount(project: string) {
+    return (await this.memberList(project)).filter((m) => m.role === "OWNER").length;
   }
   /** 프로젝트 삭제 시 멤버·초대·AI 설정 정리 */
   async dropProject(project: string) {
-    this.data.members = this.data.members.filter((m) => m.project !== project);
-    this.data.invites = this.data.invites.filter((i) => i.project !== project);
-    delete this.data.projectAi[project];
-    await this.save();
+    for (const m of await this.memberList(project)) await this.kv.srem(K.uproj(m.userId), project);
+    for (const i of await this.invitesRaw(K.pinv(project))) await this.deleteInvite(i);
+    await this.kv.del(K.members(project), K.pinv(project), K.pai(project));
   }
 
   // ── 초대 ─────────────────────────────────────
+  private async invitesRaw(setKey: string): Promise<Invite[]> {
+    const ids = await this.kv.smembers(setKey);
+    const docs = await this.kv.mget(ids.map(K.inv));
+    const out: Invite[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      const d = docs[i];
+      if (d) out.push(Invite.parse(JSON.parse(d)));
+      else await this.kv.srem(setKey, ids[i]!); // 만료된 초대 정리
+    }
+    return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  private async deleteInvite(i: Invite) {
+    await this.kv.del(K.inv(i.id), K.invtok(i.tokenHash));
+    await this.kv.srem(K.pinv(i.project), i.id);
+    await this.kv.srem(K.einv(i.email), i.id);
+  }
   /** 초대를 만들고 한 번만 보여 줄 토큰을 돌려준다 (저장은 해시) */
   async invite(project: string, email: string, role: Role, invitedBy: string): Promise<{ invite: Invite; token: string }> {
-    const e = normEmail(email ?? "");
+    const e = normEmail(email);
     if (!EMAIL.test(e)) throw new HttpError(400, "이메일 형식이 아닙니다");
     if (!ROLES.includes(role)) throw new HttpError(400, "권한 값이 올바르지 않습니다");
-    const existing = this.findByEmail(e);
-    if (existing && this.roleOf(project, existing.id)) throw new HttpError(409, "이미 이 프로젝트 멤버입니다");
-    this.data.invites = this.data.invites.filter((i) => !(i.project === project && i.email === e));
+    const existing = await this.findByEmail(e);
+    if (existing && (await this.roleOf(project, existing.id))) throw new HttpError(409, "이미 이 프로젝트 멤버입니다");
+    for (const old of await this.invitesRaw(K.pinv(project))) if (old.email === e) await this.deleteInvite(old);
     const token = newToken();
     const invite: Invite = { id: newId("inv"), tokenHash: sha256(token), project, email: e, role, invitedBy, createdAt: this.iso(), expiresAt: this.iso(INVITE_DAYS) };
-    this.data.invites.push(invite);
-    await this.save();
+    const ttl = INVITE_DAYS * DAY;
+    await this.kv.set(K.inv(invite.id), JSON.stringify(invite), { ttlSec: ttl });
+    await this.kv.set(K.invtok(invite.tokenHash), invite.id, { ttlSec: ttl });
+    await this.kv.sadd(K.pinv(project), invite.id);
+    await this.kv.sadd(K.einv(e), invite.id);
     return { invite, token };
   }
-  invitesOf(project: string) {
-    this.purge();
-    return this.data.invites.filter((i) => i.project === project).map(publicInvite);
+  async invitesOf(project: string) {
+    return (await this.invitesRaw(K.pinv(project))).map(publicInvite);
   }
-  invitesFor(email: string) {
-    this.purge();
-    return this.data.invites.filter((i) => i.email === normEmail(email)).map(publicInvite);
+  async invitesFor(email: string) {
+    return (await this.invitesRaw(K.einv(normEmail(email)))).map(publicInvite);
   }
-  inviteByToken(token: string) {
-    const h = sha256(token ?? "");
-    return this.data.invites.find((i) => i.tokenHash === h && i.expiresAt > this.iso());
+  async inviteByToken(token: string): Promise<Invite | undefined> {
+    const id = await this.kv.get(K.invtok(sha256(token ?? "")));
+    return id ? this.json(K.inv(id), Invite) : undefined;
   }
   async cancelInvite(project: string, id: string) {
-    const before = this.data.invites.length;
-    this.data.invites = this.data.invites.filter((i) => !(i.project === project && i.id === id));
-    if (before === this.data.invites.length) throw new HttpError(404, "초대가 없습니다");
-    await this.save();
+    const inv = await this.json(K.inv(id), Invite);
+    if (!inv || inv.project !== project) throw new HttpError(404, "초대가 없습니다");
+    await this.deleteInvite(inv);
   }
   /** 초대 수락 — 초대받은 이메일로 가입한 사람만 받을 수 있다 */
   async accept(user: User, by: { id?: string; token?: string }): Promise<Invite> {
-    this.purge();
-    const inv = by.token ? this.inviteByToken(by.token) : this.data.invites.find((i) => i.id === by.id);
+    const inv = by.token ? await this.inviteByToken(by.token) : by.id ? await this.json(K.inv(by.id), Invite) : undefined;
     if (!inv) throw new HttpError(404, "초대가 없거나 기한이 지났습니다");
     if (inv.email !== user.email) throw new HttpError(403, `이 초대는 ${maskEmail(inv.email)} 계정용입니다. 그 이메일로 가입하거나 로그인하세요`);
     await this.addMember(inv.project, user.id, inv.role);
-    this.data.invites = this.data.invites.filter((i) => i !== inv);
-    await this.save();
+    await this.deleteInvite(inv);
     return inv;
   }
   async declineInvite(user: User, id: string) {
-    const inv = this.data.invites.find((i) => i.id === id && i.email === user.email);
-    if (!inv) throw new HttpError(404, "초대가 없습니다");
-    this.data.invites = this.data.invites.filter((i) => i !== inv);
-    await this.save();
+    const inv = await this.json(K.inv(id), Invite);
+    if (!inv || inv.email !== user.email) throw new HttpError(404, "초대가 없습니다");
+    await this.deleteInvite(inv);
   }
 
   // ── AI 설정 ──────────────────────────────────
   private toStored(input: AiInput, prev: AiStored | undefined, by: string): AiStored {
     const provider = input.provider;
     if (!AI_PROVIDERS.includes(provider)) throw new HttpError(400, "provider는 anthropic 또는 openai-compatible 입니다");
-    const model = (input.model ?? "").trim();
+    const model = String(input.model ?? "").trim();
     if (!model) throw new HttpError(400, "모델 이름을 입력하세요");
-    let baseUrl = (input.baseUrl ?? "").trim() || undefined;
+    let baseUrl = String(input.baseUrl ?? "").trim() || undefined;
     if (baseUrl) {
       let u: URL;
       try {
@@ -354,79 +362,66 @@ export class Accounts {
     // 키: 새 값이 오면 바꾸고, clearKey면 지우고, 아무것도 없으면 이전 값을 그대로 둔다 (같은 provider일 때만)
     let keyEnc = prev && prev.provider === provider ? prev.keyEnc : undefined;
     if (input.clearKey) keyEnc = undefined;
-    if (input.apiKey && input.apiKey.trim()) keyEnc = encrypt(this.key, input.apiKey.trim());
+    if (input.apiKey && String(input.apiKey).trim()) keyEnc = encrypt(this.key, String(input.apiKey).trim());
     if (provider === "anthropic" && !keyEnc) throw new HttpError(400, "Anthropic API 키가 필요합니다");
     return { provider, model: model.slice(0, 120), baseUrl, keyEnc, updatedAt: this.iso(), updatedBy: by };
   }
   async setUserAi(userId: string, input: AiInput) {
-    const u = this.getUser(userId)!;
+    const u = (await this.getUser(userId))!;
     u.ai = this.toStored(input, u.ai, userId);
-    await this.save();
+    await this.putUser(u);
   }
   async clearUserAi(userId: string) {
-    delete this.getUser(userId)!.ai;
-    await this.save();
+    const u = (await this.getUser(userId))!;
+    delete u.ai;
+    await this.putUser(u);
   }
   async setProjectAi(project: string, input: AiInput, by: string) {
-    this.data.projectAi[project] = this.toStored(input, this.data.projectAi[project], by);
-    await this.save();
+    await this.kv.set(K.pai(project), JSON.stringify(this.toStored(input, await this.projectAi(project), by)));
   }
   async clearProjectAi(project: string) {
-    delete this.data.projectAi[project];
-    await this.save();
+    await this.kv.del(K.pai(project));
   }
   /** full=false면 주소도 숨긴다 (프로젝트 설정을 보는 운영자 아닌 멤버) */
   aiPublic(s: AiStored | undefined, full: boolean): AiPublic | null {
     if (!s) return null;
     return { provider: s.provider, model: s.model, ...(full && s.baseUrl ? { baseUrl: s.baseUrl } : {}), hasKey: !!s.keyEnc, updatedAt: s.updatedAt };
   }
-  userAi(userId: string) {
-    return this.getUser(userId)?.ai;
+  async userAi(userId: string) {
+    return (await this.getUser(userId))?.ai;
   }
   projectAi(project: string) {
-    return this.data.projectAi[project];
+    return this.json(K.pai(project), AiStored);
   }
   hasServerAi() {
     return !!this.opts.serverAi;
   }
 
-  /** 이 사람이 이 프로젝트에서 AI를 부를 때 쓸 설정. 우선순위: (개인 설정 사용 선택 시) 개인 → 프로젝트 → 개인 → 서버 기본 */
-  resolveAi(project: string | null, userId: string): AiResolved | null {
-    const personal = this.userAi(userId);
-    const m = project ? this.membership(project, userId) : undefined;
-    const proj = project ? this.projectAi(project) : undefined;
-    const pick = (s: AiStored, source: AiResolved["source"]): AiResolved => ({
-      source,
-      provider: s.provider,
-      model: s.model,
-      baseUrl: s.baseUrl,
-      apiKey: s.keyEnc ? decrypt(this.key, s.keyEnc) : undefined,
-    });
-    if (m?.usePersonalAi && personal) return pick(personal, "personal");
-    if (proj) return pick(proj, "project");
-    if (personal) return pick(personal, "personal");
-    if (this.opts.serverAi) return { source: "server", ...this.opts.serverAi };
+  /** 우선순위: (개인 설정 사용 선택 시) 개인 → 프로젝트 → 개인 → 서버 기본 */
+  private async pick(project: string | null, userId: string): Promise<{ s: AiStored; source: "project" | "personal" } | { s: null; source: "server" } | null> {
+    const personal = await this.userAi(userId);
+    const m = project ? await this.membership(project, userId) : undefined;
+    const proj = project ? await this.projectAi(project) : undefined;
+    if (m?.usePersonalAi && personal) return { s: personal, source: "personal" };
+    if (proj) return { s: proj, source: "project" };
+    if (personal) return { s: personal, source: "personal" };
+    if (this.opts.serverAi) return { s: null, source: "server" };
     return null;
+  }
+  /** 이 사람이 이 프로젝트에서 AI를 부를 때 쓸 설정 (키 복호화 — 서버 안에서만) */
+  async resolveAi(project: string | null, userId: string): Promise<AiResolved | null> {
+    const p = await this.pick(project, userId);
+    if (!p) return null;
+    if (!p.s) return { source: "server", ...this.opts.serverAi! };
+    return { source: p.source, provider: p.s.provider, model: p.s.model, baseUrl: p.s.baseUrl, apiKey: p.s.keyEnc ? decrypt(this.key, p.s.keyEnc) : undefined };
   }
   /** 어떤 설정이 쓰이는지 (비밀값 없이) */
-  aiSource(project: string | null, userId: string): { source: AiResolved["source"]; provider: AiProvider; model: string } | null {
-    const personal = this.userAi(userId);
-    const m = project ? this.membership(project, userId) : undefined;
-    const proj = project ? this.projectAi(project) : undefined;
-    if (m?.usePersonalAi && personal) return { source: "personal", provider: personal.provider, model: personal.model };
-    if (proj) return { source: "project", provider: proj.provider, model: proj.model };
-    if (personal) return { source: "personal", provider: personal.provider, model: personal.model };
-    if (this.opts.serverAi) return { source: "server", provider: this.opts.serverAi.provider, model: this.opts.serverAi.model };
-    return null;
+  async aiSource(project: string | null, userId: string): Promise<{ source: AiResolved["source"]; provider: AiProvider; model: string } | null> {
+    const p = await this.pick(project, userId);
+    if (!p) return null;
+    if (!p.s) return { source: "server", provider: this.opts.serverAi!.provider, model: this.opts.serverAi!.model };
+    return { source: p.source, provider: p.s.provider, model: p.s.model };
   }
-}
-
-export interface AiInput {
-  provider: AiProvider;
-  model: string;
-  baseUrl?: string;
-  apiKey?: string;
-  clearKey?: boolean;
 }
 
 function publicInvite(i: Invite) {

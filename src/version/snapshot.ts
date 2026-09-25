@@ -30,16 +30,23 @@ export async function takeSnapshot(
   const target = snapDir(dir, version);
   if (existsSync(target)) throw new Error(`이미 있는 스냅샷입니다: v${version}`);
 
-  await mkdir(path.join(target, "model"), { recursive: true });
-  await writeJson(path.join(target, "project.json"), m.project);
-  for (const [name, data] of Object.entries(toFiles(m))) await writeJson(path.join(target, "model", name), data);
-  await writeJson(path.join(target, "rtm.json"), buildRtm(m, now));
   const meta: SnapshotMeta = { version, takenAt: now.toISOString(), note: opts.note ?? "" };
-  await writeJson(path.join(target, "meta.json"), meta);
+  await writeSnapshot(dir, meta, m, now);
 
   m.project.version = bumpVersion(version, opts.major);
   await saveModel(dir, m, { now });
   return meta;
+}
+
+/** history/v{버전}/ 에 스냅샷 파일을 쓴다 (모델의 버전은 바꾸지 않는다) */
+export async function writeSnapshot(dir: string, meta: SnapshotMeta, m: Model, now = new Date()): Promise<void> {
+  const target = snapDir(dir, meta.version);
+  if (existsSync(target)) throw new Error(`이미 있는 스냅샷입니다: v${meta.version}`);
+  await mkdir(path.join(target, "model"), { recursive: true });
+  await writeJson(path.join(target, "project.json"), m.project);
+  for (const [name, data] of Object.entries(toFiles(m))) await writeJson(path.join(target, "model", name), data);
+  await writeJson(path.join(target, "rtm.json"), buildRtm(m, now));
+  await writeJson(path.join(target, "meta.json"), meta);
 }
 
 export async function listSnapshots(dir: string): Promise<SnapshotMeta[]> {

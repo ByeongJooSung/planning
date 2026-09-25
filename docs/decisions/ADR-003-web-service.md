@@ -10,7 +10,17 @@
 - Node HTTP 서버 하나가 API와 화면(뷰어의 편집 모드)을 함께 낸다. 프로젝트 데이터는 지금과 같은 파일 저장소(`<root>/<코드>/`)를 쓰고, CLI로 만든 프로젝트도 그대로 열린다.
 - 계정·세션·멤버·초대·AI 설정은 `<root>/.service/service.json`에 둔다(작은 팀 규모). 쓰기는 임시 파일 → 이름 바꾸기로 원자적으로 하고, 프로젝트 쓰기는 프로젝트마다 한 줄로 세운다.
 - 편집은 서버가 서비스 코어(`src/service/core.ts`의 `execute`)를 실행해 무결성 검사 후 저장한다. 화면은 저장 결과(RTM·Diff·프롬프트까지 계산된 데이터)를 받아 다시 그린다.
-- 배포: `Dockerfile`(데이터 볼륨 `/data`, 비어 있으면 샘플 프로젝트 복사), `render.yaml`(Render 블루프린트, 영구 디스크). 사내 서버에서는 `node dist/cli.js serve`.
+- 배포: `Dockerfile`(데이터 볼륨 `/data`, 비어 있으면 샘플 프로젝트 복사), `render.yaml`(Render 블루프린트, 영구 디스크), `vercel.json`(Vercel 함수). 사내 서버에서는 `node dist/cli.js serve`.
+
+### 1-1. 저장소 두 가지 — 파일과 Redis
+서버리스(Vercel)는 디스크가 남지 않고 요청이 여러 인스턴스로 나뉜다. 그래서 저장을 두 층으로 나눴다.
+| 층 | 한 프로세스 (`planning serve`) | 서버리스 (Vercel) |
+|---|---|---|
+| 계정·세션·멤버·초대·AI 설정·생성 결과·댓글 (`Kv`) | `FileKv` — `.service/kv.json` | `UpstashKv` — Upstash Redis REST |
+| 프로젝트 모델·조각·스냅샷·원본 파일 (`ProjectRepo`) | `FsRepo` — CLI와 같은 폴더 구조 | `KvRepo` — 같은 Redis (`prj:{코드}:…`) |
+- 계정 저장소는 메모리에 캐시하지 않고 요청마다 읽는다(인스턴스 사이 일관성). 가입 이메일 중복·첫 가입자·프로젝트 코드 중복은 `SET NX`로 원자적으로 막는다.
+- 프로젝트 쓰기는 `SET NX EX` 잠금으로 한 줄로 세우고, 저장소는 이전·새 상태의 차이(모델, 바뀐 조각, 새 스냅샷, 원본 파일 추가·삭제)만 쓴다.
+- Vercel 첫 요청 때 저장소가 비어 있으면 샘플 프로젝트를 넣는다(`SEED_EXAMPLES=0`이면 안 함). `PLANNING_SECRET`이나 Redis 연결이 없으면 설정 안내 화면을 낸다.
 
 ## 2. 권한 — 만든 사람이 운영자
 | 권한 | 할 수 있는 일 |

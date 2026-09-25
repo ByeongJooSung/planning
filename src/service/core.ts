@@ -39,7 +39,8 @@ export interface SnapshotMeta {
 }
 export interface SnapshotRecord {
   meta: SnapshotMeta;
-  model: Model;
+  /** 저장소에서 읽을 때는 마지막 스냅샷(비교 기준)만 모델을 싣는다 */
+  model?: Model;
 }
 export interface ProjectState {
   model: Model;
@@ -282,7 +283,7 @@ export function deriveProject(state: ProjectState, now = new Date(), opts: { vie
     model,
     rtm: buildRtm(model, now),
     snapshots: state.snapshots.map((s) => s.meta),
-    diff: last ? { from: last.meta.version, entries: diffModels(last.model, model) } : null,
+    diff: last?.model ? { from: last.meta.version, entries: diffModels(last.model, model) } : null,
     chunks,
     prompts: buildPrompts(model, chunks, opts),
     gens: buildGenPrompts(model, chunks, opts),

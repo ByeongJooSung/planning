@@ -47,6 +47,12 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 - 로컬 LLM: 호출 방법 OpenAI 호환, 주소 `http://<서버>:11434/v1`(Ollama)·`http://<서버>:8000/v1`(vLLM), 모델 이름
 
 ### 배포
+- **Vercel** (서버리스 + Upstash Redis):
+  1. Vercel → Add New → Project → GitHub `byeongjoosung/planning` 가져오기 (Framework: Other — 나머지는 `vercel.json`이 정함)
+  2. 프로젝트 → Storage → Marketplace에서 **Upstash for Redis** 만들기 → 이 프로젝트에 연결 (`KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동으로 들어감)
+  3. Settings → Environment Variables에 `PLANNING_SECRET` (16자 이상 임의 문자열, 한 번 정하면 바꾸지 않기). 선택: `ANTHROPIC_API_KEY`, `PLANNING_SIGNUP=closed`
+  4. Deployments → Redeploy → `https://<프로젝트>.vercel.app` 접속 → 첫 가입자가 샘플 프로젝트 2개의 운영자
+  - 한도: 참조자료 한 번에 3MB(Vercel 요청 4.5MB), AI 생성 최대 300초. 로컬 LLM은 Vercel에서 접속할 수 있는 공개 주소여야 합니다(사내망 주소 불가).
 - **Docker**: `docker build -t planning-studio . && docker run -p 8080:8080 -v planning-data:/data -e PLANNING_SECRET=… planning-studio` — 데이터 볼륨이 비어 있으면 샘플 프로젝트 2개를 넣습니다(`SEED_EXAMPLES=0`이면 안 넣음).
 - **Render**: 이 저장소를 Render에 연결하고 New → Blueprint를 고르면 `render.yaml`대로 웹 서비스와 영구 디스크를 만들고 `https://planning-studio-xxxx.onrender.com` 주소를 줍니다. 만든 뒤 `PUBLIC_URL`을 그 주소로 넣으세요.
 - 그 밖에 Docker가 도는 곳(Fly.io, Railway, 사내 서버)이면 같은 이미지로 됩니다. 파일 저장소라 인스턴스는 하나만 띄웁니다.

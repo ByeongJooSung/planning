@@ -3,13 +3,19 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "../src/server/app.js";
+import { createServer } from "node:http";
+import { createApp, createLocalApp } from "../src/server/app.js";
 import type { AiResolved } from "../src/server/accounts.js";
+import { FileKv } from "../src/server/kv.js";
+import { KvRepo } from "../src/server/repo.js";
 
+const MODES = ["local", "serverless"] as const;
+describe.each(MODES)("웹 서비스 (%s)", (mode) => {
 let base = "";
 let root = "";
 let close: () => void;
 const calls: AiResolved[] = [];
+const storeFile = () => path.join(root, ".service", mode === "local" ? "kv.json" : "kv-serverless.json");
 
 class Client {
   cookie = "";
@@ -28,24 +34,27 @@ class Client {
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "planning-srv-"));
-  const app = await createApp({
-    root,
-    secret: "test-secret",
-    aiCaller: async (cfg) => {
-      calls.push(cfg);
-      return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
-    },
-  });
-  await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", r));
-  base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
-  close = () => app.server.close();
+  const aiCaller = async (cfg: AiResolved) => {
+    calls.push(cfg);
+    return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
+  };
+  let server;
+  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller })).server;
+  else {
+    const kv = await FileKv.open(storeFile());
+    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller });
+    server = createServer((req, res) => void app.handle(req, res));
+  }
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  close = () => server.close();
 });
 afterAll(async () => {
   close();
   await rm(root, { recursive: true, force: true });
 });
 
-describe("웹 서비스", () => {
+describe("시나리오", () => {
   const owner = new Client();
   const editor = new Client();
   const viewer = new Client();
@@ -159,7 +168,7 @@ describe("웹 서비스", () => {
     expect(calls.at(-1)).toMatchObject({ model: "qwen2.5", apiKey: "sk-local-SECRET" });
 
     // 저장 파일에도 평문 키가 없다
-    const stored = await readFile(path.join(root, ".service", "service.json"), "utf8");
+    const stored = await readFile(storeFile(), "utf8");
     expect(stored).not.toMatch(/SECRET|MINE/);
   });
 
@@ -186,4 +195,5 @@ describe("웹 서비스", () => {
     expect(html).toContain('"mode":"server"');
     expect((await fetch(base + "/invite/abc")).status).toBe(200);
   });
+});
 });

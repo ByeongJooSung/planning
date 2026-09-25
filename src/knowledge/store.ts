@@ -22,7 +22,7 @@ export async function loadChunks(dir: string): Promise<Chunk[]> {
   return ((await readJson(f)) as { chunks: Chunk[] }).chunks;
 }
 
-async function saveChunks(dir: string, chunks: Chunk[]) {
+export async function saveChunks(dir: string, chunks: Chunk[]) {
   await mkdir(path.join(dir, "knowledge"), { recursive: true });
   await writeJson(path.join(dir, "knowledge", "chunks.json"), { chunks });
 }
