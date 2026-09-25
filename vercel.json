@@ -4,6 +4,9 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "regions": [
+    "hnd1"
+  ],
   "functions": {
     "api/index.mjs": {
       "maxDuration": 300,
@@ -11,5 +14,10 @@
       "includeFiles": "{dist/**,examples/projects/**}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ]
 }
