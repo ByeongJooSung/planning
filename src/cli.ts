@@ -14,6 +14,7 @@ import {
 } from "./project/ops.js";
 import { createProject, loadModel, projectDir, saveModel } from "./project/store.js";
 import { renderRtmCsv, renderRtmMarkdown, type RtmView } from "./render/rtm-render.js";
+import { collectViewerProject, renderViewer } from "./render/viewer/index.js";
 import { buildRtm, STATUS_LABEL } from "./trace/rtm.js";
 import { diffModels, renderDiffMarkdown } from "./version/diff.js";
 import { listSnapshots, loadSnapshot, takeSnapshot } from "./version/snapshot.js";
@@ -46,11 +47,18 @@ const program = new Command()
 
 const list = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean);
 
+async function listProjectCodes(root: string): Promise<string[]> {
+  const entries = existsSync(root) ? await readdir(root, { withFileTypes: true }) : [];
+  return entries
+    .filter((e) => e.isDirectory() && existsSync(path.join(root, e.name, "project.json")))
+    .map((e) => e.name)
+    .sort();
+}
+
 async function resolveDir(): Promise<string> {
   const { root, project } = program.opts<{ root: string; project?: string }>();
   if (project) return projectDir(root, project);
-  const entries = existsSync(root) ? await readdir(root, { withFileTypes: true }) : [];
-  const codes = entries.filter((e) => e.isDirectory() && existsSync(path.join(root, e.name, "project.json"))).map((e) => e.name);
+  const codes = await listProjectCodes(root);
   if (codes.length === 1) return projectDir(root, codes[0]!);
   throw new Error(codes.length ? `프로젝트를 -p로 지정하세요: ${codes.join(", ")}` : `프로젝트가 없습니다 (${root}). planning init 으로 만드세요`);
 }
@@ -282,6 +290,24 @@ program
     const b = to ? await loadSnapshot(dir, to) : await loadModel(dir);
     const title = `변경 비교: v${from.replace(/^v/, "")} → ${to ? `v${to.replace(/^v/, "")}` : `현재(v${b.project.version})`}`;
     process.stdout.write(renderDiffMarkdown(diffModels(a, b), title));
+  });
+
+program
+  .command("view")
+  .description("프로젝트 뷰어 HTML 생성 (대시보드·추적표·정보구조도·플로우·버전 이력)")
+  .option("--all", "루트의 모든 프로젝트를 한 뷰어에 담기")
+  .option("--out <file>", "출력 파일 (기본: 프로젝트 폴더의 outputs/viewer.html, --all이면 루트/viewer.html)")
+  .option("--fragment", "문서 뼈대(<html>, <head>) 없이 본문 조각만 출력")
+  .action(async (o) => {
+    const { root } = program.opts<{ root: string }>();
+    const dirs = o.all ? (await listProjectCodes(root)).map((c) => projectDir(root, c)) : [await resolveDir()];
+    if (!dirs.length) throw new Error(`프로젝트가 없습니다 (${root})`);
+    const now = new Date();
+    const projects = await Promise.all(dirs.map((d) => collectViewerProject(d, now)));
+    const html = await renderViewer({ generatedAt: now.toISOString(), projects }, { standalone: !o.fragment });
+    const out = o.out ?? (o.all ? path.join(root, "viewer.html") : path.join(dirs[0]!, "outputs", "viewer.html"));
+    await writeFile(out, html);
+    console.log(`뷰어를 만들었습니다: ${out} (프로젝트 ${projects.length}건)`);
   });
 
 // 출력이 head 등으로 잘려도(EPIPE) 오류 없이 끝낸다

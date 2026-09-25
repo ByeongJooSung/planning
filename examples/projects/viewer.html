@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planning Studio 뷰어</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --ink: #16202c;
+  --ink-2: #4a5566;
+  --ink-3: #7b8594;
+  --line: #d9dee5;
+  --line-strong: #b9c1cc;
+  --accent: #1f5e8c;
+  --accent-soft: #e3edf5;
+  --st-none: #7b8594;
+  --st-none-bg: transparent;
+  --st-prog: #a4470b;
+  --st-prog-bg: #fcefdf;
+  --st-done: #0e6b63;
+  --st-done-bg: #dff1ee;
+  --st-rev: #ffffff;
+  --st-rev-bg: #1d7a45;
+  --st-excl: #8a94a3;
+  --warn: #a4470b;
+  --crit: #b42318;
+  --crit-bg: #fdecea;
+  --add: #1d7a45;
+  --del: #b42318;
+  --chg: #a4470b;
+  --font: "IBM Plex Sans KR", system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f141a;
+    --surface: #161d26;
+    --surface-2: #1d2631;
+    --ink: #e5e9ef;
+    --ink-2: #a8b2bf;
+    --ink-3: #7c8694;
+    --line: #2a3441;
+    --line-strong: #3a4656;
+    --accent: #72b4e2;
+    --accent-soft: #1b2e3f;
+    --st-none: #8c96a4;
+    --st-prog: #f2a766;
+    --st-prog-bg: #3a2616;
+    --st-done: #5fcfc1;
+    --st-done-bg: #133330;
+    --st-rev: #0f141a;
+    --st-rev-bg: #58c98a;
+    --st-excl: #6d7785;
+    --warn: #f2a766;
+    --crit: #f38b82;
+    --crit-bg: #3a1c1a;
+    --add: #58c98a;
+    --del: #f38b82;
+    --chg: #f2a766;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f141a;
+  --surface: #161d26;
+  --surface-2: #1d2631;
+  --ink: #e5e9ef;
+  --ink-2: #a8b2bf;
+  --ink-3: #7c8694;
+  --line: #2a3441;
+  --line-strong: #3a4656;
+  --accent: #72b4e2;
+  --accent-soft: #1b2e3f;
+  --st-none: #8c96a4;
+  --st-prog: #f2a766;
+  --st-prog-bg: #3a2616;
+  --st-done: #5fcfc1;
+  --st-done-bg: #133330;
+  --st-rev: #0f141a;
+  --st-rev-bg: #58c98a;
+  --st-excl: #6d7785;
+  --warn: #f2a766;
+  --crit: #f38b82;
+  --crit-bg: #3a1c1a;
+  --add: #58c98a;
+  --del: #f38b82;
+  --chg: #f2a766;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.mono, code { font-family: var(--mono); font-size: 0.92em; letter-spacing: -0.01em; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Shell ─────────────────────────────── */
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.side {
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  padding: 20px 14px;
+  display: flex; flex-direction: column; gap: 18px;
+  position: sticky; top: env(safe-area-inset-top, 0px);
+  height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; flex-direction: column; gap: 2px; padding-inline: 6px; }
+.brand b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.brand span { color: var(--ink-3); font-size: 12px; }
+.side-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); padding-inline: 6px; }
+.proj-list { display: flex; flex-direction: column; gap: 4px; }
+.proj-btn {
+  text-align: left; background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 9px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.proj-btn:hover { background: var(--surface-2); }
+.proj-btn[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.proj-btn .code { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+.proj-btn .name { font-weight: 600; font-size: 13.5px; }
+.proj-select { display: none; }
+.side-foot { margin-top: auto; color: var(--ink-3); font-size: 11.5px; padding-inline: 6px; }
+
+.main { padding-inline: 32px; padding-block: 24px 64px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag {
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 9px; font-size: 12px; color: var(--ink-2); background: var(--surface);
+}
+.ver { font-family: var(--mono); font-size: 13px; color: var(--ink-2); }
+
+.tabs {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto;
+  scrollbar-width: none; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 5;
+}
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px;
+  cursor: pointer; color: var(--ink-2); white-space: nowrap; font-weight: 500;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab .n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: 4px; }
+
+.panel { display: flex; flex-direction: column; gap: 20px; }
+.section { display: flex; flex-direction: column; gap: 10px; }
+.section > h2 { font-size: 15px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+.section > h2 small { font-weight: 400; color: var(--ink-3); font-size: 12.5px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.hint { color: var(--ink-3); font-size: 12.5px; }
+
+/* ── Pills & chips ─────────────────────── */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 0 8px;
+  font-size: 11.5px; font-weight: 600; line-height: 20px; white-space: nowrap; border: 1px solid transparent;
+}
+.pill.NOT_STARTED { color: var(--st-none); border-color: var(--line-strong); border-style: dashed; }
+.pill.IN_DESIGN { color: var(--st-prog); background: var(--st-prog-bg); }
+.pill.DESIGNED { color: var(--st-done); background: var(--st-done-bg); border-color: var(--st-done); }
+.pill.REVIEWED { color: var(--st-rev); background: var(--st-rev-bg); }
+.pill.EXCLUDED { color: var(--st-excl); text-decoration: line-through; border-color: var(--line); }
+.sys {
+  display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11.5px;
+  font-weight: 500; color: var(--ink-2); white-space: nowrap;
+}
+.sys i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+.chg { font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 0 5px; border-radius: 4px; border: 1px solid; }
+.chg.NEW { color: var(--add); }
+.chg.CHANGED { color: var(--chg); }
+.chg.DELETED { color: var(--del); text-decoration: line-through; }
+.chg.KEPT { color: var(--ink-3); }
+
+/* ── Dashboard ─────────────────────────── */
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0; overflow: hidden; }
+.stage { padding: 12px 14px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; position: relative; }
+.stage:last-child { border-right: 0; }
+.stage .sid { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+.stage .sname { font-weight: 600; font-size: 13px; }
+.stage .sst { font-size: 12px; font-weight: 600; }
+.stage::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--line); }
+.stage.CONFIRMED::after { background: var(--st-rev-bg); }
+.stage.DRAFTED::after, .stage.IN_REVIEW::after, .stage.GATE_PASSED::after { background: var(--st-done); }
+.stage.COLLECTING::after, .stage.NEEDS_UPDATE::after { background: var(--st-prog); }
+.stage.SKIPPED .sname { color: var(--ink-3); text-decoration: line-through; }
+.stage.CONFIRMED .sst { color: var(--add); }
+.stage.DRAFTED .sst, .stage.IN_REVIEW .sst, .stage.GATE_PASSED .sst { color: var(--st-done); }
+.stage.COLLECTING .sst, .stage.NEEDS_UPDATE .sst { color: var(--st-prog); }
+.stage.NOT_STARTED .sst, .stage.SKIPPED .sst { color: var(--ink-3); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.kpi .v { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kpi .v small { font-size: 14px; color: var(--ink-3); font-weight: 500; margin-left: 2px; }
+.kpi .l { color: var(--ink-2); font-size: 12.5px; }
+.kpi.alert .v { color: var(--crit); }
+
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.bars { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.bar-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 104px; gap: 12px; align-items: center; }
+.bar-row .lbl { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.bar-row .lbl span { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { height: 12px; background: var(--surface-2); border-radius: 3px; position: relative; overflow: hidden; }
+.bar > b { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.bar-row .num { font-family: var(--mono); font-size: 12px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.axis { display: grid; grid-template-columns: 150px minmax(0, 1fr) 104px; gap: 12px; color: var(--ink-3); font-size: 10.5px; font-family: var(--mono); }
+.axis div { display: flex; justify-content: space-between; }
+.stack { display: flex; height: 14px; border-radius: 3px; overflow: hidden; background: var(--surface-2); }
+.stack > span { height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+
+.issues { display: flex; flex-direction: column; }
+.issue { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 13px; }
+.issue:first-child { border-top: 0; }
+.issue .st { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--warn); padding-top: 1px; }
+.issue.orphan .st { color: var(--crit); }
+.empty { padding: 18px; color: var(--ink-3); text-align: center; }
+
+/* ── Requirements ──────────────────────── */
+.req { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.req-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.req-id { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+.req-title { font-weight: 600; font-size: 14.5px; }
+.req-sub { color: var(--ink-3); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.req-desc { color: var(--ink-2); font-size: 13px; max-width: 72ch; }
+.chain { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+.step { display: grid; grid-template-columns: 58px 96px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 6px 0 6px 14px; position: relative; }
+.step::before { content: ""; position: absolute; left: -6px; top: 13px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--sys, var(--line-strong)); }
+.step .tid { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.step .act b { font-weight: 500; }
+.step .act .who { color: var(--ink-3); margin-right: 6px; }
+.step .tr { display: block; font-size: 11.5px; color: var(--ink-3); }
+.step .tr code { color: var(--ink-2); }
+.notask { color: var(--warn); font-size: 12.5px; font-weight: 500; }
+
+/* ── Tables ────────────────────────────── */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { background: none; border: 0; padding: 6px 12px; cursor: pointer; color: var(--ink-2); border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.fchip i { width: 9px; height: 9px; border-radius: 2px; }
+.fchip[aria-pressed="false"] { opacity: 0.45; }
+.twrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: var(--surface-2); font-weight: 600; color: var(--ink-2); font-size: 11.5px; white-space: nowrap; position: sticky; top: 0; }
+td.id, td .id { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+td.req-cell { background: var(--surface); border-right: 1px solid var(--line); }
+tr.muted td { color: var(--ink-3); }
+tr.orphan td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+.ids { display: flex; flex-direction: column; gap: 1px; font-family: var(--mono); font-size: 11.5px; }
+.dash { color: var(--line-strong); }
+.cell { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+.cell .t { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+.cell .s { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.cell .s.none { color: var(--warn); font-family: var(--font); }
+
+/* ── IA ────────────────────────────────── */
+.ia-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.ia-col { overflow: hidden; }
+.ia-col h3 { font-size: 13.5px; padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.ia-col h3 i { width: 10px; height: 10px; border-radius: 2px; }
+.ia-col h3 span { color: var(--ink-3); font-weight: 400; font-size: 12px; margin-left: auto; font-family: var(--mono); }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree { padding: 8px 10px 12px; }
+.tree ul { padding-left: 16px; border-left: 1px dashed var(--line-strong); margin-left: 6px; }
+.node { padding: 5px 4px; display: flex; flex-direction: column; gap: 1px; }
+.node .top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.node .nm { font-weight: 500; }
+.node.MENU > .top .nm { font-weight: 700; }
+.node .sid { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+.node .kind { font-size: 10.5px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.node .tk { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.node .tk.none { color: var(--crit); font-family: var(--font); }
+
+/* ── Flow ──────────────────────────────── */
+.flow-box { overflow-x: auto; padding: 8px; }
+.flow-box svg { display: block; }
+.flow-box text { fill: var(--ink); font-family: var(--font); }
+.flow-box .lane-label { font-size: 12px; font-weight: 600; }
+.flow-box .lane-line { stroke: var(--line); }
+.flow-box .shape { fill: var(--surface); stroke: var(--ink-2); stroke-width: 1.4; }
+.flow-box .shape.TERMINATOR { fill: var(--surface-2); }
+.flow-box .shape.DECISION { fill: var(--st-prog-bg); stroke: var(--st-prog); }
+.flow-box .nlabel { font-size: 12px; font-weight: 500; }
+.flow-box .nsid { font-size: 10px; font-family: var(--mono); fill: var(--accent); }
+.flow-box .ntask { font-size: 9.5px; font-family: var(--mono); fill: var(--ink-3); }
+.flow-box .edge { fill: none; stroke: var(--ink-3); stroke-width: 1.3; }
+.flow-box .edge.back { stroke-dasharray: 4 3; stroke: var(--st-prog); }
+.flow-box .arrow { fill: var(--ink-3); }
+.flow-box .arrow.back { fill: var(--st-prog); }
+.flow-box .elabel { font-size: 11px; font-weight: 600; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+
+/* ── Versions ──────────────────────────── */
+.snaps { display: flex; flex-wrap: wrap; gap: 10px; }
+.snap { padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+.snap .v { font-family: var(--mono); font-weight: 600; }
+.snap .d { color: var(--ink-3); font-size: 12px; }
+.snap.current { border-color: var(--accent); }
+.diff-group { padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); }
+.diff-group:first-child { border-top: 0; }
+.diff-group h3 { font-size: 13px; }
+.drow { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.drow .k { font-size: 11px; font-weight: 700; width: 34px; flex: none; }
+.drow .k.add { color: var(--add); }
+.drow .k.del { color: var(--del); }
+.drow .k.chg { color: var(--chg); }
+.fields { margin: 2px 0 0 42px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink-2); }
+.fields del { color: var(--del); }
+.fields ins { color: var(--add); text-decoration: none; }
+
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; flex-direction: row; align-items: center; gap: 12px; }
+  .proj-list, .side-label, .side-foot { display: none; }
+  .proj-select { display: block; flex: 1; min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+  .main { padding-inline: 16px; }
+  .bar-row, .axis { grid-template-columns: 88px minmax(0, 1fr) 92px; }
+  .step { grid-template-columns: 50px minmax(0, 1fr); }
+  .step .sys, .step .pill { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar > b, .stack > span { transition: width 0.4s ease; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side" id="side"></aside>
+<main class="main" id="main"></main>
+</div>
+<script type="application/json" id="planning-data">{"generatedAt":"2026-09-25T14:52:02.393Z","projects":[{"model":{"project":{"schemaVersion":1,"code":"PUBINFO","name":"정보공개 통합 서비스 구축","serviceType":"NEW","changeScope":null,"channels":["PC_WEB"],"submissionTemplate":"PUBLIC","screenIdRule":{"pattern":"{system}_{d1}_{d2}_{seq}","seqStart":10,"seqStep":10,"seqDigits":3,"popupSuffix":"_P{nn}"},"requirementIdMode":"ORIGINAL","version":"0.1","stages":{"S0":"CONFIRMED","S1":"DRAFTED","S2":"DRAFTED","S3":"DRAFTED","S4":"DRAFTED","S5":"NOT_STARTED"},"createdAt":"2026-09-25T09:00:00.000Z","updatedAt":"2026-09-25T09:00:00.000Z"},"systems":[{"code":"PUB","name":"대국민 포털","users":["일반 국민(비회원 포함)"],"channels":["PC_WEB","MOBILE_WEB"],"color":"#2563EB","hasScreens":true,"description":"공개 정보 조회, 안내"},{"code":"CVL","name":"민원포털","users":["민원인(회원)"],"channels":["PC_WEB","MOBILE_WEB"],"color":"#059669","hasScreens":true,"description":"신청, 자료 등록, 처리 현황 조회"},{"code":"ADM","name":"심사자·관리자 시스템","users":["심사자","운영 관리자"],"channels":["ADMIN_WEB"],"color":"#D97706","hasScreens":true,"description":"검토, 승인·반려, 운영 관리"},{"code":"EXT","name":"외부 연계","users":["국가 정보공개 포털"],"channels":[],"color":"#7C3AED","hasScreens":false,"description":""}],"sources":[{"id":"SRC-001","kind":"FILE","title":"제안요청서(RFP)","location":"sources/rfp.pdf","addedAt":"2026-09-25T09:00:00.000Z"}],"requirements":[{"id":"SFR-001","originalId":"SFR-001","title":"민원인 회원가입 및 로그인","description":"","type":"FUNCTIONAL","priority":"MUST","sources":[{"sourceId":"SRC-001","locator":"p.12"}],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"SFR-001-T01","systemCode":"CVL","actor":"민원인","action":"회원가입(본인인증)","after":[]},{"id":"SFR-001-T02","systemCode":"CVL","actor":"민원인","action":"로그인","after":[]}]},{"id":"SFR-002","originalId":"SFR-002","title":"대국민 정보공개","description":"민원인이 등록한 자료를 심사자가 검토·승인하면 대국민 포털에 공개한다.","type":"FUNCTIONAL","priority":"MUST","sources":[{"sourceId":"SRC-001","locator":"p.14"}],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"SFR-002-T01","systemCode":"CVL","actor":"민원인","action":"자료 등록 및 공개 신청","after":[],"transition":{"stateSetId":"ST-INFO","from":"임시저장","to":"공개신청"}},{"id":"SFR-002-T02","systemCode":"ADM","actor":"심사자","action":"신청 목록 조회 및 내용 검토","after":["SFR-002-T01"],"transition":{"stateSetId":"ST-INFO","from":"공개신청","to":"심사중"}},{"id":"SFR-002-T03","systemCode":"ADM","actor":"심사자","action":"승인 또는 반려(사유 입력)","after":["SFR-002-T02"],"transition":{"stateSetId":"ST-INFO","from":"심사중","to":"승인"}},{"id":"SFR-002-T04","systemCode":"CVL","actor":"민원인","action":"처리 결과 확인, 반려 시 보완 후 재신청","after":["SFR-002-T03"],"transition":{"stateSetId":"ST-INFO","from":"반려","to":"공개신청"}},{"id":"SFR-002-T05","systemCode":"PUB","actor":"국민","action":"공개 목록·상세 조회","after":["SFR-002-T03"],"transition":{"stateSetId":"ST-INFO","from":"승인","to":"공개"}},{"id":"SFR-002-T06","systemCode":"EXT","actor":"시스템","action":"국가 정보공개 포털로 공개 자료 전송","after":["SFR-002-T05"]}]},{"id":"SFR-003","originalId":"SFR-003","title":"심사 이력 관리","description":"","type":"FUNCTIONAL","priority":"MUST","sources":[{"sourceId":"SRC-001","locator":"p.15"}],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"SFR-003-T01","systemCode":"ADM","actor":"심사자","action":"자료별 심사 이력 조회","after":[]}]},{"id":"SFR-004","originalId":"SFR-004","title":"처리 결과 모바일 알림","description":"","type":"FUNCTIONAL","priority":"SHOULD","sources":[],"status":"ACTIVE","ambiguous":false,"tasks":[]},{"id":"SFR-005","originalId":"SFR-005","title":"타 기관 자료 일괄 수집","description":"","type":"FUNCTIONAL","priority":"COULD","sources":[],"status":"EXCLUDED","excludeReason":"2차 사업 범위로 이관(착수보고 회의 결정)","ambiguous":false,"tasks":[]}],"policies":{"stateSets":[{"id":"ST-INFO","name":"정보공개 자료 상태","values":["임시저장","공개신청","심사중","승인","반려","공개","공개중지"]}]},"plan":{"sections":[{"id":"PS-01","title":"개요","body":"","requirementIds":["SFR-001","SFR-002","SFR-003"],"taskIds":[]},{"id":"PS-05","title":"주요 기능 정의","body":"","requirementIds":[],"taskIds":["SFR-002-T01","SFR-002-T03"]}],"features":[{"id":"FN-CVL-001","name":"회원가입·로그인","systemCode":"CVL","description":"","taskIds":["SFR-001-T01","SFR-001-T02"],"change":"NEW"},{"id":"FN-CVL-021","name":"정보공개 자료 등록","systemCode":"CVL","description":"","taskIds":["SFR-002-T01"],"change":"NEW"},{"id":"FN-CVL-022","name":"처리 결과 확인·보완","systemCode":"CVL","description":"","taskIds":["SFR-002-T04"],"change":"NEW"},{"id":"FN-ADM-033","name":"정보공개 심사","systemCode":"ADM","description":"","taskIds":["SFR-002-T02","SFR-002-T03"],"change":"NEW"},{"id":"FN-PUB-010","name":"정보공개 조회","systemCode":"PUB","description":"","taskIds":["SFR-002-T05"],"change":"NEW"},{"id":"FN-PUB-900","name":"통합 검색","systemCode":"PUB","description":"요구사항 근거 확인 필요","taskIds":[],"change":"NEW"}]},"ia":{"nodes":[{"id":"M-PUB-INF","systemCode":"PUB","parentId":null,"name":"정보공개","kind":"MENU","loginRequired":false,"roles":[],"taskIds":[],"change":"NEW"},{"id":"PUB_INF_LST_010","systemCode":"PUB","parentId":"M-PUB-INF","name":"정보공개 목록","kind":"PAGE","loginRequired":false,"roles":[],"taskIds":["SFR-002-T05"],"change":"NEW"},{"id":"PUB_INF_DTL_010","systemCode":"PUB","parentId":"M-PUB-INF","name":"정보공개 상세","kind":"PAGE","loginRequired":false,"roles":[],"taskIds":["SFR-002-T05"],"change":"NEW"},{"id":"PUB_MAIN_HOME_010","systemCode":"PUB","parentId":null,"name":"메인","kind":"PAGE","loginRequired":false,"roles":[],"taskIds":[],"change":"NEW"},{"id":"M-CVL-MEM","systemCode":"CVL","parentId":null,"name":"회원","kind":"MENU","loginRequired":false,"roles":[],"taskIds":[],"change":"NEW"},{"id":"CVL_MEM_JOIN_010","systemCode":"CVL","parentId":"M-CVL-MEM","name":"회원가입","kind":"PAGE","loginRequired":false,"roles":[],"taskIds":["SFR-001-T01"],"change":"NEW"},{"id":"CVL_MEM_LOGIN_010","systemCode":"CVL","parentId":"M-CVL-MEM","name":"로그인","kind":"PAGE","loginRequired":false,"roles":[],"taskIds":["SFR-001-T02"],"change":"NEW"},{"id":"M-CVL-INF","systemCode":"CVL","parentId":null,"name":"정보공개","kind":"MENU","loginRequired":false,"roles":[],"taskIds":[],"change":"NEW"},{"id":"CVL_INF_REG_010","systemCode":"CVL","parentId":"M-CVL-INF","name":"정보공개 자료 등록","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":["SFR-002-T01"],"change":"NEW"},{"id":"CVL_INF_STS_010","systemCode":"CVL","parentId":"M-CVL-INF","name":"처리 현황","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":["SFR-002-T04"],"change":"NEW"},{"id":"M-ADM-INF","systemCode":"ADM","parentId":null,"name":"정보공개 심사","kind":"MENU","loginRequired":false,"roles":[],"taskIds":[],"change":"NEW"},{"id":"ADM_INF_REV_010","systemCode":"ADM","parentId":"M-ADM-INF","name":"심사 목록·상세","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":["SFR-002-T02"],"change":"NEW"},{"id":"ADM_INF_REV_010_P01","systemCode":"ADM","parentId":"ADM_INF_REV_010","name":"승인·반려 처리","kind":"POPUP","loginRequired":true,"roles":[],"taskIds":["SFR-002-T03"],"change":"NEW"}],"retiredIds":[]},"flows":[{"id":"PF-01","kind":"PROCESS","title":"정보공개 처리 프로세스","lanes":[{"id":"L-CVL","label":"민원포털 · 민원인","systemCode":"CVL"},{"id":"L-ADM","label":"심사자 시스템 · 심사자","systemCode":"ADM"},{"id":"L-PUB","label":"대국민 포털","systemCode":"PUB"},{"id":"L-EXT","label":"외부 연계","systemCode":"EXT"}],"nodes":[{"id":"n1","shape":"TERMINATOR","label":"시작","lane":"L-CVL","taskIds":[],"change":"NEW"},{"id":"n2","shape":"PROCESS","label":"자료 등록·공개 신청","lane":"L-CVL","screenId":"CVL_INF_REG_010","taskIds":["SFR-002-T01"],"change":"NEW"},{"id":"n3","shape":"PROCESS","label":"내용 검토","lane":"L-ADM","screenId":"ADM_INF_REV_010","taskIds":["SFR-002-T02"],"change":"NEW"},{"id":"n4","shape":"DECISION","label":"승인?","lane":"L-ADM","taskIds":["SFR-002-T03"],"change":"NEW"},{"id":"n5","shape":"PROCESS","label":"보완 후 재신청","lane":"L-CVL","screenId":"CVL_INF_STS_010","taskIds":["SFR-002-T04"],"change":"NEW"},{"id":"n6","shape":"PROCESS","label":"대국민 공개","lane":"L-PUB","screenId":"PUB_INF_LST_010","taskIds":["SFR-002-T05"],"change":"NEW"},{"id":"n7","shape":"IO","label":"정보공개 포털 전송","lane":"L-EXT","taskIds":["SFR-002-T06"],"change":"NEW"},{"id":"n8","shape":"TERMINATOR","label":"종료","lane":"L-PUB","taskIds":[],"change":"NEW"}],"edges":[{"from":"n1","to":"n2","label":""},{"from":"n2","to":"n3","label":""},{"from":"n3","to":"n4","label":""},{"from":"n4","to":"n6","label":"승인"},{"from":"n4","to":"n5","label":"반려"},{"from":"n5","to":"n3","label":"재신청"},{"from":"n6","to":"n7","label":""},{"from":"n7","to":"n8","label":""}]}],"storyboard":{"screens":[{"screenId":"CVL_INF_REG_010","systemCode":"CVL","title":"정보공개 자료 등록","taskIds":[],"components":[{"no":1,"label":"제목","kind":"text-input","planner":"공개 목록에 그대로 노출되는 제목. 저장 시 앞뒤 공백 제거","customer":"등록할 자료의 제목을 입력한다","validation":{"required":true,"minLength":2,"maxLength":100,"timing":["ON_BLUR","ON_SUBMIT"],"messages":[{"condition":"미입력","text":"제목을 입력해 주세요."},{"condition":"100자 초과","text":"제목은 100자 이내로 입력해 주세요."}]}},{"no":2,"label":"공개 구분","kind":"radio","planner":"부분공개 선택 시 비공개 사유 입력란 노출","customer":"자료를 어느 범위까지 공개할지 선택한다","options":{"values":["전체공개","부분공개"],"default":"전체공개"},"validation":{"required":true,"timing":["ON_SUBMIT"],"messages":[]}}],"status":"DRAFT"},{"screenId":"CVL_INF_STS_010","systemCode":"CVL","title":"처리 현황","taskIds":[],"components":[],"status":"DRAFT"},{"screenId":"ADM_INF_REV_010","systemCode":"ADM","title":"심사 목록·상세","taskIds":[],"components":[],"status":"DRAFT"},{"screenId":"PUB_INF_LST_010","systemCode":"PUB","title":"정보공개 목록","taskIds":[],"components":[],"status":"DRAFT"},{"screenId":"PUB_INF_DTL_010","systemCode":"PUB","title":"정보공개 상세","taskIds":[],"components":[],"status":"DRAFT"}]},"prototype":{"screens":[]},"changes":[],"rtmRecords":{"reviews":[{"taskId":"SFR-002-T01","reviewer":"기획 리드","reviewedAt":"2026-09-25T09:00:00.000Z","note":"착수 검토 회의 확인"}],"notes":{},"history":[{"requirementId":"SFR-001","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"민원인 회원가입 및 로그인"},{"requirementId":"SFR-001","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-001-T01 추가 [CVL] 회원가입(본인인증)"},{"requirementId":"SFR-001","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-001-T02 추가 [CVL] 로그인"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"대국민 정보공개"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T01 추가 [CVL] 자료 등록 및 공개 신청"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T02 추가 [ADM] 신청 목록 조회 및 내용 검토"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T03 추가 [ADM] 승인 또는 반려(사유 입력)"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T04 추가 [CVL] 처리 결과 확인, 반려 시 보완 후 재신청"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T05 추가 [PUB] 공개 목록·상세 조회"},{"requirementId":"SFR-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-002-T06 추가 [EXT] 국가 정보공개 포털로 공개 자료 전송"},{"requirementId":"SFR-003","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"심사 이력 관리"},{"requirementId":"SFR-003","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"SFR-003-T01 추가 [ADM] 자료별 심사 이력 조회"},{"requirementId":"SFR-004","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"처리 결과 모바일 알림"},{"requirementId":"SFR-005","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"타 기관 자료 일괄 수집"},{"requirementId":"SFR-005","at":"2026-09-25T09:00:00.000Z","kind":"EXCLUDED","detail":"2차 사업 범위로 이관(착수보고 회의 결정)"}]}},"rtm":{"project":{"code":"PUBINFO","name":"정보공개 통합 서비스 구축","version":"0.1"},"generatedAt":"2026-09-25T14:52:02.393Z","systems":[{"code":"PUB","name":"대국민 포털"},{"code":"CVL","name":"민원포털"},{"code":"ADM","name":"심사자·관리자 시스템"},{"code":"EXT","name":"외부 연계"}],"rows":[{"requirementId":"SFR-001","originalId":"SFR-001","title":"민원인 회원가입 및 로그인","type":"FUNCTIONAL","priority":"MUST","sources":["SRC-001 p.12"],"status":"IN_DESIGN","tasks":[{"taskId":"SFR-001-T01","requirementId":"SFR-001","systemCode":"CVL","actor":"민원인","action":"회원가입(본인인증)","screenless":false,"planSections":["PS-01"],"features":["FN-CVL-001"],"screens":["CVL_MEM_JOIN_010"],"flowNodes":[],"storyboard":[],"prototype":[],"status":"IN_DESIGN"},{"taskId":"SFR-001-T02","requirementId":"SFR-001","systemCode":"CVL","actor":"민원인","action":"로그인","screenless":false,"planSections":["PS-01"],"features":["FN-CVL-001"],"screens":["CVL_MEM_LOGIN_010"],"flowNodes":[],"storyboard":[],"prototype":[],"status":"IN_DESIGN"}],"crIds":[]},{"requirementId":"SFR-002","originalId":"SFR-002","title":"대국민 정보공개","type":"FUNCTIONAL","priority":"MUST","sources":["SRC-001 p.14"],"status":"IN_DESIGN","tasks":[{"taskId":"SFR-002-T01","requirementId":"SFR-002","systemCode":"CVL","actor":"민원인","action":"자료 등록 및 공개 신청","screenless":false,"planSections":["PS-01","PS-05"],"features":["FN-CVL-021"],"screens":["CVL_INF_REG_010"],"flowNodes":["PF-01/n2"],"storyboard":["CVL_INF_REG_010"],"prototype":[],"status":"REVIEWED","reviewer":"기획 리드 (2026-09-25)"},{"taskId":"SFR-002-T02","requirementId":"SFR-002","systemCode":"ADM","actor":"심사자","action":"신청 목록 조회 및 내용 검토","screenless":false,"planSections":["PS-01"],"features":["FN-ADM-033"],"screens":["ADM_INF_REV_010"],"flowNodes":["PF-01/n3"],"storyboard":["ADM_INF_REV_010"],"prototype":[],"status":"DESIGNED"},{"taskId":"SFR-002-T03","requirementId":"SFR-002","systemCode":"ADM","actor":"심사자","action":"승인 또는 반려(사유 입력)","screenless":false,"planSections":["PS-01","PS-05"],"features":["FN-ADM-033"],"screens":["ADM_INF_REV_010_P01"],"flowNodes":["PF-01/n4"],"storyboard":[],"prototype":[],"status":"IN_DESIGN"},{"taskId":"SFR-002-T04","requirementId":"SFR-002","systemCode":"CVL","actor":"민원인","action":"처리 결과 확인, 반려 시 보완 후 재신청","screenless":false,"planSections":["PS-01"],"features":["FN-CVL-022"],"screens":["CVL_INF_STS_010"],"flowNodes":["PF-01/n5"],"storyboard":["CVL_INF_STS_010"],"prototype":[],"status":"DESIGNED"},{"taskId":"SFR-002-T05","requirementId":"SFR-002","systemCode":"PUB","actor":"국민","action":"공개 목록·상세 조회","screenless":false,"planSections":["PS-01"],"features":["FN-PUB-010"],"screens":["PUB_INF_LST_010","PUB_INF_DTL_010"],"flowNodes":["PF-01/n6"],"storyboard":["PUB_INF_LST_010","PUB_INF_DTL_010"],"prototype":[],"status":"DESIGNED"},{"taskId":"SFR-002-T06","requirementId":"SFR-002","systemCode":"EXT","actor":"시스템","action":"국가 정보공개 포털로 공개 자료 전송","screenless":true,"planSections":["PS-01"],"features":[],"screens":[],"flowNodes":["PF-01/n7"],"storyboard":[],"prototype":[],"status":"DESIGNED"}],"crIds":[]},{"requirementId":"SFR-003","originalId":"SFR-003","title":"심사 이력 관리","type":"FUNCTIONAL","priority":"MUST","sources":["SRC-001 p.15"],"status":"IN_DESIGN","tasks":[{"taskId":"SFR-003-T01","requirementId":"SFR-003","systemCode":"ADM","actor":"심사자","action":"자료별 심사 이력 조회","screenless":false,"planSections":["PS-01"],"features":[],"screens":[],"flowNodes":[],"storyboard":[],"prototype":[],"status":"IN_DESIGN"}],"crIds":[]},{"requirementId":"SFR-004","originalId":"SFR-004","title":"처리 결과 모바일 알림","type":"FUNCTIONAL","priority":"SHOULD","sources":[],"status":"NOT_STARTED","tasks":[],"crIds":[]},{"requirementId":"SFR-005","originalId":"SFR-005","title":"타 기관 자료 일괄 수집","type":"FUNCTIONAL","priority":"COULD","sources":[],"status":"EXCLUDED","excludeReason":"2차 사업 범위로 이관(착수보고 회의 결정)","tasks":[],"crIds":[]}],"matrix":{"SFR-001":{"PUB":{"taskIds":[],"screens":[],"screenless":false,"status":null},"CVL":{"taskIds":["SFR-001-T01","SFR-001-T02"],"screens":["CVL_MEM_JOIN_010","CVL_MEM_LOGIN_010"],"screenless":false,"status":"IN_DESIGN"},"ADM":{"taskIds":[],"screens":[],"screenless":false,"status":null},"EXT":{"taskIds":[],"screens":[],"screenless":false,"status":null}},"SFR-002":{"PUB":{"taskIds":["SFR-002-T05"],"screens":["PUB_INF_LST_010","PUB_INF_DTL_010"],"screenless":false,"status":"DESIGNED"},"CVL":{"taskIds":["SFR-002-T01","SFR-002-T04"],"screens":["CVL_INF_REG_010","CVL_INF_STS_010"],"screenless":false,"status":"DESIGNED"},"ADM":{"taskIds":["SFR-002-T02","SFR-002-T03"],"screens":["ADM_INF_REV_010","ADM_INF_REV_010_P01"],"screenless":false,"status":"IN_DESIGN"},"EXT":{"taskIds":["SFR-002-T06"],"screens":[],"screenless":true,"status":"DESIGNED"}},"SFR-003":{"PUB":{"taskIds":[],"screens":[],"screenless":false,"status":null},"CVL":{"taskIds":[],"screens":[],"screenless":false,"status":null},"ADM":{"taskIds":["SFR-003-T01"],"screens":[],"screenless":false,"status":"IN_DESIGN"},"EXT":{"taskIds":[],"screens":[],"screenless":false,"status":null}},"SFR-004":{"PUB":{"taskIds":[],"screens":[],"screenless":false,"status":null},"CVL":{"taskIds":[],"screens":[],"screenless":false,"status":null},"ADM":{"taskIds":[],"screens":[],"screenless":false,"status":null},"EXT":{"taskIds":[],"screens":[],"screenless":false,"status":null}},"SFR-005":{"PUB":{"taskIds":[],"screens":[],"screenless":false,"status":null},"CVL":{"taskIds":[],"screens":[],"screenless":false,"status":null},"ADM":{"taskIds":[],"screens":[],"screenless":false,"status":null},"EXT":{"taskIds":[],"screens":[],"screenless":false,"status":null}}},"reverse":{"PUB_INF_LST_010":{"systemCode":"PUB","name":"정보공개 목록","requirementIds":["SFR-002"],"taskIds":["SFR-002-T05"]},"PUB_INF_DTL_010":{"systemCode":"PUB","name":"정보공개 상세","requirementIds":["SFR-002"],"taskIds":["SFR-002-T05"]},"PUB_MAIN_HOME_010":{"systemCode":"PUB","name":"메인","requirementIds":[],"taskIds":[]},"CVL_MEM_JOIN_010":{"systemCode":"CVL","name":"회원가입","requirementIds":["SFR-001"],"taskIds":["SFR-001-T01"]},"CVL_MEM_LOGIN_010":{"systemCode":"CVL","name":"로그인","requirementIds":["SFR-001"],"taskIds":["SFR-001-T02"]},"CVL_INF_REG_010":{"systemCode":"CVL","name":"정보공개 자료 등록","requirementIds":["SFR-002"],"taskIds":["SFR-002-T01"]},"CVL_INF_STS_010":{"systemCode":"CVL","name":"처리 현황","requirementIds":["SFR-002"],"taskIds":["SFR-002-T04"]},"ADM_INF_REV_010":{"systemCode":"ADM","name":"심사 목록·상세","requirementIds":["SFR-002"],"taskIds":["SFR-002-T02"]},"ADM_INF_REV_010_P01":{"systemCode":"ADM","name":"승인·반려 처리","requirementIds":["SFR-002"],"taskIds":["SFR-002-T03"]}},"coverage":{"requirements":{"NOT_STARTED":1,"IN_DESIGN":3,"DESIGNED":0,"REVIEWED":0,"EXCLUDED":1,"total":5},"tasks":{"NOT_STARTED":0,"IN_DESIGN":4,"DESIGNED":4,"REVIEWED":1,"EXCLUDED":0,"total":9},"bySystem":{"PUB":{"total":1,"designed":1,"rate":100},"CVL":{"total":4,"designed":2,"rate":50},"ADM":{"total":3,"designed":1,"rate":33.3},"EXT":{"total":1,"designed":1,"rate":100}},"designedRate":55.6},"gaps":[{"stage":"S0","kind":"NO_TASKS","ref":"SFR-004","message":"SFR-004 시스템별 Task가 분해되지 않았습니다"},{"stage":"S2","kind":"NO_SCREEN","ref":"SFR-003-T01","message":"SFR-003-T01 [ADM] 연결된 화면 ID가 없습니다"},{"stage":"S3","kind":"NO_FLOW","ref":"SFR-001-T01","message":"SFR-001-T01 플로우 노드에 연결되지 않았습니다"},{"stage":"S3","kind":"NO_FLOW","ref":"SFR-001-T02","message":"SFR-001-T02 플로우 노드에 연결되지 않았습니다"},{"stage":"S3","kind":"NO_FLOW","ref":"SFR-003-T01","message":"SFR-003-T01 플로우 노드에 연결되지 않았습니다"},{"stage":"S4","kind":"NO_STORYBOARD","ref":"SFR-001-T01","message":"SFR-001-T01 스토리보드 미작성 화면: CVL_MEM_JOIN_010"},{"stage":"S4","kind":"NO_STORYBOARD","ref":"SFR-001-T02","message":"SFR-001-T02 스토리보드 미작성 화면: CVL_MEM_LOGIN_010"},{"stage":"S4","kind":"NO_STORYBOARD","ref":"SFR-002-T03","message":"SFR-002-T03 스토리보드 미작성 화면: ADM_INF_REV_010_P01"},{"stage":"S4","kind":"NO_STORYBOARD","ref":"SFR-003-T01","message":"SFR-003-T01 연결된 화면이 없어 스토리보드를 작성할 수 없습니다"}],"orphans":[{"kind":"FEATURE","ref":"FN-PUB-900","message":"기능 FN-PUB-900 통합 검색: 연결된 요구사항이 없습니다"},{"kind":"SCREEN","ref":"PUB_MAIN_HOME_010","message":"화면 PUB_MAIN_HOME_010 메인: 연결된 요구사항이 없습니다"}]},"snapshots":[],"diff":null},{"model":{"project":{"schemaVersion":1,"code":"SHOPMY","name":"쇼핑몰 주문 내역 개선","serviceType":"EXISTING","changeScope":"MODIFY","channels":["PC_WEB"],"submissionTemplate":"GENERAL","screenIdRule":{"pattern":"{system}_{d1}_{d2}_{seq}","seqStart":10,"seqStep":10,"seqDigits":3,"popupSuffix":"_P{nn}"},"requirementIdMode":"GENERATED","version":"0.2","stages":{"S0":"CONFIRMED","S0A":"CONFIRMED","S1":"CONFIRMED","S2":"SKIPPED","S3":"NOT_STARTED","S4":"DRAFTED","S5":"NOT_STARTED"},"createdAt":"2026-09-25T09:00:00.000Z","updatedAt":"2026-09-25T09:00:00.000Z"},"systems":[{"code":"USR","name":"사용자 서비스","users":["회원","비회원"],"channels":["PC_WEB","MOBILE_WEB"],"color":"#2563EB","hasScreens":true,"description":""},{"code":"ADM","name":"관리자","users":["운영 관리자"],"channels":["ADMIN_WEB"],"color":"#D97706","hasScreens":true,"description":""}],"sources":[{"id":"SRC-001","kind":"EMAIL","title":"추가 요청 메일(2026-09-24)","location":"sources/cr-001.eml","addedAt":"2026-09-25T09:00:00.000Z"}],"requirements":[{"id":"REQ-001","title":"주문 내역 기간 조회 필터 추가","description":"","type":"FUNCTIONAL","priority":"MUST","sources":[],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"REQ-001-T01","systemCode":"USR","actor":"회원","action":"기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회","after":[]}]},{"id":"REQ-002","title":"관리자 주문 검색 기간 조건 추가","description":"","type":"FUNCTIONAL","priority":"MUST","sources":[],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"REQ-002-T01","systemCode":"ADM","actor":"운영 관리자","action":"주문 검색에 기간 조건 적용","after":[]}]},{"id":"REQ-003","title":"주문 내역 엑셀 다운로드","description":"","type":"FUNCTIONAL","priority":"MUST","sources":[{"sourceId":"SRC-001","locator":"본문 1문단"}],"status":"ACTIVE","ambiguous":false,"tasks":[{"id":"REQ-003-T01","systemCode":"USR","actor":"회원","action":"조회 결과를 엑셀로 다운로드","after":[]}]}],"policies":{"stateSets":[]},"plan":{"sections":[{"id":"PS-01","title":"개선 개요","body":"","requirementIds":["REQ-001","REQ-002"],"taskIds":[]}],"features":[]},"ia":{"nodes":[{"id":"USR_MY_ORD_010","systemCode":"USR","parentId":null,"name":"주문 내역","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":["REQ-001-T01","REQ-003-T01"],"change":"CHANGED","changeReason":"기간 필터 추가"},{"id":"USR_MY_ORD_020","systemCode":"USR","parentId":null,"name":"주문 상세","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":[],"change":"KEPT"},{"id":"ADM_ORD_SRCH_010","systemCode":"ADM","parentId":null,"name":"주문 검색","kind":"PAGE","loginRequired":true,"roles":[],"taskIds":["REQ-002-T01"],"change":"CHANGED","changeReason":"기간 조건 추가"}],"retiredIds":[]},"flows":[],"storyboard":{"screens":[{"screenId":"USR_MY_ORD_010","systemCode":"USR","title":"주문 내역","taskIds":[],"components":[{"no":1,"label":"조회 기간","kind":"segmented","planner":"기본 1개월. 직접입력은 최대 12개월","customer":"원하는 기간을 눌러 주문 내역을 좁혀 본다","options":{"values":["1개월","3개월","6개월","직접입력"],"default":"1개월"}}],"status":"DRAFT"}]},"prototype":{"screens":[]},"changes":[{"id":"CR-001","title":"주문 내역 엑셀 다운로드 추가","receivedAt":"2026-09-25T09:00:00.000Z","sourceIds":["SRC-001"],"requirementIds":["REQ-003"],"status":"APPLYING","summary":""}],"rtmRecords":{"reviews":[],"notes":{},"history":[{"requirementId":"REQ-001","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"주문 내역 기간 조회 필터 추가"},{"requirementId":"REQ-001","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"REQ-001-T01 추가 [USR] 기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회"},{"requirementId":"REQ-002","at":"2026-09-25T09:00:00.000Z","kind":"ADDED","detail":"관리자 주문 검색 기간 조건 추가"},{"requirementId":"REQ-002","at":"2026-09-25T09:00:00.000Z","kind":"TASKS_CHANGED","detail":"REQ-002-T01 추가 [ADM] 주문 검색에 기간 조건 적용"},{"requirementId":"REQ-003","at":"2026-09-25T09:00:00.000Z","crId":"CR-001","kind":"ADDED","detail":"주문 내역 엑셀 다운로드"},{"requirementId":"REQ-003","at":"2026-09-25T09:00:00.000Z","crId":"CR-001","kind":"TASKS_CHANGED","detail":"REQ-003-T01 추가 [USR] 조회 결과를 엑셀로 다운로드"}]}},"rtm":{"project":{"code":"SHOPMY","name":"쇼핑몰 주문 내역 개선","version":"0.2"},"generatedAt":"2026-09-25T14:52:02.393Z","systems":[{"code":"USR","name":"사용자 서비스"},{"code":"ADM","name":"관리자"}],"rows":[{"requirementId":"REQ-001","title":"주문 내역 기간 조회 필터 추가","type":"FUNCTIONAL","priority":"MUST","sources":[],"status":"DESIGNED","tasks":[{"taskId":"REQ-001-T01","requirementId":"REQ-001","systemCode":"USR","actor":"회원","action":"기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회","screenless":false,"planSections":["PS-01"],"features":[],"screens":["USR_MY_ORD_010"],"flowNodes":[],"storyboard":["USR_MY_ORD_010"],"prototype":[],"status":"DESIGNED"}],"crIds":[]},{"requirementId":"REQ-002","title":"관리자 주문 검색 기간 조건 추가","type":"FUNCTIONAL","priority":"MUST","sources":[],"status":"IN_DESIGN","tasks":[{"taskId":"REQ-002-T01","requirementId":"REQ-002","systemCode":"ADM","actor":"운영 관리자","action":"주문 검색에 기간 조건 적용","screenless":false,"planSections":["PS-01"],"features":[],"screens":["ADM_ORD_SRCH_010"],"flowNodes":[],"storyboard":[],"prototype":[],"status":"IN_DESIGN"}],"crIds":[]},{"requirementId":"REQ-003","title":"주문 내역 엑셀 다운로드","type":"FUNCTIONAL","priority":"MUST","sources":["SRC-001 본문 1문단"],"status":"DESIGNED","tasks":[{"taskId":"REQ-003-T01","requirementId":"REQ-003","systemCode":"USR","actor":"회원","action":"조회 결과를 엑셀로 다운로드","screenless":false,"planSections":[],"features":[],"screens":["USR_MY_ORD_010"],"flowNodes":[],"storyboard":["USR_MY_ORD_010"],"prototype":[],"status":"DESIGNED"}],"crIds":["CR-001"]}],"matrix":{"REQ-001":{"USR":{"taskIds":["REQ-001-T01"],"screens":["USR_MY_ORD_010"],"screenless":false,"status":"DESIGNED"},"ADM":{"taskIds":[],"screens":[],"screenless":false,"status":null}},"REQ-002":{"USR":{"taskIds":[],"screens":[],"screenless":false,"status":null},"ADM":{"taskIds":["REQ-002-T01"],"screens":["ADM_ORD_SRCH_010"],"screenless":false,"status":"IN_DESIGN"}},"REQ-003":{"USR":{"taskIds":["REQ-003-T01"],"screens":["USR_MY_ORD_010"],"screenless":false,"status":"DESIGNED"},"ADM":{"taskIds":[],"screens":[],"screenless":false,"status":null}}},"reverse":{"USR_MY_ORD_010":{"systemCode":"USR","name":"주문 내역","requirementIds":["REQ-001","REQ-003"],"taskIds":["REQ-001-T01","REQ-003-T01"]},"USR_MY_ORD_020":{"systemCode":"USR","name":"주문 상세","requirementIds":[],"taskIds":[]},"ADM_ORD_SRCH_010":{"systemCode":"ADM","name":"주문 검색","requirementIds":["REQ-002"],"taskIds":["REQ-002-T01"]}},"coverage":{"requirements":{"NOT_STARTED":0,"IN_DESIGN":1,"DESIGNED":2,"REVIEWED":0,"EXCLUDED":0,"total":3},"tasks":{"NOT_STARTED":0,"IN_DESIGN":1,"DESIGNED":2,"REVIEWED":0,"EXCLUDED":0,"total":3},"bySystem":{"USR":{"total":2,"designed":2,"rate":100},"ADM":{"total":1,"designed":0,"rate":0}},"designedRate":66.7},"gaps":[{"stage":"S1","kind":"NO_PLAN","ref":"REQ-003-T01","message":"REQ-003-T01 기획안(섹션·기능)에 반영되지 않았습니다"},{"stage":"S4","kind":"NO_STORYBOARD","ref":"REQ-002-T01","message":"REQ-002-T01 스토리보드 미작성 화면: ADM_ORD_SRCH_010"}],"orphans":[]},"snapshots":[{"version":"0.1","takenAt":"2026-09-25T09:00:00.000Z","note":"착수 기준선"}],"diff":{"from":"0.1","entries":{"sources":{"added":["SRC-001"],"removed":[],"changed":[]},"requirements":{"added":["REQ-003"],"removed":[],"changed":[]},"tasks":{"added":["REQ-003-T01"],"removed":[],"changed":[]},"iaNodes":{"added":[],"removed":[],"changed":[{"id":"USR_MY_ORD_010","fields":[{"path":"taskIds","before":["REQ-001-T01"],"after":["REQ-001-T01","REQ-003-T01"]}]}]},"changeRequests":{"added":["CR-001"],"removed":[],"changed":[]}}}}]}</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("planning-data").textContent);
+
+  var STATUS = { NOT_STARTED: "미착수", IN_DESIGN: "설계중", DESIGNED: "설계완료", REVIEWED: "검토완료", EXCLUDED: "제외" };
+  var STATUS_ORDER = ["REVIEWED", "DESIGNED", "IN_DESIGN", "NOT_STARTED", "EXCLUDED"];
+  var STAGE = { S0: "자료 수집", S0A: "기존 서비스 분석", S1: "기획안", S2: "정보구조도", S3: "다이어그램", S4: "스토리보드", S5: "프로토타입" };
+  var STAGE_ORDER = ["S0", "S0A", "S1", "S2", "S3", "S4", "S5"];
+  var STAGE_ST = { NOT_STARTED: "미시작", COLLECTING: "정보수집중", GATE_PASSED: "게이트 통과", DRAFTED: "초안", IN_REVIEW: "검토중", CONFIRMED: "확정", SKIPPED: "패스", NEEDS_UPDATE: "변경 필요" };
+  var TYPE = { NEW: "신규 구축", EXISTING: "기존 서비스" };
+  var SCOPE = { NEW_MENU: "신규 메뉴 추가", MODIFY: "기존 메뉴 수정", RENEWAL: "전면 개편" };
+  var TEMPLATE = { GENERAL: "일반 양식", PUBLIC: "공공기관 제출 양식" };
+  var KIND = { MENU: "메뉴", PAGE: "페이지", POPUP: "팝업", LAYER: "레이어", TAB: "탭", EXTERNAL: "외부" };
+  var CHG = { NEW: "신규", CHANGED: "변경", DELETED: "삭제", KEPT: "유지" };
+  var COLL = {
+    project: "프로젝트 설정", systems: "시스템 구분", sources: "자료", requirements: "요구사항", tasks: "Task",
+    stateSets: "공통 상태값", planSections: "기획안 섹션", features: "기능", iaNodes: "정보구조도", flows: "플로우",
+    flowNodes: "플로우 노드", flowEdges: "플로우 연결", storyboardScreens: "스토리보드 화면",
+    prototypeScreens: "프로토타입 화면", changeRequests: "변경 요청"
+  };
+  var TABS = [
+    ["dash", "대시보드"], ["req", "요구사항·Task"], ["rtm", "요구사항 추적표"],
+    ["ia", "정보구조도"], ["flow", "프로세스 플로우"], ["ver", "버전 이력"]
+  ];
+
+  var state = { p: 0, tab: "dash", rtmView: "matrix", off: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem("planning-viewer") || "{}");
+    if (saved.tab) state.tab = saved.tab;
+    if (saved.rtmView) state.rtmView = saved.rtmView;
+    if (typeof saved.p === "number" && saved.p < DATA.projects.length) state.p = saved.p;
+  } catch (e) { /* 저장소 없음 */ }
+  var hash = (location.hash || "").slice(1);
+  DATA.projects.forEach(function (p, i) { if (p.model.project.code === hash) state.p = i; });
+
+  function persist() {
+    try { localStorage.setItem("planning-viewer", JSON.stringify({ tab: state.tab, rtmView: state.rtmView, p: state.p })); } catch (e) { /* 무시 */ }
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function pill(st) { return '<span class="pill ' + st + '">' + (st === "REVIEWED" ? "✓ " : "") + STATUS[st] + "</span>"; }
+  function P() { return DATA.projects[state.p]; }
+  function sysColor(code) {
+    var s = P().model.systems.find(function (x) { return x.code === code; });
+    return s ? s.color : "#888888";
+  }
+  function sysName(code) {
+    var s = P().model.systems.find(function (x) { return x.code === code; });
+    return s ? s.name : code;
+  }
+  function sysChip(code) { return '<span class="sys"><i style="background:' + sysColor(code) + '"></i>' + esc(code) + "</span>"; }
+  function sysOn(code) { return !state.off[P().model.project.code + ":" + code]; }
+  function shortTask(id, reqId) { return id.indexOf(reqId + "-") === 0 ? id.slice(reqId.length + 1) : id; }
+  function fmtDate(iso) { return iso ? iso.slice(0, 16).replace("T", " ") : ""; }
+
+  // ── 셸 ─────────────────────────────────────────
+  function renderShell() {
+    var list = DATA.projects.map(function (p, i) {
+      var pr = p.model.project;
+      return '<button class="proj-btn" data-p="' + i + '" aria-current="' + (i === state.p) + '">' +
+        '<span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><span class="name">' + esc(pr.name) + "</span></button>";
+    }).join("");
+    var opts = DATA.projects.map(function (p, i) {
+      return '<option value="' + i + '"' + (i === state.p ? " selected" : "") + ">" + esc(p.model.project.name) + "</option>";
+    }).join("");
+    document.getElementById("side").innerHTML =
+      '<div class="brand"><b>Planning Studio</b><span>기획 산출물 뷰어</span></div>' +
+      '<label class="side-label" for="proj-select">프로젝트</label>' +
+      '<select class="proj-select" id="proj-select" aria-label="프로젝트">' + opts + "</select>" +
+      '<div class="proj-list">' + list + "</div>" +
+      '<div class="side-foot">생성 ' + esc(fmtDate(DATA.generatedAt)) + "<br><code>planning view</code></div>";
+  }
+
+  function renderMain() {
+    var p = P(), pr = p.model.project, rtm = p.rtm;
+    var counts = {
+      req: rtm.rows.length,
+      rtm: rtm.gaps.length + rtm.orphans.length,
+      ia: p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).length,
+      flow: p.model.flows.length,
+      ver: p.snapshots.length
+    };
+    var tags = [
+      TYPE[pr.serviceType] + (pr.changeScope ? " · " + SCOPE[pr.changeScope] : ""),
+      TEMPLATE[pr.submissionTemplate],
+      pr.requirementIdMode === "ORIGINAL" ? "RFP 원본 ID" : "요구사항 ID 자동 부여"
+    ];
+    var html =
+      '<header class="head"><div><h1>' + esc(pr.name) + '</h1><div class="meta">' +
+      '<span class="tag mono">' + esc(pr.code) + "</span>" +
+      tags.map(function (t) { return '<span class="tag">' + esc(t) + "</span>"; }).join("") +
+      p.model.systems.map(function (s) { return '<span class="tag"><i style="width:8px;height:8px;border-radius:2px;background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + "</span>"; }).join("") +
+      '</div></div><div class="ver">작업 버전 v' + esc(pr.version) + "</div></header>" +
+      '<nav class="tabs" role="tablist">' + TABS.map(function (t) {
+        var n = counts[t[0]];
+        return '<button class="tab" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] +
+          (n != null ? '<span class="n">' + n + "</span>" : "") + "</button>";
+      }).join("") + "</nav>" +
+      '<div class="panel" role="tabpanel">' + renderTab() + "</div>";
+    document.getElementById("main").innerHTML = html;
+  }
+
+  function renderTab() {
+    switch (state.tab) {
+      case "req": return renderReq();
+      case "rtm": return renderRtm();
+      case "ia": return renderIa();
+      case "flow": return renderFlows();
+      case "ver": return renderVer();
+      default: return renderDash();
+    }
+  }
+
+  // ── 대시보드 ───────────────────────────────────
+  function renderDash() {
+    var p = P(), pr = p.model.project, rtm = p.rtm, c = rtm.coverage;
+    var stages = STAGE_ORDER.filter(function (s) { return pr.stages[s]; }).map(function (s) {
+      var st = pr.stages[s];
+      return '<div class="stage ' + st + '"><span class="sid">' + (s === "S0A" ? "S0-A" : s) + '</span><span class="sname">' + STAGE[s] +
+        '</span><span class="sst">' + STAGE_ST[st] + "</span></div>";
+    }).join("");
+
+    var kpis =
+      kpi(c.designedRate, "%", "설계완료율 (제외 Task 제외)") +
+      kpi(c.requirements.total, "건", "요구사항 · 제외 " + c.requirements.EXCLUDED + "건") +
+      kpi(c.tasks.total, "건", "시스템별 Task") +
+      kpi(rtm.gaps.length, "건", "단계별 누락", rtm.gaps.length > 0) +
+      kpi(rtm.orphans.length, "건", "요구사항 근거 없는 산출물", rtm.orphans.length > 0);
+
+    var bars = p.model.systems.map(function (s) {
+      var v = c.bySystem[s.code] || { total: 0, designed: 0, rate: 0 };
+      return '<div class="bar-row"><div class="lbl">' + sysChip(s.code) + "<span>" + esc(s.name) + "</span></div>" +
+        '<div class="bar" role="img" aria-label="' + esc(s.name) + " 설계완료 " + v.rate + '%"><b style="width:' + v.rate + "%;background:" + s.color + '"></b></div>' +
+        '<div class="num">' + v.designed + "/" + v.total + " · " + v.rate + "%</div></div>";
+    }).join("");
+    var axis = '<div class="axis"><span></span><div><span>0%</span><span>50%</span><span>100%</span></div><span></span></div>';
+
+    var total = c.tasks.total || 1;
+    var stColors = { REVIEWED: "var(--st-rev-bg)", DESIGNED: "var(--st-done)", IN_DESIGN: "var(--st-prog)", NOT_STARTED: "var(--line-strong)", EXCLUDED: "var(--surface-2)" };
+    var stack = STATUS_ORDER.map(function (s) {
+      return c.tasks[s] ? '<span style="width:' + (c.tasks[s] / total * 100) + "%;background:" + stColors[s] + '" title="' + STATUS[s] + " " + c.tasks[s] + '건"></span>' : "";
+    }).join("");
+    var legend = STATUS_ORDER.map(function (s) {
+      return '<span><i style="background:' + stColors[s] + '"></i>' + STATUS[s] + " " + c.tasks[s] + "</span>";
+    }).join("");
+
+    var issues = rtm.gaps.map(function (g) {
+      return '<div class="issue"><span class="st">' + (g.stage === "S0A" ? "S0-A" : g.stage) + "</span><span>" + esc(g.message) + "</span></div>";
+    }).concat(rtm.orphans.map(function (o) {
+      return '<div class="issue orphan"><span class="st">근거</span><span>' + esc(o.message) + "</span></div>";
+    })).join("");
+
+    return '<section class="section"><h2>단계 진행</h2><div class="box stages">' + stages + "</div></section>" +
+      '<section class="kpis">' + kpis + "</section>" +
+      '<div class="dash-grid">' +
+      '<section class="section"><h2>시스템별 설계완료 <small>설계완료·검토완료 Task / 전체 Task</small></h2><div class="box bars">' + bars + axis +
+      '<div style="display:flex;flex-direction:column;gap:8px;padding-top:6px;border-top:1px solid var(--line)"><span class="hint">Task 상태 분포 (전체 ' + c.tasks.total + "건)</span>" +
+      '<div class="stack">' + stack + '</div><div class="legend">' + legend + "</div></div></div></section>" +
+      '<section class="section"><h2>확인할 항목 <small>누락 ' + rtm.gaps.length + " · 근거 없음 " + rtm.orphans.length + '</small></h2><div class="box issues">' +
+      (issues || '<div class="empty">누락이나 근거 없는 산출물이 없습니다.</div>') + "</div></section></div>";
+  }
+  function kpi(v, unit, label, alert) {
+    return '<div class="box kpi' + (alert ? " alert" : "") + '"><span class="v">' + v + "<small>" + unit + '</small></span><span class="l">' + esc(label) + "</span></div>";
+  }
+
+  // ── 요구사항·Task ───────────────────────────────
+  function renderReq() {
+    var p = P(), m = p.model;
+    var taskMap = {};
+    m.requirements.forEach(function (r) { r.tasks.forEach(function (t) { taskMap[t.id] = t; }); });
+    var rows = p.rtm.rows.map(function (row) {
+      var req = m.requirements.find(function (r) { return r.id === row.requirementId; });
+      var steps = row.tasks.map(function (t) {
+        var raw = taskMap[t.taskId] || {};
+        var tr = raw.transition ? "<code>" + esc(raw.transition.from || "") + "</code> → <code>" + esc(raw.transition.to) + "</code>" : "";
+        var after = raw.after && raw.after.length ? "선행 " + raw.after.map(function (a) { return shortTask(a, row.requirementId); }).join(", ") : "";
+        var sub = [tr, after, t.screenless ? "화면 없음" : (t.screens.length ? t.screens.join(", ") : "")].filter(Boolean).join(" · ");
+        return '<div class="step" style="--sys:' + sysColor(t.systemCode) + '"><span class="tid">' + esc(shortTask(t.taskId, row.requirementId)) + "</span>" +
+          sysChip(t.systemCode) + '<span class="act"><span class="who">' + esc(t.actor) + "</span><b>" + esc(t.action) + "</b>" +
+          (sub ? '<span class="tr">' + sub + "</span>" : "") + "</span>" + pill(t.status) + "</div>";
+      }).join("");
+      var sub = [];
+      if (row.originalId && row.originalId !== row.requirementId) sub.push("원본 " + esc(row.originalId));
+      sub.push(esc(req.type) + " · " + esc(req.priority));
+      if (row.sources.length) sub.push("출처 " + esc(row.sources.join(", ")));
+      if (row.crIds.length) sub.push("변경 요청 " + esc(row.crIds.join(", ")));
+      return '<article class="box req"><div class="req-head"><span class="req-id">' + esc(row.requirementId) + '</span><span class="req-title">' + esc(row.title) + "</span>" + pill(row.status) + "</div>" +
+        '<div class="req-sub">' + sub.map(function (s) { return "<span>" + s + "</span>"; }).join("") + "</div>" +
+        (req.description ? '<p class="req-desc" style="margin:0">' + esc(req.description) + "</p>" : "") +
+        (row.status === "EXCLUDED" ? '<div class="hint">제외 사유: ' + esc(row.excludeReason) + "</div>" :
+          steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다. <code>planning task add ' + esc(row.requirementId) + " --system …</code></div>") +
+        "</article>";
+    }).join("");
+    return '<section class="section"><h2>요구사항과 시스템별 Task <small>Task는 처리 순서대로, 선을 따라 시스템을 넘나듭니다</small></h2>' + rows + "</section>";
+  }
+
+  // ── 추적표 ─────────────────────────────────────
+  function sysFilters() {
+    return '<div class="filters" aria-label="시스템 구분 필터">' + P().model.systems.map(function (s) {
+      return '<button class="fchip" data-sys="' + esc(s.code) + '" aria-pressed="' + sysOn(s.code) + '"><i style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + "</button>";
+    }).join("") + "</div>";
+  }
+
+  function renderRtm() {
+    var views = [["matrix", "요구사항 × 시스템"], ["req", "요구사항별"], ["reverse", "화면 역추적"]];
+    var bar = '<div class="toolbar"><div class="seg" role="group" aria-label="보기">' + views.map(function (v) {
+      return '<button data-view="' + v[0] + '" aria-pressed="' + (state.rtmView === v[0]) + '">' + v[1] + "</button>";
+    }).join("") + "</div>" + sysFilters() + "</div>";
+    var body = state.rtmView === "req" ? rtmReq() : state.rtmView === "reverse" ? rtmReverse() : rtmMatrix();
+    return '<section class="section">' + bar + '<div class="box twrap">' + body + "</div>" +
+      '<p class="hint" style="margin:0">CSV·JSON 파일: <code>planning rtm --write</code> → 프로젝트 <code>rtm/</code> 폴더</p></section>';
+  }
+
+  function rtmMatrix() {
+    var p = P(), systems = p.model.systems.filter(function (s) { return sysOn(s.code); });
+    var head = "<tr><th>요구사항</th>" + systems.map(function (s) { return "<th>" + sysChip(s.code) + " " + esc(s.name) + "</th>"; }).join("") + "<th>충족</th></tr>";
+    var rows = p.rtm.rows.map(function (r) {
+      var cells = systems.map(function (s) {
+        var c = p.rtm.matrix[r.requirementId][s.code];
+        if (!c || !c.taskIds.length) return '<td><span class="dash">—</span></td>';
+        var scr = c.screens.length ? '<span class="s">' + c.screens.map(esc).join("<br>") + "</span>" :
+          '<span class="s' + (c.screenless ? "" : " none") + '">' + (c.screenless ? "화면 없음" : "화면 미연결") + "</span>";
+        return '<td><div class="cell"><span class="t">' + c.taskIds.map(function (t) { return shortTask(t, r.requirementId); }).join(", ") + "</span>" + scr + "<span>" + pill(c.status) + "</span></div></td>";
+      }).join("");
+      return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + '><td class="req-cell"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "</td>" + cells + "<td>" + pill(r.status) + "</td></tr>";
+    }).join("");
+    return "<table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>";
+  }
+
+  function rtmReq() {
+    var p = P();
+    var head = "<tr><th>요구사항</th><th>Task</th><th>시스템</th><th>처리 내용</th><th>기획안·기능</th><th>화면 ID</th><th>플로우</th><th>스토리보드</th><th>프로토타입</th><th>상태</th><th>확인</th></tr>";
+    function list(xs) { return xs.length ? '<div class="ids">' + xs.map(esc).join("<br>") + "</div>" : '<span class="dash">—</span>'; }
+    var rows = p.rtm.rows.map(function (r) {
+      var tasks = r.tasks.filter(function (t) { return sysOn(t.systemCode); });
+      var reqCell = '<td class="req-cell" rowspan="' + Math.max(tasks.length, 1) + '"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "<br>" + pill(r.status) + "</td>";
+      if (!tasks.length) {
+        var msg = r.tasks.length ? "필터로 숨김" : r.status === "EXCLUDED" ? "제외: " + esc(r.excludeReason) : "Task 미분해";
+        return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + ">" + reqCell + '<td colspan="10" class="hint">' + msg + "</td></tr>";
+      }
+      return tasks.map(function (t, i) {
+        return "<tr>" + (i === 0 ? reqCell : "") + '<td class="id">' + esc(shortTask(t.taskId, r.requirementId)) + "</td><td>" + sysChip(t.systemCode) + "</td><td>" +
+          (t.actor ? '<span class="hint">' + esc(t.actor) + "</span><br>" : "") + esc(t.action) + "</td><td>" + list(t.planSections.concat(t.features)) + "</td><td>" +
+          (t.screenless && !t.screens.length ? '<span class="hint">화면 없음</span>' : list(t.screens)) + "</td><td>" + list(t.flowNodes) + "</td><td>" + list(t.storyboard) +
+          "</td><td>" + list(t.prototype) + "</td><td>" + pill(t.status) + '</td><td class="hint">' + esc(t.reviewer || "") + "</td></tr>";
+      }).join("");
+    }).join("");
+    return "<table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>";
+  }
+
+  function rtmReverse() {
+    var p = P();
+    var rows = Object.keys(p.rtm.reverse).filter(function (id) { return sysOn(p.rtm.reverse[id].systemCode); }).map(function (id) {
+      var e = p.rtm.reverse[id];
+      var node = p.model.ia.nodes.find(function (n) { return n.id === id; }) || {};
+      var orphan = !e.requirementIds.length && node.change !== "KEPT";
+      return "<tr" + (orphan ? ' class="orphan"' : "") + '><td class="id">' + esc(id) + "</td><td>" + sysChip(e.systemCode) + "</td><td>" + esc(e.name) + "</td><td>" +
+        '<span class="chg ' + (node.change || "NEW") + '">' + CHG[node.change || "NEW"] + "</span></td><td class=\"id\">" +
+        (e.requirementIds.length ? e.requirementIds.map(esc).join("<br>") : orphan ? '<span style="color:var(--crit)">요구사항 없음</span>' : '<span class="dash">—</span>') +
+        '</td><td class="id">' + (e.taskIds.map(esc).join("<br>") || '<span class="dash">—</span>') + "</td></tr>";
+    }).join("");
+    return "<table><thead><tr><th>화면 ID</th><th>시스템</th><th>화면명</th><th>구분</th><th>요구사항</th><th>Task</th></tr></thead><tbody>" +
+      (rows || '<tr><td colspan="6" class="empty">등록된 화면이 없습니다.</td></tr>') + "</tbody></table>";
+  }
+
+  // ── 정보구조도 ─────────────────────────────────
+  function renderIa() {
+    var p = P(), m = p.model;
+    var skipped = m.project.stages.S2 === "SKIPPED";
+    var cols = m.systems.filter(function (s) { return sysOn(s.code); }).map(function (s) {
+      var nodes = m.ia.nodes.filter(function (n) { return n.systemCode === s.code; });
+      if (!s.hasScreens) return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + '<span>' + esc(s.code) + '</span></h3><div class="empty">화면 없는 시스템 (프로세스 플로우 레인으로만 표시)</div></div>';
+      var ids = {};
+      nodes.forEach(function (n) { ids[n.id] = true; });
+      function children(pid) {
+        return nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; });
+      }
+      function li(n) {
+        var kids = children(n.id);
+        var tk = n.kind === "MENU" ? "" : n.taskIds.length ? '<span class="tk">' + n.taskIds.map(esc).join(", ") + "</span>" :
+          n.change === "KEPT" ? "" : '<span class="tk none">연결된 요구사항 없음</span>';
+        return '<li><div class="node ' + n.kind + '"><div class="top">' + (n.kind === "MENU" ? "" : '<span class="sid">' + esc(n.id) + "</span>") +
+          '<span class="nm">' + esc(n.name) + "</span>" + (n.kind !== "MENU" && n.kind !== "PAGE" ? '<span class="kind">' + KIND[n.kind] + "</span>" : "") +
+          (n.loginRequired ? '<span class="kind">로그인</span>' : "") + '<span class="chg ' + n.change + '">' + CHG[n.change] + "</span></div>" + tk +
+          (n.changeReason ? '<span class="tk">' + esc(n.changeReason) + "</span>" : "") + "</div>" +
+          (kids.length ? "<ul>" + kids.map(li).join("") + "</ul>" : "") + "</li>";
+      }
+      var roots = children(null);
+      var screens = nodes.filter(function (n) { return n.kind !== "MENU"; }).length;
+      return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + " · 화면 " + screens + "</span></h3>" +
+        (roots.length ? '<ul class="tree">' + roots.map(li).join("") + "</ul>" : '<div class="empty">등록된 화면이 없습니다.</div>') + "</div>";
+    }).join("");
+    return '<section class="section"><div class="toolbar"><h2 style="font-size:15px">시스템별 메뉴·화면</h2>' + sysFilters() + "</div>" +
+      (skipped ? '<p class="hint" style="margin:0">기존 메뉴 수정(MODIFY) 프로젝트라 정보구조도 단계는 패스했습니다. 영향받는 기존 화면만 표시합니다.</p>' : "") +
+      '<div class="ia-cols">' + cols + "</div></section>";
+  }
+
+  // ── 프로세스 플로우 ─────────────────────────────
+  function renderFlows() {
+    var flows = P().model.flows;
+    if (!flows.length) return '<div class="box empty">아직 작성된 플로우가 없습니다. 다이어그램 단계(S3)에서 만듭니다.</div>';
+    return flows.map(function (f) {
+      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + " · " + (f.kind === "PROCESS" ? "프로세스 플로우" : "사용자 플로우") +
+        '</small></h2><div class="box flow-box">' + flowSvg(f) + "</div>" +
+        '<p class="hint" style="margin:0">점선 화살표는 되돌아가는 흐름(반려·보완)입니다. 노드 아래 파란 글자는 화면 ID, 회색은 연결된 Task입니다.</p></section>';
+    }).join("");
+  }
+
+  function flowSvg(f) {
+    var LW = 118, CW = 146, LH = 112, NW = 120, NH = 58, PAD = 12;
+    var lanes = f.lanes.length ? f.lanes : [{ id: "_", label: "" }];
+    var laneIdx = {};
+    lanes.forEach(function (l, i) { laneIdx[l.id] = i; });
+    var out = {}, inc = {};
+    f.nodes.forEach(function (n) { out[n.id] = []; inc[n.id] = 0; });
+    f.edges.forEach(function (e) { if (out[e.from]) out[e.from].push(e); if (e.to in inc) inc[e.to]++; });
+    // DFS로 되돌아가는 연결(back edge)을 찾는다
+    var mark = {}, back = {};
+    function dfs(id) {
+      mark[id] = 1;
+      out[id].forEach(function (e) {
+        if (mark[e.to] === 1) back[e.from + ">" + e.to] = true;
+        else if (!mark[e.to]) dfs(e.to);
+      });
+      mark[id] = 2;
+    }
+    f.nodes.forEach(function (n) { if (!inc[n.id] && !mark[n.id]) dfs(n.id); });
+    f.nodes.forEach(function (n) { if (!mark[n.id]) dfs(n.id); });
+    // 열 = 앞으로 가는 연결 기준 가장 긴 경로
+    var col = {};
+    f.nodes.forEach(function (n) { col[n.id] = 0; });
+    for (var k = 0; k < f.nodes.length; k++) {
+      f.edges.forEach(function (e) {
+        if (back[e.from + ">" + e.to] || !(e.from in col) || !(e.to in col)) return;
+        if (col[e.to] < col[e.from] + 1) col[e.to] = col[e.from] + 1;
+      });
+    }
+    var used = {};
+    f.nodes.forEach(function (n) {
+      var r = laneIdx[n.lane] || 0;
+      while (used[r + ":" + col[n.id]]) col[n.id]++;
+      used[r + ":" + col[n.id]] = true;
+    });
+    var maxCol = Math.max.apply(null, f.nodes.map(function (n) { return col[n.id]; }).concat([0]));
+    var W = LW + (maxCol + 1) * CW + PAD, H = lanes.length * LH;
+    function pos(n) {
+      var r = laneIdx[n.lane] || 0;
+      return { x: LW + col[n.id] * CW + (CW - NW) / 2, y: r * LH + (LH - NH) / 2, r: r };
+    }
+    var P0 = {};
+    f.nodes.forEach(function (n) { P0[n.id] = pos(n); });
+
+    var s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(f.title) + '">' +
+      '<defs><marker id="ah-' + f.id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>' +
+      '<marker id="ahb-' + f.id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow back" d="M0,0 L10,5 L0,10 z"/></marker></defs>';
+    lanes.forEach(function (l, i) {
+      var color = l.systemCode ? sysColor(l.systemCode) : "#888888";
+      s += '<rect x="0" y="' + i * LH + '" width="' + W + '" height="' + LH + '" fill="' + color + '" fill-opacity="' + (i % 2 ? 0.05 : 0.09) + '"/>';
+      s += '<rect x="0" y="' + i * LH + '" width="4" height="' + LH + '" fill="' + color + '"/>';
+      var words = wrap(l.label, 7);
+      words.forEach(function (w, j) {
+        s += '<text class="lane-label" x="14" y="' + (i * LH + LH / 2 - (words.length - 1) * 8 + j * 16 + 4) + '">' + esc(w) + "</text>";
+      });
+      if (i > 0) s += '<line class="lane-line" x1="0" x2="' + W + '" y1="' + i * LH + '" y2="' + i * LH + '"/>';
+    });
+    s += '<line class="lane-line" x1="' + (LW - 8) + '" x2="' + (LW - 8) + '" y1="0" y2="' + H + '"/>';
+
+    f.edges.forEach(function (e) {
+      var a = P0[e.from], b = P0[e.to];
+      if (!a || !b) return;
+      var isBack = !!back[e.from + ">" + e.to];
+      var d, lx, ly;
+      if (isBack) {
+        var yb = Math.max(a.y, b.y) + NH + 18;
+        var ax = a.x + NW / 2, bx = b.x + NW / 2 + 16;
+        d = "M" + ax + "," + (a.y + NH) + " V" + yb + " H" + bx + " V" + (b.y + NH);
+        lx = ax + 6; ly = a.y + NH + 14;
+      } else if (a.r === b.r) {
+        d = "M" + (a.x + NW) + "," + (a.y + NH / 2) + " H" + b.x;
+        lx = (a.x + NW + b.x) / 2; ly = a.y + NH / 2 - 7;
+      } else {
+        var mx = a.x + NW + (b.x - a.x - NW) / 2;
+        d = "M" + (a.x + NW) + "," + (a.y + NH / 2) + " H" + mx + " V" + (b.y + NH / 2) + " H" + b.x;
+        lx = mx + 4; ly = (a.y + b.y + NH) / 2;
+      }
+      s += '<path class="edge' + (isBack ? " back" : "") + '" d="' + d + '" marker-end="url(#' + (isBack ? "ahb-" : "ah-") + f.id + ')"/>';
+      if (e.label) s += '<text class="elabel" x="' + lx + '" y="' + ly + '" text-anchor="' + (a.r === b.r ? "middle" : "start") + '">' + esc(e.label) + "</text>";
+    });
+
+    f.nodes.forEach(function (n) {
+      var p = P0[n.id], cx = p.x + NW / 2, cy = p.y + NH / 2;
+      var shape;
+      if (n.shape === "DECISION") shape = '<polygon class="shape DECISION" points="' + cx + "," + (p.y - 4) + " " + (p.x + NW + 4) + "," + cy + " " + cx + "," + (p.y + NH + 4) + " " + (p.x - 4) + "," + cy + '"/>';
+      else if (n.shape === "TERMINATOR") shape = '<rect class="shape TERMINATOR" x="' + (p.x + 20) + '" y="' + (p.y + 12) + '" width="' + (NW - 40) + '" height="' + (NH - 24) + '" rx="17"/>';
+      else if (n.shape === "IO") shape = '<polygon class="shape IO" points="' + (p.x + 12) + "," + p.y + " " + (p.x + NW) + "," + p.y + " " + (p.x + NW - 12) + "," + (p.y + NH) + " " + p.x + "," + (p.y + NH) + '"/>';
+      else if (n.shape === "DOCUMENT") shape = '<path class="shape DOCUMENT" d="M' + p.x + "," + p.y + " H" + (p.x + NW) + " V" + (p.y + NH - 8) + " Q" + (p.x + NW * 0.75) + "," + (p.y + NH - 18) + " " + cx + "," + (p.y + NH - 8) + " T" + p.x + "," + (p.y + NH - 8) + ' Z"/>';
+      else shape = '<rect class="shape PROCESS" x="' + p.x + '" y="' + p.y + '" width="' + NW + '" height="' + NH + '" rx="5"/>';
+      s += "<g>" + shape;
+      var lines = wrap(n.label, n.shape === "DECISION" ? 5 : 9);
+      var baseY = cy - (lines.length - 1) * 7 + (n.screenId ? -5 : 4);
+      lines.forEach(function (w, j) { s += '<text class="nlabel" x="' + cx + '" y="' + (baseY + j * 14) + '" text-anchor="middle">' + esc(w) + "</text>"; });
+      if (n.screenId) s += '<text class="nsid" x="' + cx + '" y="' + (p.y + NH - 8) + '" text-anchor="middle">' + esc(n.screenId) + "</text>";
+      if (n.taskIds.length) s += '<text class="ntask" x="' + cx + '" y="' + (p.y - (n.shape === "DECISION" ? 8 : 4)) + '" text-anchor="middle">' + esc(n.taskIds.join(", ")) + "</text>";
+      s += "</g>";
+    });
+    return s + "</svg>";
+  }
+
+  function wrap(text, max) {
+    var words = String(text || "").split(" "), lines = [], cur = "";
+    words.forEach(function (w) {
+      if (cur && (cur + " " + w).length > max) { lines.push(cur); cur = w; } else cur = cur ? cur + " " + w : w;
+    });
+    if (cur) lines.push(cur);
+    return lines.slice(0, 3);
+  }
+
+  // ── 버전 ───────────────────────────────────────
+  function renderVer() {
+    var p = P(), pr = p.model.project;
+    var snaps = p.snapshots.map(function (s) {
+      return '<div class="box snap"><span class="v">v' + esc(s.version) + '</span><span class="d">' + esc(fmtDate(s.takenAt)) + "</span><span>" + esc(s.note || "—") + "</span></div>";
+    }).join("") + '<div class="box snap current"><span class="v">v' + esc(pr.version) + ' (작업 중)</span><span class="d">마지막 저장 ' + esc(fmtDate(pr.updatedAt)) + "</span><span>현재 모델</span></div>";
+    var diff = "";
+    if (!p.diff) diff = '<div class="box empty">스냅샷이 없습니다. <code>planning snapshot --note "…"</code>으로 기준 버전을 고정하면 이후 변경 사항을 비교할 수 있습니다.</div>';
+    else {
+      var groups = Object.keys(p.diff.entries);
+      if (!groups.length) diff = '<div class="box empty">v' + esc(p.diff.from) + " 이후 변경 사항이 없습니다.</div>";
+      else diff = '<div class="box">' + groups.map(function (g) {
+        var e = p.diff.entries[g];
+        var rows = e.added.map(function (id) { return '<div class="drow"><span class="k add">추가</span><code>' + esc(id) + "</code></div>"; })
+          .concat(e.removed.map(function (id) { return '<div class="drow"><span class="k del">삭제</span><code>' + esc(id) + "</code></div>"; }))
+          .concat(e.changed.map(function (c) {
+            return '<div><div class="drow"><span class="k chg">변경</span><code>' + esc(c.id) + '</code></div><div class="fields">' + c.fields.map(function (fd) {
+              return "<span>" + esc(fd.path) + ": <del>" + esc(val(fd.before)) + "</del> → <ins>" + esc(val(fd.after)) + "</ins></span>";
+            }).join("") + "</div></div>";
+          }));
+        return '<div class="diff-group"><h3>' + esc(COLL[g] || g) + "</h3>" + rows.join("") + "</div>";
+      }).join("") + "</div>";
+    }
+    return '<section class="section"><h2>스냅샷</h2><div class="snaps">' + snaps + "</div></section>" +
+      '<section class="section"><h2>변경 사항' + (p.diff ? " <small>v" + esc(p.diff.from) + " → 현재 v" + esc(pr.version) + "</small>" : "") + "</h2>" + diff + "</section>";
+  }
+  function val(v) { return v === undefined ? "(없음)" : typeof v === "string" ? v : JSON.stringify(v); }
+
+  // ── 이벤트 ─────────────────────────────────────
+  function render() { renderShell(); renderMain(); }
+  document.addEventListener("click", function (ev) {
+    var t = ev.target.closest("button");
+    if (!t) return;
+    if (t.dataset.p) { state.p = Number(t.dataset.p); persist(); render(); window.scrollTo(0, 0); }
+    else if (t.dataset.tab) { state.tab = t.dataset.tab; persist(); renderMain(); }
+    else if (t.dataset.view) { state.rtmView = t.dataset.view; persist(); renderMain(); }
+    else if (t.dataset.sys) {
+      var key = P().model.project.code + ":" + t.dataset.sys;
+      state.off[key] = !state.off[key];
+      renderMain();
+    }
+  });
+  document.addEventListener("change", function (ev) {
+    if (ev.target.id === "proj-select") { state.p = Number(ev.target.value); persist(); render(); }
+  });
+  render();
+})();
+</script>
+</body>
+</html>

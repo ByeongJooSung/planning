@@ -8,7 +8,7 @@
     "planning": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && cp -r src/render/viewer/assets dist/render/viewer/",
     "planning": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
