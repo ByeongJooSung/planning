@@ -1,0 +1,1772 @@
+{
+  "systems": [
+    {
+      "systemCode": "PUB",
+      "status": "SELECTED",
+      "proposals": [
+        {
+          "id": "A",
+          "name": "정부 표준형",
+          "summary": "상단 메가메뉴, 왼쪽 로고, 표 목록과 번호 페이지네이션. 범정부 UI/UX 가이드라인(KRDS)의 구성 원칙을 따른다.",
+          "fit": "대국민 공공 포털. 처음 방문한 국민도 익숙한 배치, 웹 접근성 심사 대응이 쉬움",
+          "tokens": {
+            "color": {
+              "primary": "#1B5FC1",
+              "onPrimary": "#FFFFFF",
+              "accent": "#0B7A75",
+              "bg": "#F4F6F9",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#EEF2F7",
+              "border": "#D5DBE3",
+              "text": "#1E2124",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#1E2124",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Noto Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 38,
+                "h1": 30,
+                "h2": 23,
+                "h3": 19,
+                "body": 16,
+                "small": 15,
+                "caption": 14
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 2,
+              "md": 4,
+              "lg": 8
+            },
+            "control": {
+              "height": 44,
+              "rowHeight": 52
+            },
+            "spacing": 8,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1200,
+              "gutter": 24
+            },
+            "shadow": "none"
+          },
+          "layout": {
+            "nav": "top-mega",
+            "logo": "left",
+            "search": "header",
+            "list": "table",
+            "pagination": "numbered",
+            "button": "square",
+            "density": "comfortable",
+            "footer": "full"
+          }
+        },
+        {
+          "id": "B",
+          "name": "검색 중심 카드형",
+          "summary": "첫 화면 큰 검색창, 카드 목록, 둥근 버튼. 원하는 정보를 바로 찾게 하는 구성",
+          "fit": "정보 조회가 주 목적인 포털, 모바일 이용 비율이 높은 서비스",
+          "tokens": {
+            "color": {
+              "primary": "#0E7C86",
+              "onPrimary": "#FFFFFF",
+              "accent": "#E0892B",
+              "bg": "#F6F8F8",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#EAF3F3",
+              "border": "#D3DEDF",
+              "text": "#172426",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#172426",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Gothic A1\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 38,
+                "h1": 30,
+                "h2": 23,
+                "h3": 19,
+                "body": 16,
+                "small": 15,
+                "caption": 14
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 8,
+              "md": 10,
+              "lg": 20
+            },
+            "control": {
+              "height": 46,
+              "rowHeight": 56
+            },
+            "spacing": 8,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1180,
+              "gutter": 24
+            },
+            "shadow": "soft"
+          },
+          "layout": {
+            "nav": "top",
+            "logo": "left",
+            "search": "hero",
+            "list": "card",
+            "pagination": "more",
+            "button": "pill",
+            "density": "comfortable",
+            "footer": "simple"
+          }
+        },
+        {
+          "id": "C",
+          "name": "정보 밀도형",
+          "summary": "가운데 로고와 두 줄 헤더, 조건 검색 패널, 촘촘한 표와 목록 개수 선택",
+          "fit": "자료·통계가 많은 정보공개형 포털, 전문 이용자 비율이 높은 서비스",
+          "tokens": {
+            "color": {
+              "primary": "#2F3E75",
+              "onPrimary": "#FFFFFF",
+              "accent": "#B4481E",
+              "bg": "#F5F5F2",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#ECEBE5",
+              "border": "#D6D4CB",
+              "text": "#1D1D1B",
+              "textMuted": "#6B7280",
+              "nav": "#2F3E75",
+              "onNav": "#FFFFFF",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"IBM Plex Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 36,
+                "h1": 28,
+                "h2": 22,
+                "h3": 18,
+                "body": 15,
+                "small": 14,
+                "caption": 13
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 0,
+              "md": 2,
+              "lg": 4
+            },
+            "control": {
+              "height": 38,
+              "rowHeight": 42
+            },
+            "spacing": 6,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1280,
+              "gutter": 24
+            },
+            "shadow": "none"
+          },
+          "layout": {
+            "nav": "top",
+            "logo": "center",
+            "search": "panel",
+            "list": "table",
+            "pagination": "numbered-size",
+            "button": "square",
+            "density": "compact",
+            "footer": "full"
+          }
+        }
+      ],
+      "components": [
+        {
+          "id": "gnb",
+          "name": "GNB (주 메뉴)",
+          "category": "navigation",
+          "description": "로고, 1depth 메뉴, 유틸리티(로그인·마이페이지). 레이아웃 규칙에 따라 상단 또는 좌측",
+          "variants": [
+            "top",
+            "top-mega",
+            "side"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "lnb",
+          "name": "LNB (하위 메뉴)",
+          "category": "navigation",
+          "description": "2depth 이하 메뉴. 상단 GNB형에서 하위 페이지 좌측에 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "breadcrumb",
+          "name": "현재 위치(Location)",
+          "category": "navigation",
+          "description": "홈 > 1depth > 2depth",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "tabs",
+          "name": "탭",
+          "category": "navigation",
+          "description": "같은 화면 안 내용 전환",
+          "variants": [
+            "line",
+            "box"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "step-indicator",
+          "name": "단계 표시",
+          "category": "navigation",
+          "description": "신청 절차의 현재 단계",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "footer",
+          "name": "푸터",
+          "category": "layout",
+          "description": "기관 정보, 개인정보처리방침, 저작권",
+          "variants": [
+            "full",
+            "simple"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-bar",
+          "name": "검색창",
+          "category": "search",
+          "description": "키워드 입력 + 검색 버튼",
+          "variants": [
+            "header",
+            "hero",
+            "inline"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-panel",
+          "name": "검색 조건 영역",
+          "category": "search",
+          "description": "목록 위 조건(기간·구분·상태·키워드)과 조회·초기화 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "data-table",
+          "name": "목록 표(그리드)",
+          "category": "data",
+          "description": "총 건수, 정렬, 행 클릭 이동, 상태 뱃지 열",
+          "variants": [
+            "table",
+            "card"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "card-list",
+          "name": "카드 목록",
+          "category": "data",
+          "description": "썸네일·제목·요약·메타 정보 카드",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "pagination",
+          "name": "페이지네이션",
+          "category": "data",
+          "description": "처음·이전·번호·다음·마지막, 목록 개수 선택",
+          "variants": [
+            "numbered",
+            "numbered-size",
+            "more"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "detail-table",
+          "name": "상세 정보 표",
+          "category": "data",
+          "description": "항목명-값 2열 표",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "status-badge",
+          "name": "상태 뱃지",
+          "category": "data",
+          "description": "처리 상태 표시 (공통 상태값 사용)",
+          "variants": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-list",
+          "name": "첨부파일 목록",
+          "category": "data",
+          "description": "파일명·용량·내려받기",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "stat-cards",
+          "name": "요약 수치 카드",
+          "category": "data",
+          "description": "대시보드 건수 요약",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "notice-list",
+          "name": "게시물 요약 목록",
+          "category": "content",
+          "description": "공지·새소식 최근 N건",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "empty-state",
+          "name": "빈 화면 안내",
+          "category": "feedback",
+          "description": "데이터가 없을 때 안내 문구",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "hero-banner",
+          "name": "메인 비주얼",
+          "category": "content",
+          "description": "메인 상단 대표 문구·검색",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "quick-links",
+          "name": "바로가기",
+          "category": "content",
+          "description": "자주 쓰는 서비스 아이콘 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "login-form",
+          "name": "로그인 폼",
+          "category": "form",
+          "description": "아이디·비밀번호, 간편인증, 찾기 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "text-input",
+          "name": "입력창",
+          "category": "form",
+          "description": "라벨, 필수 표시, 안내·오류 문구",
+          "variants": [
+            "default",
+            "error",
+            "disabled"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "textarea",
+          "name": "여러 줄 입력",
+          "category": "form",
+          "description": "글자 수 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "select",
+          "name": "선택 목록",
+          "category": "form",
+          "description": "옵션 목록, 기본값",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "radio-group",
+          "name": "라디오 버튼",
+          "category": "form",
+          "description": "하나만 선택",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "checkbox-group",
+          "name": "체크박스",
+          "category": "form",
+          "description": "여러 개 선택, 약관 동의",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "date-range",
+          "name": "기간 선택",
+          "category": "form",
+          "description": "시작일~종료일, 빠른 기간 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-upload",
+          "name": "파일 첨부",
+          "category": "form",
+          "description": "허용 형식·용량 안내, 첨부 목록",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "button",
+          "name": "버튼",
+          "category": "action",
+          "description": "주요·보조·텍스트 버튼",
+          "variants": [
+            "primary",
+            "secondary",
+            "tertiary",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "button-group",
+          "name": "버튼 영역",
+          "category": "action",
+          "description": "화면 하단 주요 동작 버튼 묶음",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "confirm-dialog",
+          "name": "확인 창(컨펌)",
+          "category": "feedback",
+          "description": "되돌릴 수 없는 동작 전 확인. 확인·취소",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "alert-dialog",
+          "name": "알림 창(얼럿)",
+          "category": "feedback",
+          "description": "결과·오류 안내. 확인 버튼 하나",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "toast",
+          "name": "토스트",
+          "category": "feedback",
+          "description": "잠시 나타났다 사라지는 처리 결과 알림",
+          "variants": [
+            "success",
+            "info",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "modal",
+          "name": "모달 팝업",
+          "category": "feedback",
+          "description": "화면 위 레이어 팝업. 제목·본문·닫기",
+          "variants": [],
+          "origin": "BASE"
+        }
+      ],
+      "icons": [
+        "search",
+        "menu",
+        "user",
+        "bell",
+        "home",
+        "download",
+        "upload",
+        "calendar",
+        "chevron-left",
+        "chevron-right",
+        "close",
+        "check",
+        "alert",
+        "info",
+        "file",
+        "logout",
+        "plus",
+        "edit",
+        "trash",
+        "filter"
+      ],
+      "selectedId": "A",
+      "selectedAt": "2026-09-25T09:00:00.000Z",
+      "tokens": {
+        "color": {
+          "primary": "#1B5FC1",
+          "onPrimary": "#FFFFFF",
+          "accent": "#0B7A75",
+          "bg": "#F4F6F9",
+          "surface": "#FFFFFF",
+          "surfaceAlt": "#EEF2F7",
+          "border": "#D5DBE3",
+          "text": "#1E2124",
+          "textMuted": "#6B7280",
+          "nav": "#FFFFFF",
+          "onNav": "#1E2124",
+          "success": "#1E7B4B",
+          "warning": "#B45309",
+          "danger": "#C0262D",
+          "info": "#1D6FB8"
+        },
+        "font": {
+          "family": "\"Noto Sans KR\", \"Malgun Gothic\", sans-serif",
+          "scale": {
+            "display": 38,
+            "h1": 30,
+            "h2": 23,
+            "h3": 19,
+            "body": 16,
+            "small": 15,
+            "caption": 14
+          },
+          "weightBold": 700
+        },
+        "radius": {
+          "sm": 2,
+          "md": 4,
+          "lg": 8
+        },
+        "control": {
+          "height": 44,
+          "rowHeight": 52
+        },
+        "spacing": 8,
+        "grid": {
+          "columns": 12,
+          "maxWidth": 1200,
+          "gutter": 24
+        },
+        "shadow": "none"
+      },
+      "layout": {
+        "nav": "top-mega",
+        "logo": "left",
+        "search": "header",
+        "list": "table",
+        "pagination": "numbered",
+        "button": "square",
+        "density": "comfortable",
+        "footer": "full"
+      }
+    },
+    {
+      "systemCode": "CVL",
+      "status": "SELECTED",
+      "proposals": [
+        {
+          "id": "A",
+          "name": "단계 안내 신청형",
+          "summary": "신청 단계 표시와 넓은 입력 폼, 상단 메뉴. 처음 신청하는 민원인이 막히지 않게 한 단계씩 안내",
+          "fit": "민원 신청·자료 등록이 핵심인 서비스",
+          "tokens": {
+            "color": {
+              "primary": "#1E6B52",
+              "onPrimary": "#FFFFFF",
+              "accent": "#1B5FC1",
+              "bg": "#F4F7F5",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#E9F1EC",
+              "border": "#D1DDD5",
+              "text": "#1B2420",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#1B2420",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Noto Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 38,
+                "h1": 30,
+                "h2": 23,
+                "h3": 19,
+                "body": 16,
+                "small": 15,
+                "caption": 14
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 4,
+              "md": 6,
+              "lg": 12
+            },
+            "control": {
+              "height": 46,
+              "rowHeight": 54
+            },
+            "spacing": 8,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1080,
+              "gutter": 24
+            },
+            "shadow": "soft"
+          },
+          "layout": {
+            "nav": "top",
+            "logo": "left",
+            "search": "header",
+            "list": "table",
+            "pagination": "numbered",
+            "button": "rounded",
+            "density": "comfortable",
+            "footer": "simple"
+          }
+        },
+        {
+          "id": "B",
+          "name": "마이페이지 대시보드형",
+          "summary": "로그인 후 내 신청 현황 카드와 처리 상태를 먼저 보여 주는 구성, 좌측 내 메뉴",
+          "fit": "신청 후 처리 현황 확인·보완 요청 대응이 잦은 서비스",
+          "tokens": {
+            "color": {
+              "primary": "#3A4FB8",
+              "onPrimary": "#FFFFFF",
+              "accent": "#12906B",
+              "bg": "#F5F6FB",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#ECEEF8",
+              "border": "#D6DAEC",
+              "text": "#1A1D2E",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#1A1D2E",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"IBM Plex Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 36,
+                "h1": 28,
+                "h2": 22,
+                "h3": 18,
+                "body": 15,
+                "small": 14,
+                "caption": 13
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 6,
+              "md": 8,
+              "lg": 16
+            },
+            "control": {
+              "height": 42,
+              "rowHeight": 50
+            },
+            "spacing": 6,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1200,
+              "gutter": 24
+            },
+            "shadow": "soft"
+          },
+          "layout": {
+            "nav": "side",
+            "logo": "left",
+            "search": "panel",
+            "list": "card",
+            "pagination": "numbered",
+            "button": "rounded",
+            "density": "comfortable",
+            "footer": "simple"
+          }
+        },
+        {
+          "id": "C",
+          "name": "모바일 우선 간결형",
+          "summary": "한 화면에 한 가지 일, 큰 버튼과 카드 목록, 더보기 방식",
+          "fit": "모바일 신청 비율이 높은 서비스",
+          "tokens": {
+            "color": {
+              "primary": "#C2410C",
+              "onPrimary": "#FFFFFF",
+              "accent": "#1F6FEB",
+              "bg": "#FBF8F5",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#F4ECE4",
+              "border": "#E5D9CC",
+              "text": "#221A14",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#221A14",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Gothic A1\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 41,
+                "h1": 31,
+                "h2": 25,
+                "h3": 20,
+                "body": 17,
+                "small": 16,
+                "caption": 15
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 10,
+              "md": 12,
+              "lg": 24
+            },
+            "control": {
+              "height": 50,
+              "rowHeight": 60
+            },
+            "spacing": 8,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 960,
+              "gutter": 24
+            },
+            "shadow": "none"
+          },
+          "layout": {
+            "nav": "top",
+            "logo": "center",
+            "search": "hero",
+            "list": "card",
+            "pagination": "more",
+            "button": "pill",
+            "density": "comfortable",
+            "footer": "simple"
+          }
+        }
+      ],
+      "components": [
+        {
+          "id": "gnb",
+          "name": "GNB (주 메뉴)",
+          "category": "navigation",
+          "description": "로고, 1depth 메뉴, 유틸리티(로그인·마이페이지). 레이아웃 규칙에 따라 상단 또는 좌측",
+          "variants": [
+            "top",
+            "top-mega",
+            "side"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "lnb",
+          "name": "LNB (하위 메뉴)",
+          "category": "navigation",
+          "description": "2depth 이하 메뉴. 상단 GNB형에서 하위 페이지 좌측에 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "breadcrumb",
+          "name": "현재 위치(Location)",
+          "category": "navigation",
+          "description": "홈 > 1depth > 2depth",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "tabs",
+          "name": "탭",
+          "category": "navigation",
+          "description": "같은 화면 안 내용 전환",
+          "variants": [
+            "line",
+            "box"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "step-indicator",
+          "name": "단계 표시",
+          "category": "navigation",
+          "description": "신청 절차의 현재 단계",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "footer",
+          "name": "푸터",
+          "category": "layout",
+          "description": "기관 정보, 개인정보처리방침, 저작권",
+          "variants": [
+            "full",
+            "simple"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-bar",
+          "name": "검색창",
+          "category": "search",
+          "description": "키워드 입력 + 검색 버튼",
+          "variants": [
+            "header",
+            "hero",
+            "inline"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-panel",
+          "name": "검색 조건 영역",
+          "category": "search",
+          "description": "목록 위 조건(기간·구분·상태·키워드)과 조회·초기화 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "data-table",
+          "name": "목록 표(그리드)",
+          "category": "data",
+          "description": "총 건수, 정렬, 행 클릭 이동, 상태 뱃지 열",
+          "variants": [
+            "table",
+            "card"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "card-list",
+          "name": "카드 목록",
+          "category": "data",
+          "description": "썸네일·제목·요약·메타 정보 카드",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "pagination",
+          "name": "페이지네이션",
+          "category": "data",
+          "description": "처음·이전·번호·다음·마지막, 목록 개수 선택",
+          "variants": [
+            "numbered",
+            "numbered-size",
+            "more"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "detail-table",
+          "name": "상세 정보 표",
+          "category": "data",
+          "description": "항목명-값 2열 표",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "status-badge",
+          "name": "상태 뱃지",
+          "category": "data",
+          "description": "처리 상태 표시 (공통 상태값 사용)",
+          "variants": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-list",
+          "name": "첨부파일 목록",
+          "category": "data",
+          "description": "파일명·용량·내려받기",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "stat-cards",
+          "name": "요약 수치 카드",
+          "category": "data",
+          "description": "대시보드 건수 요약",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "notice-list",
+          "name": "게시물 요약 목록",
+          "category": "content",
+          "description": "공지·새소식 최근 N건",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "empty-state",
+          "name": "빈 화면 안내",
+          "category": "feedback",
+          "description": "데이터가 없을 때 안내 문구",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "hero-banner",
+          "name": "메인 비주얼",
+          "category": "content",
+          "description": "메인 상단 대표 문구·검색",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "quick-links",
+          "name": "바로가기",
+          "category": "content",
+          "description": "자주 쓰는 서비스 아이콘 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "login-form",
+          "name": "로그인 폼",
+          "category": "form",
+          "description": "아이디·비밀번호, 간편인증, 찾기 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "text-input",
+          "name": "입력창",
+          "category": "form",
+          "description": "라벨, 필수 표시, 안내·오류 문구",
+          "variants": [
+            "default",
+            "error",
+            "disabled"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "textarea",
+          "name": "여러 줄 입력",
+          "category": "form",
+          "description": "글자 수 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "select",
+          "name": "선택 목록",
+          "category": "form",
+          "description": "옵션 목록, 기본값",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "radio-group",
+          "name": "라디오 버튼",
+          "category": "form",
+          "description": "하나만 선택",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "checkbox-group",
+          "name": "체크박스",
+          "category": "form",
+          "description": "여러 개 선택, 약관 동의",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "date-range",
+          "name": "기간 선택",
+          "category": "form",
+          "description": "시작일~종료일, 빠른 기간 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-upload",
+          "name": "파일 첨부",
+          "category": "form",
+          "description": "허용 형식·용량 안내, 첨부 목록",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "button",
+          "name": "버튼",
+          "category": "action",
+          "description": "주요·보조·텍스트 버튼",
+          "variants": [
+            "primary",
+            "secondary",
+            "tertiary",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "button-group",
+          "name": "버튼 영역",
+          "category": "action",
+          "description": "화면 하단 주요 동작 버튼 묶음",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "confirm-dialog",
+          "name": "확인 창(컨펌)",
+          "category": "feedback",
+          "description": "되돌릴 수 없는 동작 전 확인. 확인·취소",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "alert-dialog",
+          "name": "알림 창(얼럿)",
+          "category": "feedback",
+          "description": "결과·오류 안내. 확인 버튼 하나",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "toast",
+          "name": "토스트",
+          "category": "feedback",
+          "description": "잠시 나타났다 사라지는 처리 결과 알림",
+          "variants": [
+            "success",
+            "info",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "modal",
+          "name": "모달 팝업",
+          "category": "feedback",
+          "description": "화면 위 레이어 팝업. 제목·본문·닫기",
+          "variants": [],
+          "origin": "BASE"
+        }
+      ],
+      "icons": [
+        "search",
+        "menu",
+        "user",
+        "bell",
+        "home",
+        "download",
+        "upload",
+        "calendar",
+        "chevron-left",
+        "chevron-right",
+        "close",
+        "check",
+        "alert",
+        "info",
+        "file",
+        "logout",
+        "plus",
+        "edit",
+        "trash",
+        "filter"
+      ],
+      "selectedId": "A",
+      "selectedAt": "2026-09-25T09:00:00.000Z",
+      "tokens": {
+        "color": {
+          "primary": "#1E6B52",
+          "onPrimary": "#FFFFFF",
+          "accent": "#1B5FC1",
+          "bg": "#F4F7F5",
+          "surface": "#FFFFFF",
+          "surfaceAlt": "#E9F1EC",
+          "border": "#D1DDD5",
+          "text": "#1B2420",
+          "textMuted": "#6B7280",
+          "nav": "#FFFFFF",
+          "onNav": "#1B2420",
+          "success": "#1E7B4B",
+          "warning": "#B45309",
+          "danger": "#C0262D",
+          "info": "#1D6FB8"
+        },
+        "font": {
+          "family": "\"Noto Sans KR\", \"Malgun Gothic\", sans-serif",
+          "scale": {
+            "display": 38,
+            "h1": 30,
+            "h2": 23,
+            "h3": 19,
+            "body": 16,
+            "small": 15,
+            "caption": 14
+          },
+          "weightBold": 700
+        },
+        "radius": {
+          "sm": 4,
+          "md": 6,
+          "lg": 12
+        },
+        "control": {
+          "height": 46,
+          "rowHeight": 54
+        },
+        "spacing": 8,
+        "grid": {
+          "columns": 12,
+          "maxWidth": 1080,
+          "gutter": 24
+        },
+        "shadow": "soft"
+      },
+      "layout": {
+        "nav": "top",
+        "logo": "left",
+        "search": "header",
+        "list": "table",
+        "pagination": "numbered",
+        "button": "rounded",
+        "density": "comfortable",
+        "footer": "simple"
+      }
+    },
+    {
+      "systemCode": "ADM",
+      "status": "SELECTED",
+      "proposals": [
+        {
+          "id": "A",
+          "name": "좌측 메뉴 업무형",
+          "summary": "어두운 좌측 메뉴, 조건 검색 패널, 촘촘한 표와 목록 개수 선택. 오래 쓰는 업무 화면에 맞춘 구성",
+          "fit": "심사·관리 업무 담당자가 하루 종일 쓰는 시스템",
+          "tokens": {
+            "color": {
+              "primary": "#2257A8",
+              "onPrimary": "#FFFFFF",
+              "accent": "#0F8A6C",
+              "bg": "#F3F5F8",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#EBEEF3",
+              "border": "#D4DAE3",
+              "text": "#1C232D",
+              "textMuted": "#6B7280",
+              "nav": "#1F2A3C",
+              "onNav": "#E6EBF2",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"IBM Plex Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 34,
+                "h1": 26,
+                "h2": 20,
+                "h3": 17,
+                "body": 14,
+                "small": 13,
+                "caption": 12
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 2,
+              "md": 4,
+              "lg": 8
+            },
+            "control": {
+              "height": 34,
+              "rowHeight": 40
+            },
+            "spacing": 6,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1600,
+              "gutter": 24
+            },
+            "shadow": "none"
+          },
+          "layout": {
+            "nav": "side",
+            "logo": "left",
+            "search": "panel",
+            "list": "table",
+            "pagination": "numbered-size",
+            "button": "square",
+            "density": "compact",
+            "footer": "none"
+          }
+        },
+        {
+          "id": "B",
+          "name": "상단 메뉴 업무형",
+          "summary": "상단 메뉴와 탭, 넓은 표 영역. 메뉴가 적고 화면 폭을 넓게 쓰는 구성",
+          "fit": "메뉴 수가 적은 관리자, 표 열이 많은 심사 화면",
+          "tokens": {
+            "color": {
+              "primary": "#6246C9",
+              "onPrimary": "#FFFFFF",
+              "accent": "#D05A1B",
+              "bg": "#F6F5FA",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#EEECF6",
+              "border": "#DAD7E8",
+              "text": "#1E1B2A",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#1E1B2A",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Noto Sans KR\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 34,
+                "h1": 26,
+                "h2": 20,
+                "h3": 17,
+                "body": 14,
+                "small": 13,
+                "caption": 12
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 4,
+              "md": 6,
+              "lg": 12
+            },
+            "control": {
+              "height": 36,
+              "rowHeight": 44
+            },
+            "spacing": 6,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1600,
+              "gutter": 24
+            },
+            "shadow": "soft"
+          },
+          "layout": {
+            "nav": "top",
+            "logo": "left",
+            "search": "panel",
+            "list": "table",
+            "pagination": "numbered",
+            "button": "rounded",
+            "density": "compact",
+            "footer": "none"
+          }
+        },
+        {
+          "id": "C",
+          "name": "밝은 사이드바 모던형",
+          "summary": "밝은 좌측 메뉴, 요약 수치 카드, 여유 있는 표. 대시보드 비중이 큰 구성",
+          "fit": "현황 모니터링과 처리를 함께 하는 관리자",
+          "tokens": {
+            "color": {
+              "primary": "#0F766E",
+              "onPrimary": "#FFFFFF",
+              "accent": "#2563EB",
+              "bg": "#F7F8F8",
+              "surface": "#FFFFFF",
+              "surfaceAlt": "#EEF1F1",
+              "border": "#DCE1E1",
+              "text": "#172020",
+              "textMuted": "#6B7280",
+              "nav": "#FFFFFF",
+              "onNav": "#172020",
+              "success": "#1E7B4B",
+              "warning": "#B45309",
+              "danger": "#C0262D",
+              "info": "#1D6FB8"
+            },
+            "font": {
+              "family": "\"Gothic A1\", \"Malgun Gothic\", sans-serif",
+              "scale": {
+                "display": 34,
+                "h1": 26,
+                "h2": 20,
+                "h3": 17,
+                "body": 14,
+                "small": 13,
+                "caption": 12
+              },
+              "weightBold": 700
+            },
+            "radius": {
+              "sm": 6,
+              "md": 8,
+              "lg": 16
+            },
+            "control": {
+              "height": 38,
+              "rowHeight": 48
+            },
+            "spacing": 6,
+            "grid": {
+              "columns": 12,
+              "maxWidth": 1600,
+              "gutter": 24
+            },
+            "shadow": "soft"
+          },
+          "layout": {
+            "nav": "side",
+            "logo": "left",
+            "search": "panel",
+            "list": "table",
+            "pagination": "numbered",
+            "button": "rounded",
+            "density": "comfortable",
+            "footer": "none"
+          }
+        }
+      ],
+      "components": [
+        {
+          "id": "gnb",
+          "name": "GNB (주 메뉴)",
+          "category": "navigation",
+          "description": "로고, 1depth 메뉴, 유틸리티(로그인·마이페이지). 레이아웃 규칙에 따라 상단 또는 좌측",
+          "variants": [
+            "top",
+            "top-mega",
+            "side"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "lnb",
+          "name": "LNB (하위 메뉴)",
+          "category": "navigation",
+          "description": "2depth 이하 메뉴. 상단 GNB형에서 하위 페이지 좌측에 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "breadcrumb",
+          "name": "현재 위치(Location)",
+          "category": "navigation",
+          "description": "홈 > 1depth > 2depth",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "tabs",
+          "name": "탭",
+          "category": "navigation",
+          "description": "같은 화면 안 내용 전환",
+          "variants": [
+            "line",
+            "box"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "step-indicator",
+          "name": "단계 표시",
+          "category": "navigation",
+          "description": "신청 절차의 현재 단계",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "footer",
+          "name": "푸터",
+          "category": "layout",
+          "description": "기관 정보, 개인정보처리방침, 저작권",
+          "variants": [
+            "full",
+            "simple"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-bar",
+          "name": "검색창",
+          "category": "search",
+          "description": "키워드 입력 + 검색 버튼",
+          "variants": [
+            "header",
+            "hero",
+            "inline"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "search-panel",
+          "name": "검색 조건 영역",
+          "category": "search",
+          "description": "목록 위 조건(기간·구분·상태·키워드)과 조회·초기화 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "data-table",
+          "name": "목록 표(그리드)",
+          "category": "data",
+          "description": "총 건수, 정렬, 행 클릭 이동, 상태 뱃지 열",
+          "variants": [
+            "table",
+            "card"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "card-list",
+          "name": "카드 목록",
+          "category": "data",
+          "description": "썸네일·제목·요약·메타 정보 카드",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "pagination",
+          "name": "페이지네이션",
+          "category": "data",
+          "description": "처음·이전·번호·다음·마지막, 목록 개수 선택",
+          "variants": [
+            "numbered",
+            "numbered-size",
+            "more"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "detail-table",
+          "name": "상세 정보 표",
+          "category": "data",
+          "description": "항목명-값 2열 표",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "status-badge",
+          "name": "상태 뱃지",
+          "category": "data",
+          "description": "처리 상태 표시 (공통 상태값 사용)",
+          "variants": [
+            "neutral",
+            "info",
+            "success",
+            "warning",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-list",
+          "name": "첨부파일 목록",
+          "category": "data",
+          "description": "파일명·용량·내려받기",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "stat-cards",
+          "name": "요약 수치 카드",
+          "category": "data",
+          "description": "대시보드 건수 요약",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "notice-list",
+          "name": "게시물 요약 목록",
+          "category": "content",
+          "description": "공지·새소식 최근 N건",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "empty-state",
+          "name": "빈 화면 안내",
+          "category": "feedback",
+          "description": "데이터가 없을 때 안내 문구",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "hero-banner",
+          "name": "메인 비주얼",
+          "category": "content",
+          "description": "메인 상단 대표 문구·검색",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "quick-links",
+          "name": "바로가기",
+          "category": "content",
+          "description": "자주 쓰는 서비스 아이콘 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "login-form",
+          "name": "로그인 폼",
+          "category": "form",
+          "description": "아이디·비밀번호, 간편인증, 찾기 링크",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "text-input",
+          "name": "입력창",
+          "category": "form",
+          "description": "라벨, 필수 표시, 안내·오류 문구",
+          "variants": [
+            "default",
+            "error",
+            "disabled"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "textarea",
+          "name": "여러 줄 입력",
+          "category": "form",
+          "description": "글자 수 표시",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "select",
+          "name": "선택 목록",
+          "category": "form",
+          "description": "옵션 목록, 기본값",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "radio-group",
+          "name": "라디오 버튼",
+          "category": "form",
+          "description": "하나만 선택",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "checkbox-group",
+          "name": "체크박스",
+          "category": "form",
+          "description": "여러 개 선택, 약관 동의",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "date-range",
+          "name": "기간 선택",
+          "category": "form",
+          "description": "시작일~종료일, 빠른 기간 버튼",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "file-upload",
+          "name": "파일 첨부",
+          "category": "form",
+          "description": "허용 형식·용량 안내, 첨부 목록",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "button",
+          "name": "버튼",
+          "category": "action",
+          "description": "주요·보조·텍스트 버튼",
+          "variants": [
+            "primary",
+            "secondary",
+            "tertiary",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "button-group",
+          "name": "버튼 영역",
+          "category": "action",
+          "description": "화면 하단 주요 동작 버튼 묶음",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "confirm-dialog",
+          "name": "확인 창(컨펌)",
+          "category": "feedback",
+          "description": "되돌릴 수 없는 동작 전 확인. 확인·취소",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "alert-dialog",
+          "name": "알림 창(얼럿)",
+          "category": "feedback",
+          "description": "결과·오류 안내. 확인 버튼 하나",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "toast",
+          "name": "토스트",
+          "category": "feedback",
+          "description": "잠시 나타났다 사라지는 처리 결과 알림",
+          "variants": [
+            "success",
+            "info",
+            "danger"
+          ],
+          "origin": "BASE"
+        },
+        {
+          "id": "modal",
+          "name": "모달 팝업",
+          "category": "feedback",
+          "description": "화면 위 레이어 팝업. 제목·본문·닫기",
+          "variants": [],
+          "origin": "BASE"
+        },
+        {
+          "id": "review-timeline",
+          "name": "심사 이력 타임라인",
+          "category": "data",
+          "description": "일시·처리자·처리 결과·사유를 시간 순으로 표시",
+          "variants": [],
+          "origin": "ADDED",
+          "addedFor": "SFR-003-T01",
+          "addedAt": "2026-09-25T09:00:00.000Z"
+        }
+      ],
+      "icons": [
+        "search",
+        "menu",
+        "user",
+        "bell",
+        "home",
+        "download",
+        "upload",
+        "calendar",
+        "chevron-left",
+        "chevron-right",
+        "close",
+        "check",
+        "alert",
+        "info",
+        "file",
+        "logout",
+        "plus",
+        "edit",
+        "trash",
+        "filter"
+      ],
+      "selectedId": "A",
+      "selectedAt": "2026-09-25T09:00:00.000Z",
+      "tokens": {
+        "color": {
+          "primary": "#2257A8",
+          "onPrimary": "#FFFFFF",
+          "accent": "#0F8A6C",
+          "bg": "#F3F5F8",
+          "surface": "#FFFFFF",
+          "surfaceAlt": "#EBEEF3",
+          "border": "#D4DAE3",
+          "text": "#1C232D",
+          "textMuted": "#6B7280",
+          "nav": "#1F2A3C",
+          "onNav": "#E6EBF2",
+          "success": "#1E7B4B",
+          "warning": "#B45309",
+          "danger": "#C0262D",
+          "info": "#1D6FB8"
+        },
+        "font": {
+          "family": "\"IBM Plex Sans KR\", \"Malgun Gothic\", sans-serif",
+          "scale": {
+            "display": 34,
+            "h1": 26,
+            "h2": 20,
+            "h3": 17,
+            "body": 14,
+            "small": 13,
+            "caption": 12
+          },
+          "weightBold": 700
+        },
+        "radius": {
+          "sm": 2,
+          "md": 4,
+          "lg": 8
+        },
+        "control": {
+          "height": 34,
+          "rowHeight": 40
+        },
+        "spacing": 6,
+        "grid": {
+          "columns": 12,
+          "maxWidth": 1600,
+          "gutter": 24
+        },
+        "shadow": "none"
+      },
+      "layout": {
+        "nav": "side",
+        "logo": "left",
+        "search": "panel",
+        "list": "table",
+        "pagination": "numbered-size",
+        "button": "square",
+        "density": "compact",
+        "footer": "none"
+      }
+    }
+  ]
+}

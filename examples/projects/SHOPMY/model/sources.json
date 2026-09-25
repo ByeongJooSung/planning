@@ -4,8 +4,16 @@
       "id": "SRC-001",
       "kind": "EMAIL",
       "title": "추가 요청 메일(2026-09-24)",
-      "location": "sources/cr-001.eml",
-      "addedAt": "2026-09-25T09:00:00.000Z"
+      "location": "sources/SRC-001_추가요청_주문내역_엑셀.eml",
+      "addedAt": "2026-09-25T09:00:00.000Z",
+      "fileName": "추가요청_주문내역_엑셀.eml",
+      "size": 619,
+      "sha256": "b3a7dcdba2744fc969ccf365a7acf2185bdfbd5ae1d1d36a40707820eec10e9d",
+      "index": {
+        "status": "INDEXED",
+        "chunks": 5,
+        "chars": 255
+      }
     }
   ]
 }

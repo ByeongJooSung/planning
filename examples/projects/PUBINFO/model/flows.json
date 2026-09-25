@@ -103,7 +103,7 @@
           "id": "n8",
           "shape": "TERMINATOR",
           "label": "종료",
-          "lane": "L-PUB",
+          "lane": "L-EXT",
           "taskIds": [],
           "change": "NEW"
         }

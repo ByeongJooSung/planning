@@ -21,7 +21,7 @@ import {
 import { validateModel } from "../model/validate.js";
 import { SYSTEM_PRESETS, type PresetName } from "./presets.js";
 
-export const PROJECT_SUBDIRS = ["model", "sources", "analysis", "outputs", "changes", "rtm", "history"] as const;
+export const PROJECT_SUBDIRS = ["model", "sources", "knowledge", "analysis", "outputs", "changes", "rtm", "history"] as const;
 
 export interface CreateProjectInput {
   code: string;
@@ -100,6 +100,7 @@ export function toFiles(m: Model): Record<ModelFileName, unknown> {
     "prototype.json": m.prototype,
     "changes.json": { items: m.changes },
     "rtm-records.json": m.rtmRecords,
+    "design.json": m.design,
   };
 }
 
@@ -124,6 +125,7 @@ export function fromFiles(project: unknown, files: Partial<Record<ModelFileName,
     prototype: p("prototype.json"),
     changes: p("changes.json").items,
     rtmRecords: p("rtm-records.json"),
+    design: p("design.json"),
   };
 }
 

@@ -50,16 +50,18 @@ describe("RTM — 대국민 정보공개 샘플", () => {
   });
 
   it("시스템별 설계완료율을 계산한다 (제외 Task는 빼고)", () => {
-    expect(rtm.coverage.bySystem.PUB).toEqual({ total: 1, designed: 1, rate: 100 });
-    expect(rtm.coverage.bySystem.ADM).toEqual({ total: 3, designed: 1, rate: 33.3 });
-    expect(rtm.coverage.tasks.total).toBe(9);
+    // SFR-006 자동 생성 Task(미착수)가 시스템마다 더해진다
+    expect(rtm.coverage.bySystem.PUB).toEqual({ total: 2, designed: 1, rate: 50 });
+    expect(rtm.coverage.bySystem.ADM).toEqual({ total: 5, designed: 2, rate: 40 });
+    expect(rtm.coverage.tasks.total).toBe(16);
   });
 
   it("단계별 누락과 근거 없는 산출물을 찾는다", () => {
     const g = (kind: string) => rtm.gaps.filter((x) => x.kind === kind).map((x) => x.ref);
     expect(g("NO_TASKS")).toEqual(["SFR-004"]);
-    expect(g("NO_SCREEN")).toEqual(["SFR-003-T01"]);
-    expect(g("NO_STORYBOARD")).toEqual(["SFR-001-T01", "SFR-001-T02", "SFR-002-T03", "SFR-003-T01"]);
+    expect(g("NO_SCREEN")).toEqual(["SFR-006-T01", "SFR-006-T02", "SFR-006-T03", "SFR-006-T04", "SFR-006-T05"]);
+    expect(g("NO_STORYBOARD")).toEqual(["SFR-001-T01", "SFR-001-T02", "SFR-002-T03", "SFR-006-T01", "SFR-006-T02", "SFR-006-T03", "SFR-006-T04", "SFR-006-T05"]);
+    expect(g("NO_DESIGN_SYSTEM")).toEqual([]); // 세 시스템 모두 컨셉 선택 완료
     expect(g("NO_PROTOTYPE")).toEqual([]); // S5 미시작 단계는 검사하지 않음
     expect(rtm.orphans.map((o) => o.ref).sort()).toEqual(["FN-PUB-900", "PUB_MAIN_HOME_010"]);
   });
@@ -76,6 +78,6 @@ describe("RTM — 대국민 정보공개 샘플", () => {
     expect(md).toContain("| SFR-002 대국민 정보공개 |");
     const csv = renderRtmCsv(rtm, "req");
     expect(csv.startsWith("﻿요구사항 ID,")).toBe(true);
-    expect(csv.split("\r\n").filter(Boolean)).toHaveLength(1 + 9 + 2); // 헤더 + Task 9 + Task 없는 요구사항 2
+    expect(csv.split("\r\n").filter(Boolean)).toHaveLength(1 + 16 + 2); // 헤더 + Task 16 + Task 없는 요구사항 2
   });
 });

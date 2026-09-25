@@ -35,6 +35,10 @@ const COLLECTIONS: Record<string, (m: Model) => [string, unknown][]> = {
   storyboardScreens: (m) => m.storyboard.screens.map((s) => [s.screenId, s]),
   prototypeScreens: (m) => m.prototype.screens.map((s) => [s.screenId, s]),
   changeRequests: (m) => m.changes.map((c) => [c.id, c]),
+  designSystems: (m) =>
+    m.design.systems.map((d) => [d.systemCode, { status: d.status, selectedId: d.selectedId, tokens: d.tokens, layout: d.layout }]),
+  designComponents: (m) =>
+    m.design.systems.flatMap((d) => d.components.map((c) => [`${d.systemCode}/${c.id}`, c] as [string, unknown])),
 };
 
 export const COLLECTION_LABEL: Record<string, string> = {
@@ -53,6 +57,8 @@ export const COLLECTION_LABEL: Record<string, string> = {
   storyboardScreens: "스토리보드 화면",
   prototypeScreens: "프로토타입 화면",
   changeRequests: "변경 요청",
+  designSystems: "디자인 시스템",
+  designComponents: "디자인 컴포넌트",
 };
 
 export function diffModels(before: Model, after: Model): ModelDiff {

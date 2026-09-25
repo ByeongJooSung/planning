@@ -31,6 +31,48 @@
           },
           "addedAt": {
             "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "index": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "INDEXED",
+                  "UNSUPPORTED",
+                  "FAILED"
+                ]
+              },
+              "chunks": {
+                "default": 0,
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "chars": {
+                "default": 0,
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ]
           }
         },
         "required": [

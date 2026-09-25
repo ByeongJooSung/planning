@@ -4,10 +4,15 @@ import { readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { validateModel } from "./model/validate.js";
+import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
+import { search } from "./knowledge/search.js";
+import { addKnowledgeFile, loadChunks, removeKnowledgeFile } from "./knowledge/store.js";
+import { suggestTasks } from "./project/suggest.js";
 import {
   addRequirement,
   addSystem,
   addTask,
+  autoCreateTasks,
   excludeRequirement,
   recordReview,
   removeTask,
@@ -153,9 +158,10 @@ req
   .addOption(new Option("--type <t>").choices(["FUNCTIONAL", "NON_FUNCTIONAL", "POLICY", "CONTENT", "CONSTRAINT"]))
   .addOption(new Option("--priority <p>").choices(["MUST", "SHOULD", "COULD"]))
   .option("--source <ref...>", "출처 SRC-001[:위치]")
+  .option("--auto-tasks", "등록하면서 시스템별 Task 자동 생성")
   .action(async (o) => {
-    const r = await mutate((m) =>
-      addRequirement(m, {
+    const r = await mutate((m) => {
+      const req = addRequirement(m, {
         title: o.title,
         description: o.desc,
         originalId: o.originalId,
@@ -165,10 +171,13 @@ req
           const [sourceId, ...rest] = s.split(":");
           return { sourceId: sourceId!, locator: rest.join(":") };
         }),
-      }),
-    );
+      });
+      if (o.autoTasks) autoCreateTasks(m, req.id);
+      return req;
+    });
     console.log(`요구사항을 추가했습니다: ${r.id} ${r.title}`);
-    console.log(`다음: planning task add ${r.id} --system <코드> --action "<처리 내용>"`);
+    if (o.autoTasks) for (const t of r.tasks) console.log(`  자동 생성 ${t.id} [${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action}  — ${t.suggestReason}`);
+    else console.log(`다음: planning task auto ${r.id}  또는  planning task add ${r.id} --system <코드> --action "<처리 내용>"`);
   });
 req.command("list").action(async () => {
   const rtm = buildRtm(await loadModel(await resolveDir()));
@@ -208,6 +217,24 @@ task
       }),
     );
     console.log(`Task를 추가했습니다: ${t.id} [${t.systemCode}] ${t.action}`);
+  });
+task
+  .command("suggest <requirementId>")
+  .description("시스템별 Task 자동 제안 미리보기 (저장하지 않음)")
+  .action(async (reqId: string) => {
+    const m = await loadModel(await resolveDir());
+    const req = m.requirements.find((r) => r.id === reqId || r.originalId === reqId);
+    if (!req) throw new Error(`요구사항이 없습니다: ${reqId}`);
+    for (const t of suggestTasks(m, req))
+      console.log(`[${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action}${t.after?.length ? `  (선행: ${t.after.join(", ")})` : ""}\n    근거: ${t.reason}`);
+    console.log(`\n적용: planning task auto ${req.id}`);
+  });
+task
+  .command("auto <requirementId>")
+  .description("시스템별 Task 자동 생성 (제안을 그대로 적용)")
+  .action(async (reqId: string) => {
+    const tasks = await mutate((m) => autoCreateTasks(m, reqId));
+    for (const t of tasks) console.log(`자동 생성 ${t.id} [${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action}  — ${t.suggestReason}`);
   });
 task.command("rm <taskId>").action(async (id: string) => {
   await mutate((m) => removeTask(m, id));
@@ -290,6 +317,87 @@ program
     const b = to ? await loadSnapshot(dir, to) : await loadModel(dir);
     const title = `변경 비교: v${from.replace(/^v/, "")} → ${to ? `v${to.replace(/^v/, "")}` : `현재(v${b.project.version})`}`;
     process.stdout.write(renderDiffMarkdown(diffModels(a, b), title));
+  });
+
+const kb = program.command("kb").description("참조자료(프로젝트 지식) 관리");
+kb.command("add <files...>")
+  .description("파일을 올려 색인 (txt, md, csv, json, html, eml, docx, pdf)")
+  .option("--title <title>", "자료 제목 (파일 1개일 때)")
+  .action(async (files: string[], o) => {
+    const dir = await resolveDir();
+    const m = await loadModel(dir);
+    for (const f of files) {
+      const r = await addKnowledgeFile(dir, m, f, { title: files.length === 1 ? o.title : undefined });
+      const s = r.source;
+      if (r.duplicateOf) console.log(`이미 올린 파일입니다: ${f} → ${r.duplicateOf}`);
+      else if (s.index?.status === "INDEXED") console.log(`${s.id} ${s.title}: 색인 ${s.index.chunks}조각 · ${s.index.chars.toLocaleString()}자`);
+      else console.log(`${s.id} ${s.title}: 보관만 함 — ${s.index?.message}`);
+    }
+    await saveModel(dir, m);
+  });
+kb.command("list").action(async () => {
+  const m = await loadModel(await resolveDir());
+  for (const s of m.sources)
+    console.log(`${s.id}\t${s.title}\t${s.fileName ?? s.location}\t${s.index ? `${s.index.status} ${s.index.chunks}조각` : "색인 없음"}`);
+});
+kb.command("search <query...>")
+  .option("-n, --limit <n>", "결과 수", "5")
+  .action(async (words: string[], o) => {
+    const dir = await resolveDir();
+    const m = await loadModel(dir);
+    const hits = search(await loadChunks(dir), words.join(" "), Number(o.limit));
+    if (!hits.length) console.log("찾은 내용이 없습니다");
+    for (const h of hits) {
+      const src = m.sources.find((s) => s.id === h.chunk.sourceId);
+      console.log(`\n[${h.score}] ${h.chunk.sourceId} ${src?.title ?? ""} · ${h.chunk.locator}\n${h.chunk.text.slice(0, 240)}${h.chunk.text.length > 240 ? "…" : ""}`);
+    }
+  });
+kb.command("rm <sourceId>").action(async (id: string) => {
+  const dir = await resolveDir();
+  const m = await loadModel(dir);
+  await removeKnowledgeFile(dir, m, id);
+  await saveModel(dir, m);
+  console.log(`${id}를 삭제했습니다`);
+});
+
+const design = program.command("design").description("시스템별 디자인 시스템");
+design
+  .command("propose <system>")
+  .description("컨셉 3종 제안")
+  .action(async (code: string) => {
+    const d = await mutate((m) => proposeDesign(m, code));
+    for (const c of d.proposals) console.log(`${c.id}. ${c.name} — ${c.summary}\n   어울리는 경우: ${c.fit}`);
+    console.log(`\n선택: planning design select ${code} <A|B|C>`);
+  });
+design
+  .command("select <system> <concept>")
+  .description("컨셉을 선택해 디자인 시스템 생성")
+  .action(async (code: string, concept: string) => {
+    const d = await mutate((m) => selectDesign(m, code, concept));
+    const c = d.proposals.find((p) => p.id === d.selectedId)!;
+    console.log(`${code} 디자인 시스템을 만들었습니다: ${c.name} · 컴포넌트 ${d.components.length}개 · 아이콘 ${d.icons.length}개`);
+  });
+design
+  .command("show <system>")
+  .action(async (code: string) => {
+    const d = getSystemDesign(await loadModel(await resolveDir()), code);
+    if (!d) return console.log(`${code} 디자인 시스템이 없습니다. planning design propose ${code}`);
+    console.log(`${code} ${d.status === "SELECTED" ? `선택 컨셉 ${d.selectedId}` : "컨셉 선택 대기"}`);
+    for (const c of d.components) console.log(`  ${c.id}\t${c.name}${c.origin === "ADDED" ? `\t(추가: ${c.addedFor ?? ""})` : ""}`);
+  });
+design
+  .command("component-add <system> <id>")
+  .description("새 컴포넌트를 디자인 시스템에 추가 (스토리보드에서 쓰기 전에)")
+  .requiredOption("--name <name>")
+  .addOption(new Option("--category <c>").choices(["navigation", "search", "data", "form", "action", "feedback", "content", "layout"]).makeOptionMandatory())
+  .option("--desc <text>", "", "")
+  .option("--variants <list>", "변형 (쉼표 구분)", list, [])
+  .option("--for <ref>", "필요한 화면·Task ID")
+  .action(async (code: string, id: string, o) => {
+    const c = await mutate((m) =>
+      addDesignComponent(m, code, { id, name: o.name, category: o.category, description: o.desc, variants: o.variants, addedFor: o.for }),
+    );
+    console.log(`${code} 디자인 시스템에 ${c.id}(${c.name})를 추가했습니다`);
   });
 
 program

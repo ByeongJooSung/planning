@@ -18,6 +18,18 @@
           "title": {
             "type": "string"
           },
+          "template": {
+            "type": "string",
+            "enum": [
+              "login",
+              "dashboard",
+              "main",
+              "list",
+              "detail",
+              "form",
+              "popup"
+            ]
+          },
           "taskIds": {
             "default": [],
             "type": "array",
@@ -125,6 +137,28 @@
                       }
                     }
                   }
+                },
+                "ui": {
+                  "type": "object",
+                  "properties": {
+                    "component": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "link": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "component"
+                  ]
                 }
               },
               "required": [

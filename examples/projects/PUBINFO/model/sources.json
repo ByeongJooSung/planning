@@ -3,9 +3,32 @@
     {
       "id": "SRC-001",
       "kind": "FILE",
-      "title": "제안요청서(RFP)",
-      "location": "sources/rfp.pdf",
-      "addedAt": "2026-09-25T09:00:00.000Z"
+      "title": "제안요청서(요약)",
+      "location": "sources/SRC-001_제안요청서_요약.md",
+      "addedAt": "2026-09-25T09:00:00.000Z",
+      "fileName": "제안요청서_요약.md",
+      "size": 2637,
+      "sha256": "5744c174abe11af25d37cd769a1efde82f0c31c493c377d19e42ad394de1d9c2",
+      "index": {
+        "status": "INDEXED",
+        "chunks": 11,
+        "chars": 1110
+      }
+    },
+    {
+      "id": "SRC-002",
+      "kind": "FILE",
+      "title": "착수보고 회의록",
+      "location": "sources/SRC-002_착수회의_회의록.txt",
+      "addedAt": "2026-09-25T09:00:00.000Z",
+      "fileName": "착수회의_회의록.txt",
+      "size": 1090,
+      "sha256": "e3e3b8a845518a88489361210419c4b11d684c6463d63c1aab28fc5c5139e6ea",
+      "index": {
+        "status": "INDEXED",
+        "chunks": 7,
+        "chars": 472
+      }
     }
   ]
 }

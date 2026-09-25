@@ -4,7 +4,7 @@
     "name": "쇼핑몰 주문 내역 개선",
     "version": "0.2"
   },
-  "generatedAt": "2026-09-25T14:39:48.812Z",
+  "generatedAt": "2026-09-25T15:45:48.952Z",
   "systems": [
     {
       "code": "USR",
@@ -84,7 +84,7 @@
       "type": "FUNCTIONAL",
       "priority": "MUST",
       "sources": [
-        "SRC-001 본문 1문단"
+        "SRC-001 본문 문단 1"
       ],
       "status": "DESIGNED",
       "tasks": [
@@ -242,6 +242,12 @@
       "kind": "NO_STORYBOARD",
       "ref": "REQ-002-T01",
       "message": "REQ-002-T01 스토리보드 미작성 화면: ADM_ORD_SRCH_010"
+    },
+    {
+      "stage": "S4",
+      "kind": "NO_DESIGN_SYSTEM",
+      "ref": "USR",
+      "message": "USR 디자인 시스템 컨셉이 선택되지 않아 와이어프레임을 그릴 수 없습니다 (제안 3종 검토 중)"
     }
   ],
   "orphans": []

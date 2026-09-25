@@ -124,6 +124,17 @@
                 },
                 "noScreenReason": {
                   "type": "string"
+                },
+                "origin": {
+                  "default": "MANUAL",
+                  "type": "string",
+                  "enum": [
+                    "AUTO",
+                    "MANUAL"
+                  ]
+                },
+                "suggestReason": {
+                  "type": "string"
                 }
               },
               "required": [

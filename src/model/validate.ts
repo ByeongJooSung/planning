@@ -96,9 +96,25 @@ export function validateModel(m: Model): Issue[] {
       if (!nodeIds.has(e.from) || !nodeIds.has(e.to)) err("DANGLING_EDGE", `플로우 ${f.id}의 연결 ${e.from}→${e.to}가 없는 노드를 가리킵니다`, f.id);
   }
 
+  const designs = new Map(m.design.systems.map((d) => [d.systemCode, d]));
+  for (const d of m.design.systems) {
+    checkSystem(`디자인 시스템 ${d.systemCode}`, d.systemCode);
+    if (d.status === "SELECTED" && !d.proposals.some((p) => p.id === d.selectedId))
+      err("UNKNOWN_CONCEPT", `디자인 시스템 ${d.systemCode}의 선택 컨셉 ${d.selectedId}가 제안 목록에 없습니다`, d.systemCode);
+  }
   for (const s of m.storyboard.screens) {
     checkTaskRefs(`스토리보드 ${s.screenId}`, s.taskIds);
     if (!iaIds.has(s.screenId)) err("UNKNOWN_SCREEN", `스토리보드 화면 ${s.screenId}가 IA에 없습니다`, s.screenId);
+    const d = designs.get(s.systemCode);
+    const known = new Set(d?.components.map((c) => c.id));
+    for (const c of s.components) {
+      if (!c.ui) continue;
+      if (d?.status !== "SELECTED")
+        err("NO_DESIGN_SYSTEM", `${s.screenId} 와이어프레임을 그리려면 ${s.systemCode} 디자인 시스템 컨셉을 먼저 선택해야 합니다`, s.screenId);
+      else if (!known.has(c.ui.component))
+        err("UNKNOWN_COMPONENT", `${s.screenId} #${c.no} "${c.ui.component}"는 ${s.systemCode} 디자인 시스템에 없습니다. 먼저 디자인 시스템에 추가하세요`, s.screenId);
+      if (c.ui.link && !iaIds.has(c.ui.link)) err("UNKNOWN_SCREEN", `${s.screenId} #${c.no}의 이동 화면 ${c.ui.link}가 IA에 없습니다`, s.screenId);
+    }
   }
   for (const p of m.prototype.screens)
     if (!iaIds.has(p.screenId)) err("UNKNOWN_SCREEN", `프로토타입 화면 ${p.screenId}가 IA에 없습니다`, p.screenId);

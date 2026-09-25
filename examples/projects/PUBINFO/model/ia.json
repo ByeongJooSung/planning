@@ -137,7 +137,7 @@
       "id": "ADM_INF_REV_010",
       "systemCode": "ADM",
       "parentId": "M-ADM-INF",
-      "name": "심사 목록·상세",
+      "name": "심사 목록",
       "kind": "PAGE",
       "loginRequired": true,
       "roles": [],
@@ -156,6 +156,19 @@
       "roles": [],
       "taskIds": [
         "SFR-002-T03"
+      ],
+      "change": "NEW"
+    },
+    {
+      "id": "ADM_INF_HIS_010",
+      "systemCode": "ADM",
+      "parentId": "M-ADM-INF",
+      "name": "심사 이력",
+      "kind": "PAGE",
+      "loginRequired": true,
+      "roles": [],
+      "taskIds": [
+        "SFR-003-T01"
       ],
       "change": "NEW"
     }

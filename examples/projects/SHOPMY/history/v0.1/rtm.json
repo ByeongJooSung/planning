@@ -182,6 +182,12 @@
       "kind": "NO_STORYBOARD",
       "ref": "REQ-002-T01",
       "message": "REQ-002-T01 스토리보드 미작성 화면: ADM_ORD_SRCH_010"
+    },
+    {
+      "stage": "S4",
+      "kind": "NO_DESIGN_SYSTEM",
+      "ref": "USR",
+      "message": "USR 디자인 시스템 컨셉이 선택되지 않아 와이어프레임을 그릴 수 없습니다 (제안 3종 검토 중)"
     }
   ],
   "orphans": []

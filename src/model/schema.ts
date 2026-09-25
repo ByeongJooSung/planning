@@ -90,6 +90,18 @@ export const Source = z.object({
   /** 프로젝트 폴더 기준 상대 경로(sources/…) 또는 URL */
   location: z.string().default(""),
   addedAt: z.string(),
+  /** 참조자료(지식) 색인 정보 — PRD §4.2C */
+  fileName: z.string().optional(),
+  size: z.number().int().optional(),
+  sha256: z.string().optional(),
+  index: z
+    .object({
+      status: z.enum(["INDEXED", "UNSUPPORTED", "FAILED"]),
+      chunks: z.number().int().default(0),
+      chars: z.number().int().default(0),
+      message: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const SourceRef = z.object({
@@ -121,6 +133,10 @@ export const Task = z.object({
   transition: StateTransition.optional(),
   /** 화면이 없는 Task(배치·자동 처리·외부 연계)의 사유. 있으면 화면 매핑 없이 충족 가능 */
   noScreenReason: z.string().optional(),
+  /** AUTO: 요구사항에서 자동 제안된 Task, MANUAL: 작업자가 직접 만든 Task */
+  origin: z.enum(["AUTO", "MANUAL"]).default("MANUAL"),
+  /** 자동 제안 근거 (예: "‘심사’ → 심사자·관리자 시스템") */
+  suggestReason: z.string().optional(),
 });
 
 export const Requirement = z.object({
@@ -253,12 +269,22 @@ export const ComponentSpec = z.object({
     .object({ values: z.array(z.string()), default: z.string().optional(), note: z.string().optional() })
     .optional(),
   validation: Validation.optional(),
+  /** 와이어프레임 표현: 디자인 시스템 컴포넌트와 속성. link는 이동할 화면 ID (프로토타입 연결) */
+  ui: z
+    .object({
+      component: z.string(),
+      props: z.record(z.string(), z.unknown()).default({}),
+      link: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const StoryboardScreen = z.object({
   screenId: z.string(),
   systemCode: SystemCode,
   title: z.string(),
+  /** 화면 유형 — 디자인 시스템 페이지 템플릿 */
+  template: z.enum(["login", "dashboard", "main", "list", "detail", "form", "popup"]).optional(),
   taskIds: z.array(z.string()).default([]),
   components: z.array(ComponentSpec).default([]),
   status: z.enum(["DRAFT", "REVIEWED"]).default("DRAFT"),
@@ -313,6 +339,99 @@ export const RtmRecords = z.object({
     .default([]),
 });
 
+// ── 디자인 시스템 (PRD §4.6A) — 시스템 구분별로 관리 ─────────────────────
+
+const Hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+
+export const DesignTokens = z.object({
+  color: z.object({
+    primary: Hex,
+    onPrimary: Hex,
+    accent: Hex,
+    bg: Hex,
+    surface: Hex,
+    surfaceAlt: Hex,
+    border: Hex,
+    text: Hex,
+    textMuted: Hex,
+    nav: Hex,
+    onNav: Hex,
+    success: Hex,
+    warning: Hex,
+    danger: Hex,
+    info: Hex,
+  }),
+  font: z.object({
+    family: z.string(),
+    /** 크기(px): display h1 h2 h3 body small caption */
+    scale: z.object({
+      display: z.number(),
+      h1: z.number(),
+      h2: z.number(),
+      h3: z.number(),
+      body: z.number(),
+      small: z.number(),
+      caption: z.number(),
+    }),
+    weightBold: z.number().int(),
+  }),
+  radius: z.object({ sm: z.number(), md: z.number(), lg: z.number() }),
+  control: z.object({ height: z.number(), rowHeight: z.number() }),
+  spacing: z.number(),
+  grid: z.object({ columns: z.number().int(), maxWidth: z.number(), gutter: z.number() }),
+  shadow: z.enum(["none", "soft", "strong"]),
+});
+
+export const LayoutRules = z.object({
+  /** GNB: 상단 / 상단 메가메뉴 / 좌측 사이드 */
+  nav: z.enum(["top", "top-mega", "side"]),
+  logo: z.enum(["left", "center"]),
+  /** 검색 영역: 헤더 안 / 첫 화면 큰 검색 / 목록 위 조건 패널 */
+  search: z.enum(["header", "hero", "panel"]),
+  list: z.enum(["table", "card"]),
+  pagination: z.enum(["numbered", "numbered-size", "more"]),
+  button: z.enum(["square", "rounded", "pill"]),
+  density: z.enum(["comfortable", "compact"]),
+  footer: z.enum(["full", "simple", "none"]),
+});
+
+export const DesignConcept = z.object({
+  id: z.string(),
+  name: z.string(),
+  summary: z.string(),
+  /** 어울리는 대상·근거 */
+  fit: z.string(),
+  tokens: DesignTokens,
+  layout: LayoutRules,
+});
+
+export const DesignComponent = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9-]*$/, "컴포넌트 ID는 영문 소문자·숫자·하이픈 (예: search-panel)"),
+  name: z.string(),
+  category: z.enum(["navigation", "search", "data", "form", "action", "feedback", "content", "layout"]),
+  description: z.string().default(""),
+  variants: z.array(z.string()).default([]),
+  /** BASE: 컨셉 선택 시 생성된 기본 컴포넌트, ADDED: 작업 중 추가된 컴포넌트 */
+  origin: z.enum(["BASE", "ADDED"]).default("BASE"),
+  /** 추가를 요청한 화면·Task */
+  addedFor: z.string().optional(),
+  addedAt: z.string().optional(),
+});
+
+export const SystemDesign = z.object({
+  systemCode: SystemCode,
+  status: z.enum(["PROPOSED", "SELECTED"]),
+  proposals: z.array(DesignConcept).default([]),
+  selectedId: z.string().optional(),
+  selectedAt: z.string().optional(),
+  tokens: DesignTokens.optional(),
+  layout: LayoutRules.optional(),
+  components: z.array(DesignComponent).default([]),
+  icons: z.array(z.string()).default([]),
+});
+
+export const Design = z.object({ systems: z.array(SystemDesign).default([]) });
+
 // ── 모델 파일 목록 ──────────────────────────────────────────────────────
 
 /** model/ 아래 파일명 ↔ 스키마. 스냅샷·Diff·JSON Schema 생성이 이 목록을 기준으로 동작한다. */
@@ -328,6 +447,7 @@ export const MODEL_FILES = {
   "prototype.json": Prototype,
   "changes.json": ChangeRequests,
   "rtm-records.json": RtmRecords,
+  "design.json": Design,
 } as const;
 
 export type ModelFileName = keyof typeof MODEL_FILES;
@@ -349,6 +469,12 @@ export type Storyboard = z.infer<typeof Storyboard>;
 export type Prototype = z.infer<typeof Prototype>;
 export type ChangeRequest = z.infer<typeof ChangeRequest>;
 export type RtmRecords = z.infer<typeof RtmRecords>;
+export type DesignTokens = z.infer<typeof DesignTokens>;
+export type LayoutRules = z.infer<typeof LayoutRules>;
+export type DesignConcept = z.infer<typeof DesignConcept>;
+export type DesignComponent = z.infer<typeof DesignComponent>;
+export type SystemDesign = z.infer<typeof SystemDesign>;
+export type Design = z.infer<typeof Design>;
 
 /** 메모리상 프로젝트 전체 모델 */
 export interface Model {
@@ -364,4 +490,5 @@ export interface Model {
   prototype: Prototype;
   changes: ChangeRequest[];
   rtmRecords: RtmRecords;
+  design: Design;
 }

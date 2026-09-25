@@ -15,7 +15,8 @@
           "systemCode": "USR",
           "actor": "회원",
           "action": "기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회",
-          "after": []
+          "after": [],
+          "origin": "MANUAL"
         }
       ]
     },
@@ -34,7 +35,8 @@
           "systemCode": "ADM",
           "actor": "운영 관리자",
           "action": "주문 검색에 기간 조건 적용",
-          "after": []
+          "after": [],
+          "origin": "MANUAL"
         }
       ]
     },
@@ -47,7 +49,7 @@
       "sources": [
         {
           "sourceId": "SRC-001",
-          "locator": "본문 1문단"
+          "locator": "본문 문단 1"
         }
       ],
       "status": "ACTIVE",
@@ -58,7 +60,8 @@
           "systemCode": "USR",
           "actor": "회원",
           "action": "조회 결과를 엑셀로 다운로드",
-          "after": []
+          "after": [],
+          "origin": "MANUAL"
         }
       ]
     }

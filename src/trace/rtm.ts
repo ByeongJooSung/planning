@@ -60,7 +60,7 @@ export interface MatrixCell {
 
 export interface Gap {
   stage: StageId;
-  kind: "NO_TASKS" | "NO_PLAN" | "NO_SCREEN" | "NO_FLOW" | "NO_STORYBOARD" | "NO_PROTOTYPE";
+  kind: "NO_TASKS" | "NO_PLAN" | "NO_SCREEN" | "NO_FLOW" | "NO_DESIGN_SYSTEM" | "NO_STORYBOARD" | "NO_PROTOTYPE";
   ref: string;
   message: string;
 }
@@ -275,6 +275,20 @@ function findGaps(m: Model, rows: RequirementTrace[]): Gap[] {
               : `${t.taskId} 연결된 화면이 없어 프로토타입에 반영할 수 없습니다`,
           });
       }
+    }
+  }
+  // 와이어프레임 제작 전 디자인 시스템 컨셉 선택 필요 (PRD F-DS-02)
+  if (started("S4")) {
+    const systems = new Set(m.storyboard.screens.map((s) => s.systemCode));
+    for (const code of systems) {
+      const d = m.design.systems.find((x) => x.systemCode === code);
+      if (d?.status !== "SELECTED")
+        gaps.push({
+          stage: "S4",
+          kind: "NO_DESIGN_SYSTEM",
+          ref: code,
+          message: `${code} 디자인 시스템 컨셉이 선택되지 않아 와이어프레임을 그릴 수 없습니다 (${d ? "제안 3종 검토 중" : "컨셉 제안 전"})`,
+        });
     }
   }
   const order: StageId[] = ["S0", "S0A", "S1", "S2", "S3", "S4", "S5"];

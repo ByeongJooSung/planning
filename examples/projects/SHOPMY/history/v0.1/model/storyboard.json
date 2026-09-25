@@ -4,6 +4,7 @@
       "screenId": "USR_MY_ORD_010",
       "systemCode": "USR",
       "title": "주문 내역",
+      "template": "list",
       "taskIds": [],
       "status": "DRAFT",
       "components": [

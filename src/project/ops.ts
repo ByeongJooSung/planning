@@ -4,6 +4,7 @@
  */
 import { nextRequirementId, nextTaskId, resolveTaskRef } from "../model/ids.js";
 import { Requirement, System, Task, type Model } from "../model/schema.js";
+import { resolveSuggestionOrder, suggestTasks } from "./suggest.js";
 
 type Ctx = { now?: Date; crId?: string };
 const ts = (c: Ctx) => (c.now ?? new Date()).toISOString();
@@ -53,6 +54,8 @@ export interface AddTaskInput {
   after?: string[];
   transition?: { stateSetId?: string; from?: string; to: string };
   noScreenReason?: string;
+  origin?: "AUTO" | "MANUAL";
+  suggestReason?: string;
 }
 
 export function addTask(m: Model, requirementId: string, input: AddTaskInput, c: Ctx = {}): Task {
@@ -70,7 +73,7 @@ export function addTask(m: Model, requirementId: string, input: AddTaskInput, c:
     at: ts(c),
     crId: c.crId,
     kind: "TASKS_CHANGED",
-    detail: `${task.id} 추가 [${task.systemCode}] ${task.action}`,
+    detail: `${task.id} ${task.origin === "AUTO" ? "자동 생성" : "추가"} [${task.systemCode}] ${task.action}`,
   });
   return task;
 }
@@ -97,4 +100,12 @@ export function recordReview(m: Model, taskId: string, reviewer: string, note = 
   if (!m.requirements.some((r) => r.tasks.some((t) => t.id === taskId))) throw new Error(`Task가 없습니다: ${taskId}`);
   m.rtmRecords.reviews = m.rtmRecords.reviews.filter((r) => r.taskId !== taskId);
   m.rtmRecords.reviews.push({ taskId, reviewer, reviewedAt: ts(c), note });
+}
+
+/** 요구사항에서 시스템별 Task를 자동 생성한다 (규칙 기반 제안을 그대로 적용) */
+export function autoCreateTasks(m: Model, requirementId: string, c: Ctx = {}): Task[] {
+  const req = findRequirement(m, requirementId);
+  const suggestions = suggestTasks(m, req);
+  const inputs = resolveSuggestionOrder(suggestions, req.tasks.length);
+  return inputs.map((input, i) => addTask(m, req.id, { ...input, origin: "AUTO", suggestReason: suggestions[i]!.reason }, c));
 }
