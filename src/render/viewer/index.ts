@@ -33,6 +33,8 @@ export interface ViewerProject {
 
 export interface ViewerData {
   generatedAt: string;
+  /** static: 파일 하나로 여는 읽기 전용 뷰어, server: `planning serve` 웹 서비스 (로그인·편집) */
+  mode?: "static" | "server";
   viewerUrl?: string;
   projects: ViewerProject[];
 }

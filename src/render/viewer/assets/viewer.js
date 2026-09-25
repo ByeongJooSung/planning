@@ -3,6 +3,8 @@
   var DATA = JSON.parse(document.getElementById("planning-data").textContent);
   // 저장소 기준 모델. AI 적용본(overlay)은 이 위에 덧씌워 p.model을 만든다
   DATA.projects.forEach(function (p) { p.base = JSON.parse(JSON.stringify(p.model)); });
+  // server: `planning serve` 웹 서비스(로그인·편집), 그 밖: 파일 하나로 여는 읽기 전용 뷰어
+  var SRV = DATA.mode === "server";
   var Wire = window.Wire, Flow = window.Flow, KB = window.KB;
 
   var STATUS = { NOT_STARTED: "미착수", IN_DESIGN: "설계중", DESIGNED: "설계완료", REVIEWED: "검토완료", EXCLUDED: "제외" };
@@ -43,19 +45,22 @@
     ia: ["정보구조도", "Task별로 만든 화면이 통합된 시스템별 메뉴·화면 구조"],
     rtm: ["요구사항 추적표", "요구사항 → 시스템별 Task → 산출물 연결과 충족 상태"],
     flow: ["시스템별 프로세스 플로우", "Task별 흐름을 통합한 프로세스를 시스템 영역별로 나눠 봅니다"],
-    ver: ["버전 이력", "스냅샷과 최근 스냅샷 이후 변경 사항"]
+    ver: ["버전 이력", "스냅샷과 최근 스냅샷 이후 변경 사항"],
+    members: ["멤버", "프로젝트 공동 작업자와 권한, 초대"],
+    aiset: ["AI 설정", "이 프로젝트에서 AI를 부르는 방법 — 로컬 LLM 또는 외부 API"]
   };
 
   var state = { route: { view: "home" }, rtmView: "matrix", off: {}, flowSys: "ALL", dsSys: {}, kbQ: "", proto: {} };
-  try {
+  if (!SRV) try {
     var saved = JSON.parse(localStorage.getItem("planning-viewer-2") || "{}");
     if (saved.route && (saved.route.view === "home" || (typeof saved.route.p === "number" && saved.route.p < DATA.projects.length))) state.route = saved.route;
     if (saved.rtmView) state.rtmView = saved.rtmView;
   } catch (e) { /* 저장소 없음 */ }
   var hash = (location.hash || "").slice(1);
-  DATA.projects.forEach(function (p, i) { if (p.model.project.code === hash) state.route = { view: "project", p: i, page: "dash" }; });
+  if (!SRV) DATA.projects.forEach(function (p, i) { if (p.model.project.code === hash) state.route = { view: "project", p: i, page: "dash" }; });
 
   function persist() {
+    if (SRV) return syncUrl();
     try { localStorage.setItem("planning-viewer-2", JSON.stringify({ route: state.route, rtmView: state.rtmView })); } catch (e) { /* 무시 */ }
   }
 
@@ -116,7 +121,7 @@
   function fitStages(root) {
     (root || document).querySelectorAll(".stage").forEach(function (st) {
       var inner = st.firstElementChild, w = Number(st.dataset.w), avail = st.clientWidth;
-      if (!avail || !inner) return;
+      if (!avail || !inner || !w) return;
       var sc = Math.min(Number(st.dataset.max || 1), avail / w);
       inner.style.transform = "scale(" + sc + ")";
       var h = st.dataset.h ? Number(st.dataset.h) : inner.offsetHeight;
@@ -165,8 +170,8 @@
   function renderLnb() {
     var r = state.route, html = '<div class="brand"><b>Planning Studio</b><span>서비스 기획 산출물 관리</span></div>';
     var opts = [];
-    if (r.view === "home") {
-      html += '<nav class="nav-group"><span class="side-label">메뉴</span>' + navItem("전체 프로젝트", 'data-nav="home"', true, DATA.projects.length) + "</nav>";
+    if (r.view === "home" || r.view === "account") {
+      html += '<nav class="nav-group"><span class="side-label">메뉴</span>' + navItem("전체 프로젝트", 'data-nav="home"', r.view === "home", DATA.projects.length) + (SRV ? navItem("내 계정 · AI 설정", 'data-nav="account"', r.view === "account") : "") + "</nav>";
       html += '<nav class="nav-group"><span class="side-label">프로젝트 바로가기</span>' + DATA.projects.map(function (p, i) {
         return navItem(p.model.project.name, 'data-open="' + i + '"', false);
       }).join("") + "</nav>";
@@ -183,6 +188,7 @@
         ["통합 산출물", [["ia", null], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null]]],
         ["이력", [["ver", p.snapshots.length]]]
       ];
+      if (SRV) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
       groups.forEach(function (g) {
         html += '<nav class="nav-group"><span class="side-label">' + g[0] + "</span>" + g[1].map(function (it) {
           opts.push([it[0], g[0] + " · " + PAGES[it[0]][0]]);
@@ -191,11 +197,12 @@
       });
       opts.unshift(["home", "← 전체 프로젝트"]);
     }
-    var cur = r.view === "home" ? "home" : r.view === "task" ? "req" : r.page;
+    var cur = r.view === "home" || r.view === "account" ? "home" : r.view === "task" ? "req" : r.page;
     html += '<label class="sr" for="lnb-select">메뉴</label><select id="lnb-select" class="lnb-select">' + opts.map(function (o) {
       return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>";
     }).join("") + "</select>";
-    html += '<div class="side-foot">생성 ' + esc(fmtDate(DATA.generatedAt)) + "<br><code>planning view</code></div>";
+    html += SRV && ME ? '<div class="side-foot user-foot"><b>' + esc(ME.name) + "</b><span>" + esc(ME.email) + '</span><span class="row-actions">' + actBtn("account", "내 계정") + actBtn("logout", "로그아웃") + "</span></div>" :
+      '<div class="side-foot">생성 ' + esc(fmtDate(DATA.generatedAt)) + "<br><code>planning view</code></div>";
     document.getElementById("side").innerHTML = html;
   }
 
@@ -205,6 +212,7 @@
     renderLnb();
     var r = state.route, html;
     if (r.view === "home") html = renderHome();
+    else if (r.view === "account") html = renderAccount();
     else if (r.view === "task") html = renderTask();
     else {
       var info = PAGES[r.page] || PAGES.dash, pr = P().model.project;
@@ -215,7 +223,7 @@
   }
   function overlayBanner() {
     var p = P();
-    if (!p.appliedCount) return "";
+    if (SRV || !p.appliedCount) return "";
     var list = Object.keys(overlays).map(function (k) { return overlays[k]; }).filter(function (o) { return o.project === p.model.project.code && o.applied; });
     return '<div class="note ov"><b>AI 적용본 ' + list.length + '건이 반영된 화면입니다</b><p class="hint">' + list.map(function (o) { return esc((p.gens[o.kind + ":" + o.target] || {}).title || o.target) + " v" + o.applied; }).join(" · ") +
       ". 저장소 반영 전이라 요구사항 추적표·누락 수치는 저장소 기준입니다. 저장소에 반영하려면 Claude에 “뷰어의 AI 적용본을 저장소에 반영해 줘”라고 요청하거나 JSON을 <code>planning gen apply</code>로 넣으세요.</p></div>";
@@ -229,6 +237,8 @@
       case "rtm": return renderRtm();
       case "flow": return renderFlows();
       case "ver": return renderVer();
+      case "members": return SRV ? renderMembers() : renderDash();
+      case "aiset": return SRV ? renderAiSettings() : renderDash();
       default: return renderDash();
     }
   }
@@ -259,11 +269,12 @@
         '<div class="pc-rate"><div class="bar"><b style="width:' + c.designedRate + '%;background:var(--accent)"></b></div><span>설계완료 ' + c.designedRate + "%</span></div>" +
         '<dl class="pc-nums"><div><dt>요구사항</dt><dd>' + p.rtm.rows.length + "</dd></div><div><dt>Task</dt><dd>" + c.tasks.total + "</dd></div><div><dt>참조자료</dt><dd>" + p.model.sources.length +
         '</dd></div><div class="' + (p.rtm.gaps.length ? "warn" : "") + '"><dt>누락</dt><dd>' + p.rtm.gaps.length + "</dd></div></dl>" +
-        '<span class="pc-foot">' + esc(TEMPLATE[pr.submissionTemplate]) + " · 수정 " + esc(fmtDate(pr.updatedAt)) + "</span></button>";
+        '<span class="pc-foot">' + (p.role ? ROLE_LABEL[p.role] + " · " : "") + esc(TEMPLATE[pr.submissionTemplate]) + " · 수정 " + esc(fmtDate(pr.updatedAt)) + "</span></button>";
     }).join("");
-    return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>프로젝트</h1><p>프로젝트 ' + DATA.projects.length + "개 · 요구사항 " + totals.req + "건 · Task " + totals.task + "건 · 누락 " + totals.gap + "건</p></header>" +
-      '<section class="pgrid">' + cards + '<div class="box pcard new"><b>새 프로젝트</b><p class="hint">서비스 유형, 변경 범위, 시스템 구분을 정해 만듭니다.</p>' +
-      copyBox('planning init <코드> --name "<프로젝트명>" --type NEW --preset public-civil') + "</div></section>";
+    var newCard = SRV ? '<button class="box pcard new" data-act="new-project"><b>+ 새 프로젝트</b><p class="hint">서비스 유형, 변경 범위, 시스템 구분을 정해 만듭니다. 만든 사람이 운영자가 되어 공동 작업자를 초대합니다.</p></button>' :
+      '<div class="box pcard new"><b>새 프로젝트</b><p class="hint">서비스 유형, 변경 범위, 시스템 구분을 정해 만듭니다.</p>' + copyBox('planning init <코드> --name "<프로젝트명>" --type NEW --preset public-civil') + "</div>";
+    return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>프로젝트</h1><p>' + (SRV && ME ? esc(ME.name) + "님이 참여한 " : "") + "프로젝트 " + DATA.projects.length + "개 · 요구사항 " + totals.req + "건 · Task " + totals.task + "건 · 누락 " + totals.gap + "건</p></header>" +
+      (SRV ? invitesBanner() : "") + '<section class="pgrid">' + cards + newCard + "</section>";
   }
 
   // ── 대시보드 ────────────────────────────────────
@@ -271,7 +282,8 @@
     var p = P(), pr = p.model.project, rtm = p.rtm, c = rtm.coverage;
     var stages = STAGE_ORDER.filter(function (s) { return pr.stages[s]; }).map(function (s) {
       var st = pr.stages[s];
-      return '<div class="stage ' + st + '"><span class="sid">' + (s === "S0A" ? "S0-A" : s) + '</span><span class="sname">' + STAGE[s] + '</span><span class="sst">' + STAGE_ST[st] + "</span></div>";
+      var inner = '<span class="sid">' + (s === "S0A" ? "S0-A" : s) + '</span><span class="sname">' + STAGE[s] + '</span><span class="sst">' + STAGE_ST[st] + "</span>";
+      return canEdit() ? '<button class="stage ' + st + ' editable" data-act="stage" data-arg="' + s + '" title="단계 상태 바꾸기">' + inner + "</button>" : '<div class="stage ' + st + '">' + inner + "</div>";
     }).join("");
     var tasks = allTasks(p), auto = p.model.requirements.reduce(function (a, r) { return a + r.tasks.filter(function (t) { return t.origin === "AUTO"; }).length; }, 0);
     var kpis =
@@ -310,7 +322,14 @@
       return '<div class="mini-row static"><span class="mono">' + esc(h.requirementId) + "</span><span>" + esc(h.detail) + "</span><em>" + esc(h.crId || "") + "</em></div>";
     }).join("");
 
-    return '<section class="section"><h2>단계 진행</h2><div class="box stages">' + stages + "</div></section>" +
+    var links = pr.links.map(function (l) {
+      return '<div class="mini-row static"><span class="tag">' + esc({ SERVICE: "운영", FIGMA: "Figma", REFERENCE: "참고", VIEWER: "뷰어", OTHER: "기타" }[l.kind] || l.kind) + '</span><a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.label) + "</a><em>" + esc(l.systemCode || "") + "</em>" + (canEdit() ? '<button class="btn-sm" data-act="link-rm" data-arg="' + esc(l.url) + '" aria-label="' + esc(l.label) + ' 삭제">삭제</button>' : "") + "</div>";
+    }).join("");
+    var sysList = p.model.systems.map(function (s) { return '<div class="mini-row static">' + sysChip(s.code) + "<span>" + esc(s.name) + '</span><em class="hint">' + esc((s.users || []).join(", ") || (s.hasScreens ? "" : "화면 없음")) + "</em></div>"; }).join("");
+    var setup = SRV ? '<div class="dash-grid">' +
+      '<section class="section"><h2>시스템 구분 <small>' + p.model.systems.length + "개</small>" + editBtn("sys-add", "+ 시스템") + '</h2><div class="box mini">' + (sysList || '<div class="empty">시스템이 없습니다.</div>') + "</div></section>" +
+      '<section class="section"><h2>참조 URL <small>AI 요청 프롬프트에 담김</small>' + editBtn("link-add", "+ URL") + '</h2><div class="box mini">' + (links || '<div class="empty">등록된 URL이 없습니다.</div>') + "</div></section></div>" : "";
+    return '<section class="section"><h2>단계 진행' + (canEdit() ? " <small>단계를 누르면 상태를 바꿉니다</small>" : "") + '</h2><div class="box stages">' + stages + "</div></section>" +
       '<section class="kpis">' + kpis + "</section>" +
       '<div class="dash-3">' +
       '<section class="section"><h2>참조자료 <small>프로젝트 지식</small></h2><button class="box tile" data-page="kb"><b>' + p.model.sources.length + "<small>건</small></b><span>검색 색인 " + chunks + "조각</span></button></section>" +
@@ -319,7 +338,7 @@
       '<div class="dash-grid">' +
       '<section class="section"><h2>시스템별 설계완료 <small>설계완료·검토완료 Task / 전체 Task</small></h2><div class="box bars">' + bars + axis +
       '<div class="stack-wrap"><span class="hint">Task 상태 분포 (전체 ' + c.tasks.total + '건)</span><div class="stack">' + stack + '</div><div class="legend">' + legend + "</div></div></div></section>" +
-      '<section class="section"><h2>확인할 항목 <small>누락 ' + rtm.gaps.length + " · 근거 없음 " + rtm.orphans.length + '</small></h2><div class="box issues">' + (issues || '<div class="empty">누락이나 근거 없는 산출물이 없습니다.</div>') + "</div></section></div>";
+      '<section class="section"><h2>확인할 항목 <small>누락 ' + rtm.gaps.length + " · 근거 없음 " + rtm.orphans.length + '</small></h2><div class="box issues">' + (issues || '<div class="empty">누락이나 근거 없는 산출물이 없습니다.</div>') + "</div></section></div>" + setup;
   }
   function kpi(v, unit, label, alert) {
     return '<div class="box kpi' + (alert ? " alert" : "") + '"><span class="v">' + v + "<small>" + unit + '</small></span><span class="l">' + esc(label) + "</span></div>";
@@ -332,15 +351,15 @@
       var used = p.model.requirements.filter(function (r) { return r.sources.some(function (x) { return x.sourceId === s.id; }); }).map(function (r) { return r.id; });
       var st = s.index ? (s.index.status === "INDEXED" ? '<span class="pill DESIGNED">색인 완료</span>' : '<span class="pill IN_DESIGN">' + (s.index.status === "UNSUPPORTED" ? "보관만(미지원 형식)" : "색인 실패") + "</span>") : '<span class="pill NOT_STARTED">색인 없음</span>';
       return '<tr><td class="id">' + esc(s.id) + "</td><td><b>" + esc(s.title) + '</b><br><span class="hint">' + esc(s.fileName || s.location) + (s.size ? " · " + (s.size / 1024).toFixed(1) + "KB" : "") + "</span></td><td>" + esc(s.kind) + "</td><td>" + st +
-        '</td><td class="num">' + (s.index ? s.index.chunks + "조각 · " + s.index.chars.toLocaleString() + "자" : "—") + '</td><td class="id">' + (used.map(esc).join("<br>") || '<span class="dash">—</span>') + "</td><td>" + esc(fmtDate(s.addedAt)) + "</td></tr>";
+        '</td><td class="num">' + (s.index ? s.index.chunks + "조각 · " + s.index.chars.toLocaleString() + "자" : "—") + '</td><td class="id">' + (used.map(esc).join("<br>") || '<span class="dash">—</span>') + "</td><td>" + esc(fmtDate(s.addedAt)) + "</td>" + (canEdit() ? "<td>" + (used.length ? "" : actBtn("kb-rm", "삭제", s.id)) + "</td>" : "") + "</tr>";
     }).join("");
     return '<section class="section"><div class="box kb-search"><label for="kb-q" class="kb-label">프로젝트 지식 검색</label><div class="kb-row"><input id="kb-q" type="search" placeholder="예: 반려 사유, 목록 50건, 부분공개" value="' + esc(state.kbQ) + '" autocomplete="off"></div>' +
       '<div id="kb-results" class="kb-results"></div></div></section>' +
-      '<section class="section"><h2>올린 자료 <small>' + p.model.sources.length + "건</small></h2>" +
-      '<div class="box twrap"><table><thead><tr><th>ID</th><th>자료</th><th>유형</th><th>색인</th><th>분량</th><th>근거로 쓴 요구사항</th><th>올린 날</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="7" class="empty">아직 올린 자료가 없습니다.</td></tr>') + "</tbody></table></div>" +
-      '<div class="note"><b>자료 올리기</b><p class="hint">지원 형식: txt, md, csv, json, html, eml(메일), docx, pdf. 같은 파일은 한 번만 색인합니다. 한글(hwp)·pptx·xlsx는 보관만 하고 P1에서 지원합니다. 이 화면은 읽기 전용 뷰어라 파일 올리기는 명령어로 합니다(웹 업로드는 서버 모드 P7).</p>' +
-      copyBox("planning -p " + P().model.project.code + " kb add <파일> [<파일>...]") + "</div></section>";
+      '<section class="section"><h2>올린 자료 <small>' + p.model.sources.length + "건</small>" + editBtn("kb-upload", "+ 자료 올리기", null, "btn-primary") + "</h2>" +
+      '<div class="box twrap"><table><thead><tr><th>ID</th><th>자료</th><th>유형</th><th>색인</th><th>분량</th><th>근거로 쓴 요구사항</th><th>올린 날</th>' + (canEdit() ? "<th></th>" : "") + "</tr></thead><tbody>" +
+      (rows || '<tr><td colspan="8" class="empty">아직 올린 자료가 없습니다.</td></tr>') + "</tbody></table></div>" +
+      (SRV ? "" : '<div class="note"><b>자료 올리기</b><p class="hint">지원 형식: txt, md, csv, json, html, eml(메일), docx, pdf. 같은 파일은 한 번만 색인합니다. 한글(hwp)·pptx·xlsx는 보관만 하고 P1에서 지원합니다. 이 화면은 읽기 전용 뷰어라 파일 올리기는 명령어로 합니다(웹 업로드는 서버 모드 P7).</p>' +
+      copyBox("planning -p " + P().model.project.code + " kb add <파일> [<파일>...]") + "</div>") + "</section>";
   }
   function runSearch() {
     var box = document.getElementById("kb-results");
@@ -381,11 +400,12 @@
         '<div class="req-sub">' + sub.map(function (s) { return "<span>" + s + "</span>"; }).join("") + "</div>" +
         (req.description ? '<p class="req-desc">' + esc(req.description) + "</p>" : "") +
         (row.status === "EXCLUDED" ? '<div class="hint">제외 사유: ' + esc(row.excludeReason) + "</div>" :
-          steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다.' + copyBox("planning -p " + m.project.code + " task auto " + row.requirementId) + "</div>") +
+          steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다.' + (SRV ? "" : copyBox("planning -p " + m.project.code + " task auto " + row.requirementId)) + "</div>") +
+        (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + '<span class="sp"></span>' + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
         "</article>";
     }).join("");
-    return '<section class="section"><div class="note row"><div><b>요구사항 등록과 Task 생성</b><p class="hint">등록할 때 <code>--auto-tasks</code>를 붙이면 업무 동사(신청·심사·공개·알림·연계)를 시스템 성격에 맞춰 Task를 자동으로 만듭니다. <span class="auto">자동</span> 표시에 마우스를 올리면 근거가 보입니다. 직접 만들려면 <code>task add</code>를 씁니다.</p></div>' +
-      copyBox('planning -p ' + m.project.code + ' req add --title "<요구사항>" --desc "<설명>" --auto-tasks') + "</div>" + rows + "</section>";
+    return '<section class="section"><div class="note row"><div><b>요구사항 등록과 Task 생성</b><p class="hint">' + (SRV ? "등록할 때 ‘시스템별 Task 자동 생성’을 켜면" : "등록할 때 <code>--auto-tasks</code>를 붙이면") + ' 업무 동사(신청·심사·공개·알림·연계)를 시스템 성격에 맞춰 Task를 자동으로 만듭니다. <span class="auto">자동</span> 표시에 마우스를 올리면 근거가 보입니다. ' + (SRV ? "직접 만들려면 요구사항 아래 ‘Task 직접 추가’를 누릅니다." : "직접 만들려면 <code>task add</code>를 씁니다.") + '</p></div>' +
+      (SRV ? editBtn("req-add", "+ 요구사항 등록", null, "btn-primary") : copyBox('planning -p ' + m.project.code + ' req add --title "<요구사항>" --desc "<설명>" --auto-tasks')) + "</div>" + (rows || '<div class="box empty">등록된 요구사항이 없습니다.</div>') + "</section>";
   }
 
   // ── Task 상세 ───────────────────────────────────
@@ -418,6 +438,7 @@
     return overlayBanner() + '<header class="page-head"><nav class="crumbs"><button data-page="req">요구사항·Task</button><span>›</span><span>' + esc(row.requirementId) + " " + esc(row.title) + "</span></nav>" +
       '<h1><span class="mono">' + esc(shortTask(t.taskId, row.requirementId)) + "</span> " + esc(t.action) + "</h1>" +
       '<div class="meta">' + sysChip(t.systemCode) + '<span class="tag">' + esc((sysOf(p, t.systemCode) || {}).name || "") + "</span>" + (t.actor ? '<span class="tag">행위자 ' + esc(t.actor) + "</span>" : "") + pill(t.status) + '<span class="tag mono">' + esc(t.taskId) + "</span></div></header>" +
+      (canEdit() ? '<div class="row-actions">' + actBtn("task-review", t.reviewer ? "검토 다시 기록" : "검토 완료 기록", t.taskId) + actBtn("task-rm", "Task 삭제", t.taskId) + "</div>" : "") +
       '<dl class="box info">' + info.map(function (i) { return "<div><dt>" + i[0] + "</dt><dd>" + i[1] + "</dd></div>"; }).join("") + "</dl>" +
       '<nav class="tabs" role="tablist">' + tabs.map(function (x) { return '<button class="tab" role="tab" data-ttab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</nav>" +
       '<div class="panel">' + body + "</div>";
@@ -679,7 +700,7 @@
     }).join("") + "</div>";
     var s = sysOf(p, code), d = designOf(p, code), ctx = wireCtx(p, code, null);
     var body;
-    if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.' + copyBox("planning -p " + p.model.project.code + " design propose " + code) + "</div>";
+    if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.' + (SRV ? '<div class="row-actions center">' + editBtn("ds-propose", "컨셉 3종 제안받기", code, "btn-primary") + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
     else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
     return '<section class="section"><div class="toolbar">' + chips + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div></section>" + body;
@@ -690,7 +711,7 @@
       var ds = asDs(c);
       return '<article class="box concept"><div class="concept-h"><span class="cid">' + esc(c.id) + '</span><div><b>' + esc(c.name) + "</b><p>" + esc(c.summary) + '</p></div></div><p class="fit"><b>어울리는 경우</b> ' + esc(c.fit) + "</p>" +
         swatches(c.tokens) + '<p class="hint">글꼴 ' + esc(fontName(c.tokens.font.family)) + " · 본문 " + c.tokens.font.scale.body + "px · 버튼 높이 " + c.tokens.control.height + "px</p>" + layoutChips(c.layout) +
-        thumbs(ds, ctx, c.id + ". " + c.name) + '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div></article>";
+        thumbs(ds, ctx, c.id + ". " + c.name) + (SRV ? (canEdit() ? '<div class="pick">' + actBtn("ds-select", "컨셉 " + esc(c.id) + " 으로 정하기", d.systemCode + "|" + c.id, "btn-primary") + "</div>" : "") : '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div>") + "</article>";
     }).join("");
     return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 미리보기는 모두 " + VW + "×" + VH + " 실제 규격을 축소한 것이고, 누르면 크게 볼 수 있습니다. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p></div>" +
       '<div class="concepts">' + cols + "</div>";
@@ -760,7 +781,7 @@
       '<section class="section"><h2>기초 <small>색상 · 글꼴 · 간격 · 모서리 · 컨트롤 — 섹션마다 조정 입력란</small></h2>' + foundation + "</section>" +
       '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
       '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, chosen.name, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>" +
-      '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small></h2>" + comps + "</section>" +
+      '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small>" + editBtn("ds-comp-add", "+ 컴포넌트 추가", code) + "</h2>" + comps + "</section>" +
       '<section class="section"><h2>아이콘 <small>' + d.icons.length + "개</small></h2>" + icons + "</section>";
   }
 
@@ -895,7 +916,7 @@
       return '<div class="box snap"><span class="v">v' + esc(s.version) + '</span><span class="d">' + esc(fmtDate(s.takenAt)) + "</span><span>" + esc(s.note || "—") + "</span></div>";
     }).join("") + '<div class="box snap current"><span class="v">v' + esc(pr.version) + ' (작업 중)</span><span class="d">마지막 저장 ' + esc(fmtDate(pr.updatedAt)) + "</span><span>현재 모델</span></div>";
     var diff;
-    if (!p.diff) diff = '<div class="box empty">스냅샷이 없습니다. 기준 버전을 고정하면 이후 변경 사항을 비교할 수 있습니다.' + copyBox('planning -p ' + pr.code + ' snapshot --note "착수 기준선"') + "</div>";
+    if (!p.diff) diff = '<div class="box empty">스냅샷이 없습니다. 기준 버전을 고정하면 이후 변경 사항을 비교할 수 있습니다.' + (SRV ? "" : copyBox('planning -p ' + pr.code + ' snapshot --note "착수 기준선"')) + "</div>";
     else {
       var groups = Object.keys(p.diff.entries);
       if (!groups.length) diff = '<div class="box empty">v' + esc(p.diff.from) + " 이후 변경 사항이 없습니다.</div>";
@@ -911,7 +932,7 @@
         return '<div class="diff-group"><h3>' + esc(COLL[g] || g) + "</h3>" + rows.join("") + "</div>";
       }).join("") + "</div>";
     }
-    return '<section class="section"><h2>스냅샷</h2><div class="snaps">' + snaps + "</div></section>" +
+    return '<section class="section"><h2>스냅샷' + editBtn("snapshot", "+ 스냅샷 찍기", null, "btn-primary") + '</h2><div class="snaps">' + snaps + "</div></section>" +
       '<section class="section"><h2>변경 사항' + (p.diff ? " <small>v" + esc(p.diff.from) + " → 현재 v" + esc(pr.version) + "</small>" : "") + "</h2>" + diff + "</section>";
   }
   function val(v) { return v === undefined ? "(없음)" : typeof v === "string" ? v : JSON.stringify(v); }
@@ -927,7 +948,7 @@
   function appliedOutput(o) { var v = (o.versions || []).find(function (x) { return x.n === o.applied; }); return v ? v.output : null; }
   function genBtn(key, label) {
     var p = P();
-    if (!p.gens || !p.gens[key]) return "";
+    if (!p.gens || !p.gens[key] || (SRV && !canEdit())) return "";
     return '<button class="gen-btn" data-gen="' + esc(key) + '"><span aria-hidden="true">✦</span> ' + esc(label) + "</button>";
   }
   function merge(base, patch) {
@@ -975,6 +996,8 @@
   /** 저장소 모델 + 적용본 → 화면에 쓰는 모델 */
   function rebuild() {
     DATA.projects.forEach(function (p) {
+      // 서비스 모드에서는 AI 결과를 적용하면 서버 모델이 바로 바뀌므로 덧씌우지 않는다
+      if (SRV) { p.model = p.base; p.appliedCount = 0; return; }
       var m = JSON.parse(JSON.stringify(p.base)), code = m.project.code, n = 0;
       var mine = Object.keys(overlays).map(function (k) { return overlays[k]; }).filter(function (o) { return o.project === code && (o.kind === "ds" ? o.cumulative && o.appliedRev : o.applied); });
       var order = { ds: 0, ia: 1, sb: 2, flow: 3 };
@@ -1086,6 +1109,7 @@
     var p = P(), id = ovId(p.model.project.code, key);
     overlays[id] = doc;
     rebuild();
+    if (SRV) return api("PUT", "/api/projects/" + enc(p.model.project.code) + "/kv/gens/" + enc(id), { doc: doc }).then(function () { return true; }, function (e) { toast(e.message, "err"); return false; });
     if (!AI.db || !AI.dbWrite) return Promise.resolve(false);
     return AI.db.collection("gens").doc(id).set(doc).then(function () { return true; }, function (e) {
       if (e && e.code === "invalid_argument") AI.dbWrite = false;
@@ -1143,11 +1167,44 @@
         layer.draft = "";
         return saveOverlay(key, doc).then(function (saved) { layer.saved = saved; });
       }, function (e) {
-        layer.err = e && e.code === "cancelled" ? "" : (SAMPLE_ERR[e && e.code] || "생성하지 못했습니다(" + (e && e.code) + "). 다시 눌러 주세요.");
+        layer.err = e && e.code === "cancelled" ? "" : e && e.code === "server" ? e.message : (SAMPLE_ERR[e && e.code] || "생성하지 못했습니다(" + (e && e.code) + "). 다시 눌러 주세요.");
       })
       .then(function () { layer.busy = false; layer.ctl = null; if (layer) { render(); renderLayer(); } });
   }
+  /** 서비스 모드: 생성 결과를 서버 모델에 바로 반영한다. 디자인은 적용 전 디자인을 기록해 되돌릴 수 있다 */
+  function genApplySrv(apply) {
+    var p = P(), key = layer.key, doc = JSON.parse(JSON.stringify(overlayOf(key))), v = doc.versions[layer.sel];
+    var chk = apply ? validateOutput(doc.kind, doc.target, v.output, p, v.scope) : { errs: [] };
+    if (chk.errs.length) { layer.err = "적용할 수 없습니다: " + chk.errs[0]; renderLayer(); return; }
+    var before = doc.kind === "ds" ? JSON.parse(JSON.stringify(selectedDesign(p, doc.target))) : null;
+    var run;
+    if (apply) run = cmd({ op: "gen.apply", kind: doc.kind, target: doc.target, output: v.output, instruction: v.root || v.instruction, scope: v.scope });
+    else {
+      var last = (doc.history || [])[doc.history.length - 1];
+      if (!last) return;
+      run = cmd({ op: "design.revert", systemCode: doc.target, design: last.beforeDesign });
+    }
+    layer.busy = true; renderLayer();
+    run.then(function () {
+      if (doc.kind === "ds") {
+        var after = selectedDesign(P(), doc.target);
+        if (apply) {
+          doc.history = (doc.history || []).concat([{ rev: after.revision, n: v.n, scope: v.scope, scopeLabel: v.scopeLabel, instruction: v.root || v.instruction, summary: v.output.summary || "", changes: designChanges(before, after), beforeDesign: before, at: new Date().toISOString() }]).slice(-10);
+          doc.appliedRev = after.revision;
+          doc.applied = v.n;
+          if (v.commentIds && v.commentIds.length) resolveComments(p, doc.target, v.commentIds, after.revision);
+        } else {
+          var gone = doc.history.pop();
+          doc.applied = doc.history.length ? doc.history[doc.history.length - 1].n : null;
+          doc.appliedRev = doc.history.length ? doc.history[doc.history.length - 1].rev : null;
+          reopenComments(p, doc.target, gone.rev);
+        }
+      } else doc.applied = v.n;
+      return saveOverlay(key, doc);
+    }, function (e) { layer.err = e.message; }).then(function () { layer.busy = false; render(); if (layer) renderLayer(); });
+  }
   function genApply(apply) {
+    if (SRV) return genApplySrv(apply);
     var p = P(), key = layer.key, doc = JSON.parse(JSON.stringify(overlayOf(key)));
     var v = doc.versions[layer.sel];
     if (doc.kind === "ds") {
@@ -1181,6 +1238,7 @@
   }
   /** 디자인 시스템 화면의 “마지막 적용 되돌리기” */
   function dsUndo(code) {
+    if (SRV) { openLayer({ kind: "gen", key: "ds:" + code, sel: null }); genApplySrv(false); return; }
     var p = P(), key = "ds:" + code, doc = JSON.parse(JSON.stringify(overlayOf(key)));
     var last = (doc.history || []).pop();
     if (!last) return;
@@ -1198,6 +1256,7 @@
   function saveReviews(p, sys, doc) {
     var id = revId(p.model.project.code, sys);
     reviews[id] = doc;
+    if (SRV) return api("PUT", "/api/projects/" + enc(p.model.project.code) + "/kv/reviews/" + enc(id), { doc: doc }).then(function () { return true; }, function (e) { toast(e.message, "err"); return false; });
     if (!AI.db || !AI.dbWrite) return Promise.resolve(false);
     return AI.db.collection("reviews").doc(id).set(doc).then(function () { return true; }, function (e) { if (e && e.code === "invalid_argument") AI.dbWrite = false; return false; });
   }
@@ -1213,7 +1272,11 @@
     if (changed) saveReviews(p, sys, doc);
   }
 
+  /** 결과 형식이 틀려도(로컬 LLM 등) 레이어가 깨지지 않게 한다 — 오류 목록은 왼쪽 검사 결과에 나온다 */
   function genPreview(p, g, out) {
+    try { return genPreviewRaw(p, g, out); } catch (e) { return '<div class="empty">결과 형식이 올바르지 않아 미리보기를 그릴 수 없습니다. 왼쪽 검사 결과를 확인하고 다시 생성하거나 미세조정하세요.</div>'; }
+  }
+  function genPreviewRaw(p, g, out) {
     if (!out) return '<div class="empty">아직 생성한 결과가 없습니다. 왼쪽에서 생성하세요.</div>';
     if (g.kind === "ia") {
       var before = {};
@@ -1257,23 +1320,23 @@
     var vlist = doc.versions.map(function (v, i) {
       return '<button class="ver-item' + (i === layer.sel ? " on" : "") + '" data-gsel="' + i + '"><b>v' + v.n + "</b>" + (v.n === doc.applied ? '<span class="pill DESIGNED">적용 중</span>' : "") + (v.scopeLabel ? '<span class="tag">' + esc(v.scopeLabel) + "</span>" : "") + "<span>" + esc(v.from ? "v" + v.from + "에서 조정: " : "") + esc(v.instruction) + '</span><em class="hint">' + esc(fmtDate(v.at)) + "</em></button>";
     }).join("");
-    var canGen = !!AI.sample;
+    var canGen = !!AI.sample && (!SRV || !!P().ai);
     var label = !sel ? (g.requiresInstruction ? "조정 요청" : "추가 지시 (선택)") : "미세조정 프롬프트 · v" + sel.n + " 기준";
     var ph = !sel ? (g.requiresInstruction ? "예: 주 색을 더 진하게, 버튼을 둥글게" : "예: 목록은 50건까지 보이게, 반려 사유 보기 버튼 추가") : "예: 검색 조건에 '신청인' 추가, 버튼 문구를 '공개 신청하기'로";
     var chk = sel ? validateOutput(g.kind, g.target, sel.output, p, sel.scope) : null;
     var scopeNow = sel ? sel.scope : layer.scope;
     var scopeNote = g.kind === "ds" ? '<p class="scope-note"><b>조정 범위</b> ' + esc(scopeInfo(scopeNow || "global").label) + ' <span class="hint">' + esc(scopeInfo(scopeNow || "global").hint) + "</span>" + ((sel ? sel.commentIds : layer.commentIds) && (sel ? sel.commentIds : layer.commentIds).length ? '<br><span class="hint">댓글 ' + (sel ? sel.commentIds : layer.commentIds).length + "개 반영 요청</span>" : "") + "</p>" : "";
     var left = '<div class="gen-left">' + scopeNote + '<div class="gen-status">' + (g.kind === "ds" ? (doc.appliedRev ? '<span class="pill DESIGNED">누적 적용 r' + doc.appliedRev + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') : doc.applied ? '<span class="pill DESIGNED">적용: v' + doc.applied + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') +
-      (AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
+      (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유됩니다. 적용하면 저장소 모델이 바로 바뀝니다 · AI: ' + esc(P().ai ? SOURCE_LABEL[P().ai.source] + " · " + P().ai.model : "설정 없음") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
       (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
         '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
-        : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
+        : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
     var right = '<div class="gen-right">' + (sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 Claude가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (sel.n === doc.applied ? " 적용 중" : " 미리보기") : "") + '</span><span class="sp"></span>' +
-      (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
+      (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied && !SRV ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
     return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 미세조정</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="gen-body">' + left + right + "</div>" + foot;
@@ -1431,7 +1494,9 @@
     if (draftEl && layer.kind === "gen") layer.draft = draftEl.value;
     var rvDraftEl = document.getElementById("rv-in");
     if (rvDraftEl && layer.kind === "review") layer.rvDraft = rvDraftEl.value;
-    if (layer.kind === "review") {
+    if (layer.kind === "form") {
+      body = renderFormLayer();
+    } else if (layer.kind === "review") {
       body = renderReviewLayer();
     } else if (layer.kind === "gen") {
       body = renderGenLayer();
@@ -1454,9 +1519,9 @@
       body = '<header class="layer-h"><div><span class="eyebrow">실제 규격 미리보기 · ' + VW + " × " + (pv.h || "가변") + '</span><h2 id="layer-t">' + esc(pv.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
         '<div class="layer-stage">' + stage(pv.html, { w: VW, h: pv.h, page: !pv.h }) + "</div>";
     }
-    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
+    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : layer.kind === "form" ? " form" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
     fitStages(root);
-    var gi = document.getElementById("gen-in") || document.getElementById("rv-in");
+    var gi = document.getElementById("gen-in") || document.getElementById("rv-in") || root.querySelector("#fm input, #fm select, #fm textarea");
     if (gi && !layer.busy) gi.focus();
     else { var x = root.querySelector("[data-close-layer]"); if (x) x.focus(); }
   }
@@ -1473,6 +1538,528 @@
     if (pv && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); pv.click(); }
   });
 
+  // ── 웹 서비스 모드 (planning serve) ─────────────
+  // 로그인한 사람의 프로젝트만 서버에서 받아 오고, 편집은 서버 명령(API)으로 한다. 권한: OWNER 운영자 · EDITOR 작업자 · VIEWER 열람자
+  var ME = null, CFG = {}, INVITES = [], MY_AI = null;
+  var ROLE_LABEL = { OWNER: "운영자", EDITOR: "작업자", VIEWER: "열람자" };
+  var PROVIDER_LABEL = { anthropic: "Anthropic (Claude API)", "openai-compatible": "OpenAI 호환 API · 로컬 LLM" };
+  var SOURCE_LABEL = { project: "프로젝트 설정", personal: "내 개인 설정", server: "서버 기본 설정" };
+  function enc(s) { return encodeURIComponent(s); }
+  function api(method, url, body, signal) {
+    return fetch(url, { method: method, credentials: "same-origin", signal: signal, headers: { "content-type": "application/json", "x-planning": "1" }, body: body === undefined ? undefined : JSON.stringify(body) })
+      .then(function (res) {
+        return res.text().then(function (t) {
+          var j;
+          try { j = t ? JSON.parse(t) : {}; } catch (e) { j = { error: "응답을 읽지 못했습니다 (" + res.status + ")" }; }
+          if (!res.ok) { var err = new Error(j.error || "오류 " + res.status); err.status = res.status; err.code = "server"; if (res.status === 401 && ME) { ME = null; showAuth("login"); } throw err; }
+          return j;
+        });
+      });
+  }
+  function role() { var p = SRV && state.route.view !== "home" && state.route.view !== "account" ? P() : null; return p ? p.role : null; }
+  function canEdit() { var r = role(); return r === "OWNER" || r === "EDITOR"; }
+  function isOwner() { return role() === "OWNER"; }
+  function actBtn(act, label, arg, cls) { return '<button class="' + (cls || "btn-sm") + '" data-act="' + act + '"' + (arg != null ? ' data-arg="' + esc(arg) + '"' : "") + ">" + label + "</button>"; }
+  function editBtn(act, label, arg, cls) { return canEdit() ? actBtn(act, label, arg, cls) : ""; }
+
+  function setProject(view) {
+    view.base = view.model;
+    view.full = true;
+    var i = DATA.projects.findIndex(function (x) { return x.model.project.code === view.model.project.code; });
+    if (i < 0) { DATA.projects.push(view); i = DATA.projects.length - 1; } else DATA.projects[i] = view;
+    return i;
+  }
+  function loadProjects() {
+    return api("GET", "/api/projects").then(function (r) {
+      DATA.projects = r.projects.map(function (v) { v.base = v.model; v.full = false; return v; });
+    });
+  }
+  function loadKv(code) {
+    return api("GET", "/api/projects/" + enc(code) + "/kv").then(function (r) {
+      Object.keys(r.gens || {}).forEach(function (k) { overlays[k] = r.gens[k]; });
+      Object.keys(r.reviews || {}).forEach(function (k) { reviews[k] = r.reviews[k]; });
+    }, function () {});
+  }
+  function openProject(code, page) {
+    return api("GET", "/api/projects/" + enc(code)).then(function (r) {
+      var i = setProject(r.project);
+      return loadKv(code).then(function () { rebuild(); go({ view: "project", p: i, page: page || "dash" }); });
+    }, function (e) { toast(e.message, "err"); goHome(); });
+  }
+  function goHome() { return loadProjects().then(function () { go({ view: "home" }); }); }
+  function refreshMe() {
+    return api("GET", "/api/me").then(function (r) { ME = r.user; MY_AI = r.ai; INVITES = r.invites || []; });
+  }
+  /** 편집 명령 실행 → 서버가 저장하고 새 프로젝트 데이터를 돌려준다 */
+  function cmd(c) {
+    var code = P().model.project.code;
+    return api("POST", "/api/projects/" + enc(code) + "/commands", { cmd: c }).then(function (r) {
+      setProject(r.project);
+      rebuild();
+      render();
+      toast(r.message);
+      return r;
+    });
+  }
+  function syncUrl() {
+    if (!SRV) return;
+    var r = state.route, want = r.view === "project" || r.view === "task" ? "/p/" + P().model.project.code : r.view === "account" ? "/account" : "/";
+    if (location.pathname !== want && location.pathname.indexOf("/invite/") !== 0) history.replaceState(null, "", want);
+  }
+
+  // 알림 토스트
+  function toast(msg, tone) {
+    if (!msg) return;
+    var box = document.getElementById("toasts");
+    if (!box) { box = document.createElement("div"); box.id = "toasts"; box.setAttribute("role", "status"); document.body.appendChild(box); }
+    var t = document.createElement("div");
+    t.className = "toast" + (tone === "err" ? " err" : "");
+    t.textContent = msg;
+    box.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, tone === "err" ? 6000 : 3200);
+  }
+
+  // ── 입력 폼 레이어 ─────────────────────────────
+  function openForm(f) { openLayer({ kind: "form", form: f, err: "" }); }
+  function fieldHtml(x) {
+    var id = "f-" + x.name, req = x.required ? ' <em class="fm-req">필수</em>' : "";
+    var hint = x.hint ? '<span class="hint">' + x.hint + "</span>" : "";
+    if (x.type === "html") return '<div class="fm-html">' + x.html + "</div>";
+    if (x.type === "checkbox") return '<label class="fm-check"><input type="checkbox" id="' + id + '" name="' + x.name + '"' + (x.value ? " checked" : "") + "> " + esc(x.label) + "</label>" + hint;
+    var input;
+    if (x.type === "textarea") input = '<textarea id="' + id + '" name="' + x.name + '" rows="' + (x.rows || 3) + '" placeholder="' + esc(x.placeholder || "") + '">' + esc(x.value || "") + "</textarea>";
+    else if (x.type === "select") input = '<select id="' + id + '" name="' + x.name + '">' + x.options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(x.value == null ? "" : x.value) ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select>";
+    else if (x.type === "file") input = '<input type="file" id="' + id + '" name="' + x.name + '" multiple' + (x.accept ? ' accept="' + esc(x.accept) + '"' : "") + ">";
+    else input = '<input type="' + (x.type || "text") + '" id="' + id + '" name="' + x.name + '" value="' + esc(x.value || "") + '" placeholder="' + esc(x.placeholder || "") + '" autocomplete="' + (x.type === "password" ? "new-password" : "off") + '"' + (x.maxlength ? ' maxlength="' + x.maxlength + '"' : "") + ">";
+    return '<div class="fm-row"><label for="' + id + '">' + esc(x.label) + req + "</label>" + input + hint + "</div>";
+  }
+  function renderFormLayer() {
+    var f = layer.form;
+    if (layer.done) {
+      return '<header class="layer-h"><div><span class="eyebrow">' + esc(f.eyebrow || "") + '</span><h2 id="layer-t">' + esc(f.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+        '<div class="fm">' + layer.done + '</div><footer class="layer-f"><span class="sp"></span><button class="btn-primary" data-close-layer>닫기</button></footer>';
+    }
+    return '<header class="layer-h"><div><span class="eyebrow">' + esc(f.eyebrow || "") + '</span><h2 id="layer-t">' + esc(f.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+      '<form class="fm" id="fm" novalidate>' + (f.intro ? '<p class="hint">' + f.intro + "</p>" : "") + f.fields.map(fieldHtml).join("") +
+      '<p class="gen-err" id="fm-err" role="alert"' + (layer.err ? "" : " hidden") + ">" + esc(layer.err) + "</p>" +
+      '<div class="fm-actions"><button type="button" class="btn-sm" data-close-layer>취소</button><button type="submit" class="btn-primary' + (f.danger ? " danger" : "") + '" id="fm-submit">' + esc(f.submit || "저장") + "</button></div></form>";
+  }
+  function formValues(form, f) {
+    var v = {};
+    f.fields.forEach(function (x) {
+      if (x.type === "html") return;
+      var el = form.elements[x.name];
+      if (!el) return;
+      v[x.name] = x.type === "checkbox" ? el.checked : x.type === "file" ? Array.prototype.slice.call(el.files || []) : el.value.trim();
+    });
+    return v;
+  }
+  function submitForm(form) {
+    var f = layer.form, v = formValues(form, f), errEl = document.getElementById("fm-err"), btn = document.getElementById("fm-submit");
+    var miss = f.fields.find(function (x) { return x.required && (x.type === "file" ? !v[x.name].length : !v[x.name]); });
+    var showErr = function (m) { errEl.textContent = m; errEl.hidden = false; };
+    if (miss) { showErr(miss.label + "을(를) 입력하세요"); var el = form.elements[miss.name]; if (el && el.focus) el.focus(); return; }
+    btn.disabled = true;
+    btn.textContent = "처리 중…";
+    Promise.resolve().then(function () { return f.onSubmit(v); }).then(function (res) {
+      if (res && res.done) { layer.done = res.done; renderLayer(); } else closeLayer();
+    }, function (e) {
+      btn.disabled = false;
+      btn.textContent = f.submit || "저장";
+      showErr(e.message || String(e));
+    });
+  }
+  function confirmAct(title, message, submit, fn) {
+    openForm({ title: title, intro: esc(message), fields: [], submit: submit, danger: true, onSubmit: fn });
+  }
+  function readB64(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(",")[1] || ""); };
+      r.onerror = function () { reject(new Error(file.name + "을(를) 읽지 못했습니다")); };
+      r.readAsDataURL(file);
+    });
+  }
+  function systemOptions(p, screensOnly) { return p.model.systems.filter(function (s) { return !screensOnly || s.hasScreens; }).map(function (s) { return [s.code, s.code + " " + s.name]; }); }
+  function list(s) { return String(s || "").split(/[,\n]/).map(function (x) { return x.trim(); }).filter(Boolean); }
+
+  // ── 편집 동작 ──────────────────────────────────
+  var ACTIONS = {
+    "new-project": function () {
+      openForm({
+        eyebrow: "새 프로젝트", title: "프로젝트 만들기", submit: "만들기", intro: "만든 사람이 이 프로젝트의 운영자가 됩니다. 운영자는 공동 작업자를 초대하고 AI 설정을 관리합니다.",
+        fields: [
+          { name: "code", label: "프로젝트 코드", required: true, placeholder: "예: PUBINFO", hint: "영문 대문자로 시작, 2~20자. 화면 ID·파일 이름에 쓰입니다.", maxlength: 20 },
+          { name: "name", label: "프로젝트 이름", required: true, placeholder: "예: 정보공개 통합 서비스" },
+          { name: "serviceType", label: "서비스 유형", type: "select", options: [["NEW", "신규 구축"], ["EXISTING", "기존 서비스"]], value: "NEW" },
+          { name: "changeScope", label: "변경 범위 (기존 서비스일 때)", type: "select", options: [["", "—"], ["NEW_MENU", "신규 메뉴 추가"], ["MODIFY", "기존 메뉴 수정 (정보구조도 단계 패스)"], ["RENEWAL", "전면 개편"]] },
+          { name: "submissionTemplate", label: "출력 양식", type: "select", options: [["GENERAL", "일반 양식"], ["PUBLIC", "공공기관 제출 양식"]] },
+          { name: "preset", label: "시스템 구분", type: "select", options: [["public-civil", "공공 민원형 (대국민 · 민원포털 · 심사자)"], ["general", "일반 서비스 (사용자 · 관리자)"], ["none", "직접 추가"]], value: "public-civil" }
+        ],
+        onSubmit: function (v) {
+          if (v.serviceType === "EXISTING" && !v.changeScope) throw new Error("기존 서비스는 변경 범위를 고르세요");
+          return api("POST", "/api/projects", v).then(function (r) { return loadProjects().then(function () { return openProject(r.code); }); });
+        }
+      });
+    },
+    logout: function () { api("POST", "/api/logout").then(function () { location.href = "/"; }); },
+    account: function () { go({ view: "account" }); },
+    "inv-accept": function (id) {
+      api("POST", "/api/invites/" + enc(id) + "/accept").then(function (r) { toast("초대를 수락했습니다"); return refreshMe().then(loadProjects).then(function () { return openProject(r.project); }); }, function (e) { toast(e.message, "err"); });
+    },
+    "inv-decline": function (id) { api("POST", "/api/invites/" + enc(id) + "/decline").then(refreshMe).then(render); },
+    stage: function (sid) {
+      var p = P();
+      openForm({
+        eyebrow: p.model.project.name, title: (sid === "S0A" ? "S0-A" : sid) + " " + STAGE[sid] + " 단계 상태", submit: "바꾸기",
+        fields: [{ name: "status", label: "상태", type: "select", options: Object.keys(STAGE_ST).map(function (k) { return [k, STAGE_ST[k]]; }), value: p.model.project.stages[sid] }],
+        onSubmit: function (v) { return cmd({ op: "stage.set", stage: sid, status: v.status }); }
+      });
+    },
+    "sys-add": function () {
+      openForm({
+        eyebrow: "시스템 구분", title: "시스템 추가", submit: "추가", intro: "대국민·민원포털·심사자처럼 사용자와 화면이 다른 영역을 나눕니다. 요구사항 하나가 시스템마다 Task로 나뉩니다.",
+        fields: [
+          { name: "code", label: "코드", required: true, placeholder: "예: PUB", hint: "영문 대문자 2~6자", maxlength: 6 },
+          { name: "name", label: "이름", required: true, placeholder: "예: 대국민 포털" },
+          { name: "users", label: "주 사용자", placeholder: "예: 국민(비회원), 민원인(회원)", hint: "쉼표로 구분" },
+          { name: "color", label: "구분 색", type: "color", value: "#2563EB" },
+          { name: "hasScreens", label: "화면이 있는 시스템 (외부 연계처럼 화면이 없으면 끄기)", type: "checkbox", value: true }
+        ],
+        onSubmit: function (v) { return cmd({ op: "system.add", system: { code: v.code.toUpperCase(), name: v.name, users: list(v.users), color: v.color.toUpperCase(), hasScreens: v.hasScreens } }); }
+      });
+    },
+    "link-add": function () {
+      var p = P();
+      openForm({
+        eyebrow: "참조 URL", title: "참조 URL 추가", submit: "추가", intro: "운영 중인 서비스, Figma 파일, 참고 사이트 주소를 등록하면 AI 요청 프롬프트에 함께 담깁니다.",
+        fields: [
+          { name: "label", label: "이름", required: true, placeholder: "예: 현행 정보공개 포털" },
+          { name: "url", label: "URL", type: "url", required: true, placeholder: "https://" },
+          { name: "kind", label: "종류", type: "select", options: [["SERVICE", "운영 서비스"], ["FIGMA", "Figma 파일"], ["REFERENCE", "참고 사이트"], ["OTHER", "기타"]], value: "REFERENCE" },
+          { name: "systemCode", label: "시스템 (특정 시스템에만 해당하면)", type: "select", options: [["", "전체"]].concat(systemOptions(p)) }
+        ],
+        onSubmit: function (v) { var l = { label: v.label, url: v.url, kind: v.kind }; if (v.systemCode) l.systemCode = v.systemCode; return cmd({ op: "link.add", link: l }); }
+      });
+    },
+    "link-rm": function (url) { confirmAct("참조 URL 삭제", url + " 을(를) 삭제할까요?", "삭제", function () { return cmd({ op: "link.rm", url: url }); }); },
+    "kb-upload": function () {
+      var p = P();
+      openForm({
+        eyebrow: "참조자료", title: "자료 올리기", submit: "올리기", intro: "올린 문서는 이 프로젝트의 지식이 됩니다. 지원: " + esc((CFG.uploadExt || []).join(", ")) + ". 그 밖의 형식은 보관만 합니다. 한 번에 30MB까지.",
+        fields: [{ name: "files", label: "파일", type: "file", required: true }],
+        onSubmit: function (v) {
+          var total = v.files.reduce(function (a, f) { return a + f.size; }, 0);
+          if (total > 22 * 1024 * 1024) throw new Error("한 번에 22MB까지 올릴 수 있습니다. 나눠서 올려 주세요");
+          return Promise.all(v.files.map(function (f) { return readB64(f).then(function (d) { return { name: f.name, data: d }; }); })).then(function (files) {
+            return api("POST", "/api/projects/" + enc(p.model.project.code) + "/sources", { files: files });
+          }).then(function (r) { setProject(r.project); rebuild(); render(); toast(r.message); });
+        }
+      });
+    },
+    "kb-rm": function (id) { confirmAct("참조자료 삭제", id + " 자료와 검색 색인을 삭제할까요? 요구사항 출처로 쓰는 자료는 삭제할 수 없습니다.", "삭제", function () { return cmd({ op: "kb.rm", sourceId: id }); }); },
+    "req-add": function () {
+      var p = P();
+      openForm({
+        eyebrow: "요구사항", title: "요구사항 등록", submit: "등록",
+        fields: [
+          { name: "title", label: "요구사항", required: true, placeholder: "예: 대국민 정보공개" },
+          { name: "description", label: "설명", type: "textarea", rows: 4, placeholder: "예: 민원인이 자료를 등록하면 심사자가 검토 후 승인·반려하고, 승인된 자료는 대국민 포털에 공개한다.", hint: "누가 무엇을 하는지(신청·심사·공개·알림·연계) 적으면 시스템별 Task를 더 정확히 만듭니다." },
+          p.model.project.requirementIdMode === "ORIGINAL" ? { name: "originalId", label: "원본 요구사항 ID", required: true, placeholder: "예: SFR-001" } : { type: "html", html: "" },
+          { name: "type", label: "유형", type: "select", options: [["FUNCTIONAL", "기능"], ["NON_FUNCTIONAL", "비기능"], ["POLICY", "정책"], ["CONTENT", "콘텐츠"], ["CONSTRAINT", "제약"]] },
+          { name: "priority", label: "우선순위", type: "select", options: [["MUST", "필수 (MUST)"], ["SHOULD", "권장 (SHOULD)"], ["COULD", "선택 (COULD)"]] },
+          { name: "sourceId", label: "출처 자료", type: "select", options: [["", "없음"]].concat(p.model.sources.map(function (s) { return [s.id, s.id + " " + s.title]; })) },
+          { name: "locator", label: "출처 위치", placeholder: "예: p.14, 3.2절" },
+          { name: "autoTasks", label: "시스템별 Task 자동 생성", type: "checkbox", value: true }
+        ],
+        onSubmit: function (v) {
+          var input = { title: v.title, description: v.description, type: v.type, priority: v.priority };
+          if (v.originalId) input.originalId = v.originalId;
+          if (v.sourceId) input.sources = [{ sourceId: v.sourceId, locator: v.locator }];
+          return cmd({ op: "req.add", input: input, autoTasks: v.autoTasks });
+        }
+      });
+    },
+    "task-auto": function (rid) { cmd({ op: "task.auto", requirementId: rid }).catch(function (e) { toast(e.message, "err"); }); },
+    "task-add": function (rid) {
+      var p = P(), req = p.model.requirements.find(function (r) { return r.id === rid; });
+      openForm({
+        eyebrow: rid + " " + req.title, title: "Task 추가", submit: "추가", intro: "요구사항을 시스템 영역별 처리 단계로 나눕니다. 예: 민원포털 자료 등록 → 심사자 승인 → 대국민 공개.",
+        fields: [
+          { name: "systemCode", label: "시스템", type: "select", options: systemOptions(p), required: true },
+          { name: "actor", label: "행위자", placeholder: "예: 심사자" },
+          { name: "action", label: "처리 내용", required: true, placeholder: "예: 검토 후 승인·반려" },
+          { name: "after", label: "선행 Task", type: "select", options: [["", "없음"]].concat(req.tasks.map(function (t) { return [t.id, shortTask(t.id, rid) + " [" + t.systemCode + "] " + t.action]; })), value: req.tasks.length ? req.tasks[req.tasks.length - 1].id : "" },
+          { name: "to", label: "처리 후 자료 상태", placeholder: "예: 공개" },
+          { name: "noScreenReason", label: "화면이 없다면 사유", placeholder: "예: 외부 시스템 자동 연계" }
+        ],
+        onSubmit: function (v) {
+          var input = { systemCode: v.systemCode, action: v.action, actor: v.actor || undefined, after: v.after ? [v.after] : [] };
+          if (v.to) input.transition = { to: v.to };
+          if (v.noScreenReason) input.noScreenReason = v.noScreenReason;
+          return cmd({ op: "task.add", requirementId: rid, input: input });
+        }
+      });
+    },
+    "req-exclude": function (rid) {
+      openForm({ eyebrow: rid, title: "요구사항 제외", submit: "제외", danger: true, fields: [{ name: "reason", label: "제외 사유", type: "textarea", required: true, placeholder: "예: 2차 사업 범위로 이관 (CR-003)" }], onSubmit: function (v) { return cmd({ op: "req.exclude", id: rid, reason: v.reason }); } });
+    },
+    "task-review": function (tid) {
+      openForm({
+        eyebrow: tid, title: "검토 완료 기록", submit: "기록", intro: "요구사항 추적표의 검토완료 상태는 사람이 확인해야 합니다.",
+        fields: [{ name: "reviewer", label: "검토자", required: true, value: ME ? ME.name : "" }, { name: "note", label: "메모", type: "textarea" }],
+        onSubmit: function (v) { return cmd({ op: "task.review", taskId: tid, reviewer: v.reviewer, note: v.note }); }
+      });
+    },
+    "task-rm": function (tid) {
+      confirmAct("Task 삭제", tid + " 를 삭제할까요? 선행으로 쓰는 Task가 있으면 삭제할 수 없습니다.", "삭제", function () {
+        return cmd({ op: "task.rm", taskId: tid }).then(function () { go({ view: "project", p: state.route.p, page: "req" }); });
+      });
+    },
+    "ds-propose": function (sys) { cmd({ op: "design.propose", systemCode: sys }).catch(function (e) { toast(e.message, "err"); }); },
+    "ds-select": function (arg) {
+      var a = arg.split("|");
+      confirmAct("컨셉 " + a[1] + " 선택", a[0] + " 디자인 시스템을 컨셉 " + a[1] + "(으)로 만듭니다. 이 시스템의 화면설계서와 프로토타입이 이 디자인으로 그려집니다.", "이 컨셉으로 정하기", function () { return cmd({ op: "design.select", systemCode: a[0], conceptId: a[1] }); });
+    },
+    "ds-comp-add": function (sys) {
+      openForm({
+        eyebrow: sys + " 디자인 시스템", title: "컴포넌트 추가", submit: "추가", intro: "화면설계서에서 새 컴포넌트가 필요하면 먼저 디자인 시스템에 추가하고 씁니다.",
+        fields: [
+          { name: "id", label: "컴포넌트 ID", required: true, placeholder: "예: review-timeline", hint: "영문 소문자·숫자·하이픈" },
+          { name: "name", label: "이름", required: true, placeholder: "예: 심사 이력 타임라인" },
+          { name: "category", label: "분류", type: "select", options: Object.keys(CATEGORY).map(function (k) { return [k, CATEGORY[k]]; }) },
+          { name: "description", label: "설명", type: "textarea" },
+          { name: "variants", label: "변형", placeholder: "예: 기본, 간단히", hint: "쉼표로 구분" },
+          { name: "addedFor", label: "필요한 화면·Task", placeholder: "예: ADM_INF_REV_020" }
+        ],
+        onSubmit: function (v) { return cmd({ op: "design.component", systemCode: sys, input: { id: v.id, name: v.name, category: v.category, description: v.description, variants: list(v.variants), addedFor: v.addedFor || undefined } }); }
+      });
+    },
+    snapshot: function () {
+      var p = P();
+      openForm({
+        eyebrow: "버전", title: "스냅샷 찍기 · v" + p.model.project.version, submit: "스냅샷", intro: "지금 상태를 기준 버전으로 고정합니다. 이후 변경 사항은 이 버전과 비교해 보여 줍니다.",
+        fields: [{ name: "note", label: "메모", placeholder: "예: 착수 기준선, 1차 보고" }, { name: "major", label: "큰 버전 올리기 (0.x → 1.0)", type: "checkbox" }],
+        onSubmit: function (v) { return cmd({ op: "snapshot", note: v.note, major: v.major }); }
+      });
+    },
+    "proj-rename": function () {
+      var p = P();
+      openForm({ title: "프로젝트 이름 바꾸기", submit: "바꾸기", fields: [{ name: "name", label: "이름", required: true, value: p.model.project.name }], onSubmit: function (v) { return cmd({ op: "project.update", name: v.name }); } });
+    },
+    "proj-delete": function () {
+      var code = P().model.project.code;
+      openForm({
+        title: "프로젝트 삭제", submit: "삭제", danger: true, intro: "프로젝트와 멤버·초대·AI 설정이 모두 지워집니다. 서버 보관함(.service/trash)에만 남습니다. 확인하려면 프로젝트 코드 <b>" + esc(code) + "</b>를 입력하세요.",
+        fields: [{ name: "confirm", label: "프로젝트 코드", required: true }],
+        onSubmit: function (v) { return api("DELETE", "/api/projects/" + enc(code), { confirm: v.confirm }).then(function () { toast("프로젝트를 삭제했습니다"); return goHome(); }); }
+      });
+    },
+    "mem-invite": function () {
+      var code = P().model.project.code;
+      openForm({
+        eyebrow: "공동 작업자", title: "초대하기", submit: "초대 링크 만들기", intro: "초대받은 사람은 이 이메일로 가입하거나 로그인하면 첫 화면에서 초대를 수락할 수 있습니다. 만든 링크를 메일·메신저로 보내도 됩니다(14일 유효).",
+        fields: [
+          { name: "email", label: "이메일", type: "email", required: true, placeholder: "name@example.com" },
+          { name: "role", label: "권한", type: "select", options: [["EDITOR", "작업자 — 요구사항·산출물 편집, AI 생성"], ["VIEWER", "열람자 — 보기, 디자인 댓글"], ["OWNER", "운영자 — 멤버·AI 설정 관리까지"]], value: "EDITOR" }
+        ],
+        onSubmit: function (v) {
+          return api("POST", "/api/projects/" + enc(code) + "/invites", v).then(function (r) {
+            renderMembersAsync();
+            return { done: '<p><b>' + esc(r.invite.email) + "</b> 님을 " + ROLE_LABEL[r.invite.role] + "(으)로 초대했습니다.</p><p class=\"hint\">이 링크는 지금만 볼 수 있습니다. 복사해서 보내 주세요.</p>" + copyBox(r.link) };
+          });
+        }
+      });
+    },
+    "inv-cancel": function (id) { api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/invites/" + enc(id)).then(renderMembersAsync, function (e) { toast(e.message, "err"); }); },
+    "mem-rm": function (uid) {
+      confirmAct("멤버 내보내기", "이 멤버를 프로젝트에서 내보낼까요?", "내보내기", function () { return api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(uid)).then(renderMembersAsync); });
+    },
+    leave: function () {
+      confirmAct("프로젝트 나가기", "이 프로젝트에서 나갈까요? 다시 들어오려면 초대를 받아야 합니다.", "나가기", function () { return api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/members/me").then(goHome); });
+    },
+    "ai-edit": function (scope) { aiForm(scope); },
+    "ai-clear": function (scope) {
+      confirmAct("AI 설정 삭제", scope === "project" ? "프로젝트 AI 설정을 지웁니다. 멤버는 각자 개인 설정(없으면 서버 기본 설정)을 쓰게 됩니다." : "내 개인 AI 설정과 저장한 키를 지웁니다.", "삭제", function () {
+        return api("DELETE", scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai").then(function () { return refreshMe(); }).then(function () { render(); });
+      });
+    },
+    "ai-test": function (scope, btn) {
+      var url = scope === "personal" && state.route.view === "account" ? "/api/me/ai/test" : "/api/projects/" + enc(P().model.project.code) + "/ai/test";
+      btn.disabled = true; btn.textContent = "확인 중…";
+      api("POST", url, { scope: scope }).then(function (r) {
+        toast("연결됨 · " + SOURCE_LABEL[r.source] + " · " + r.model + " · " + (r.ms / 1000).toFixed(1) + "초");
+      }, function (e) { toast(e.message, "err"); }).then(function () { btn.disabled = false; btn.textContent = "연결 확인"; });
+    },
+    "ai-personal": function (on) {
+      api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/me", { usePersonalAi: on === "1" }).then(function (r) { P().ai = r.ai; render(); }, function (e) { toast(e.message, "err"); });
+    },
+    "pw-change": function () {
+      openForm({
+        title: "비밀번호 바꾸기", submit: "바꾸기",
+        fields: [{ name: "current", label: "현재 비밀번호", type: "password", required: true }, { name: "next", label: "새 비밀번호 (8자 이상)", type: "password", required: true }],
+        onSubmit: function (v) { return api("POST", "/api/me/password", v).then(function () { toast("비밀번호를 바꿨습니다"); }); }
+      });
+    }
+  };
+
+  function aiForm(scope) {
+    var cur = scope === "project" ? (aiCache.project || null) : MY_AI;
+    var code = scope === "project" ? P().model.project.code : null;
+    openForm({
+      eyebrow: scope === "project" ? "프로젝트 AI 설정 · 운영자" : "내 AI 설정", title: cur ? "AI 설정 바꾸기" : "AI 설정 등록", submit: "저장",
+      intro: (scope === "project" ? "이 프로젝트의 모든 멤버가 기본으로 이 설정으로 AI를 부릅니다. 멤버에게는 종류와 모델 이름만 보이고, 주소와 키는 보이지 않습니다." : "개인 설정은 나만 씁니다. 프로젝트 설정이 없는 프로젝트, 또는 ‘내 개인 설정 사용’을 켠 프로젝트에서 쓰입니다.") +
+        " 키는 서버에 암호화해 저장하고 화면·응답에 다시 보여 주지 않습니다.",
+      fields: [
+        { name: "provider", label: "호출 방법", type: "select", options: [["anthropic", PROVIDER_LABEL.anthropic], ["openai-compatible", PROVIDER_LABEL["openai-compatible"]]], value: cur ? cur.provider : "anthropic" },
+        { name: "model", label: "모델", required: true, value: cur ? cur.model : CFG.defaultModel || "claude-opus-5", placeholder: "예: claude-opus-5 · llama3.1 · qwen2.5:14b" },
+        { name: "baseUrl", label: "API 주소", type: "url", value: cur && cur.baseUrl || "", placeholder: "예: http://localhost:11434/v1 (Ollama) · http://gpu-server:8000/v1 (vLLM)", hint: "OpenAI 호환은 필수. Anthropic은 비우면 기본 주소를 씁니다. 로컬 LLM은 이 서비스가 돌아가는 서버에서 접속할 수 있는 주소여야 합니다." },
+        { name: "apiKey", label: "API 키", type: "password", placeholder: cur && cur.hasKey ? "저장됨 — 바꿀 때만 입력" : "Anthropic은 필수, 로컬 LLM은 보통 비움" },
+        cur && cur.hasKey ? { name: "clearKey", label: "저장한 키 지우기", type: "checkbox" } : { type: "html", html: "" }
+      ],
+      onSubmit: function (v) {
+        var body = { provider: v.provider, model: v.model, baseUrl: v.baseUrl, apiKey: v.apiKey, clearKey: !!v.clearKey };
+        return api("PUT", scope === "project" ? "/api/projects/" + enc(code) + "/ai" : "/api/me/ai", body).then(function () {
+          toast("AI 설정을 저장했습니다");
+          return refreshMe().then(function () { if (code) return loadAiInfo(code); }).then(render);
+        });
+      }
+    });
+  }
+
+  // ── 멤버 · AI 설정 · 내 계정 화면 ───────────────
+  var memCache = null, aiCache = {};
+  function renderMembersAsync() { memCache = null; if (state.route.page === "members") render(); }
+  function renderMembers() {
+    var p = P(), code = p.model.project.code;
+    if (!memCache || memCache.code !== code) {
+      api("GET", "/api/projects/" + enc(code) + "/members").then(function (r) { memCache = Object.assign({ code: code }, r); render(); }, function (e) { toast(e.message, "err"); });
+      return '<div class="box empty">멤버를 불러오는 중…</div>';
+    }
+    var own = isOwner();
+    var rows = memCache.members.map(function (m) {
+      var me = ME && m.userId === ME.id;
+      var roleCell = own && !me ? '<select data-memrole="' + esc(m.userId) + '" aria-label="' + esc(m.name) + ' 권한">' + ["OWNER", "EDITOR", "VIEWER"].map(function (r) { return '<option value="' + r + '"' + (r === m.role ? " selected" : "") + ">" + ROLE_LABEL[r] + "</option>"; }).join("") + "</select>" : '<span class="pill ' + (m.role === "OWNER" ? "REVIEWED" : m.role === "EDITOR" ? "DESIGNED" : "NOT_STARTED") + '">' + ROLE_LABEL[m.role] + "</span>";
+      return "<tr><td><b>" + esc(m.name) + "</b>" + (me ? ' <span class="tag">나</span>' : "") + '</td><td class="mono">' + esc(m.email) + "</td><td>" + roleCell + "</td><td>" + esc(fmtDate(m.addedAt)) + "</td><td>" + (own && !me ? actBtn("mem-rm", "내보내기", m.userId) : me && !(m.role === "OWNER" && memCache.members.filter(function (x) { return x.role === "OWNER"; }).length === 1) ? actBtn("leave", "나가기") : "") + "</td></tr>";
+    }).join("");
+    var inv = own ? '<section class="section"><h2>대기 중인 초대 <small>' + memCache.invites.length + "건</small></h2>" + (memCache.invites.length ? '<div class="box twrap"><table><thead><tr><th>이메일</th><th>권한</th><th>보낸 날</th><th>만료</th><th></th></tr></thead><tbody>' + memCache.invites.map(function (i) {
+      return '<tr><td class="mono">' + esc(i.email) + "</td><td>" + ROLE_LABEL[i.role] + "</td><td>" + esc(fmtDate(i.createdAt)) + "</td><td>" + esc(fmtDate(i.expiresAt)) + "</td><td>" + actBtn("inv-cancel", "취소", i.id) + "</td></tr>";
+    }).join("") + "</tbody></table></div>" : '<div class="box empty">대기 중인 초대가 없습니다.</div>') + "</section>" : "";
+    var danger = own ? '<section class="section"><h2>프로젝트 관리</h2><div class="box pad row-actions">' + actBtn("proj-rename", "이름 바꾸기") + actBtn("proj-delete", "프로젝트 삭제", null, "btn-sm danger") + "</div></section>" : "";
+    return '<section class="section"><div class="toolbar"><p class="hint" style="margin:0">운영자는 멤버를 초대하고 권한을 바꾸며 프로젝트 AI 설정을 관리합니다. 작업자는 편집과 AI 생성을, 열람자는 보기와 디자인 댓글을 할 수 있습니다.</p>' + (own ? actBtn("mem-invite", "+ 공동 작업자 초대", null, "btn-primary") : "") + "</div>" +
+      '<div class="box twrap"><table><thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>참여</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" + inv + danger;
+  }
+  function loadAiInfo(code) {
+    return api("GET", "/api/projects/" + enc(code) + "/ai").then(function (r) { aiCache = Object.assign({ code: code }, r); P().ai = r.effective; });
+  }
+  function aiCard(title, cfg, full, actions) {
+    var body = cfg ? '<dl class="kv"><div><dt>호출 방법</dt><dd>' + esc(PROVIDER_LABEL[cfg.provider]) + '</dd></div><div><dt>모델</dt><dd class="mono">' + esc(cfg.model) + "</dd></div>" +
+      (full ? '<div><dt>API 주소</dt><dd class="mono">' + esc(cfg.baseUrl || "기본") + "</dd></div>" : "") + "<div><dt>API 키</dt><dd>" + (cfg.hasKey ? "저장됨 (보이지 않음)" : "없음") + "</dd></div><div><dt>수정</dt><dd>" + esc(fmtDate(cfg.updatedAt)) + "</dd></div></dl>" : '<p class="hint">설정 없음</p>';
+    return '<div class="box pad aicard"><h3>' + title + "</h3>" + body + '<div class="row-actions">' + actions + "</div></div>";
+  }
+  function renderAiSettings() {
+    var p = P(), code = p.model.project.code;
+    if (aiCache.code !== code) { loadAiInfo(code).then(render, function (e) { toast(e.message, "err"); }); return '<div class="box empty">불러오는 중…</div>'; }
+    var a = aiCache, eff = a.effective;
+    var effLine = eff ? "<b>" + SOURCE_LABEL[eff.source] + "</b> · " + esc(PROVIDER_LABEL[eff.provider]) + ' · <span class="mono">' + esc(eff.model) + "</span>" : '<b class="warn-t">AI 설정 없음</b> — 운영자가 프로젝트 설정을 등록하거나, 내 계정에서 개인 설정을 등록하세요.';
+    var projActs = a.canManage ? actBtn("ai-edit", a.project ? "바꾸기" : "등록", "project", a.project ? "btn-sm" : "btn-primary") + (a.project ? actBtn("ai-clear", "삭제", "project") : "") : '<span class="hint">운영자만 바꿀 수 있습니다. 주소와 키는 운영자에게도 다시 보이지 않습니다.</span>';
+    var toggle = a.personal ? '<label class="fm-check"><input type="checkbox" data-aipersonal' + (a.usePersonalAi ? " checked" : "") + "> 이 프로젝트에서 프로젝트 설정 대신 내 개인 설정 사용</label>" : '<p class="hint">개인 설정이 없습니다. <button class="lnk" data-act="account">내 계정</button>에서 등록하면 이 프로젝트에서 골라 쓸 수 있습니다.</p>';
+    return '<section class="section"><div class="note"><b>지금 이 프로젝트에서 AI를 부르는 방법</b><p>' + effLine + "</p>" + (eff && canEdit() ? '<div class="row-actions">' + actBtn("ai-test", "연결 확인", "project") + "</div>" : "") +
+      '<p class="hint">우선순위: (개인 설정 사용을 켠 경우) 개인 설정 → 프로젝트 설정 → 개인 설정 → 서버 기본 설정' + (a.serverDefault ? " (있음)" : " (없음)") + "</p></div></section>" +
+      '<div class="ds-grid2">' + aiCard("프로젝트 설정 <small>멤버 공통 기본값</small>", a.project, a.canManage, projActs) + aiCard("내 개인 설정", a.personal, true, toggle + actBtn("ai-edit", a.personal ? "바꾸기" : "등록", "personal")) + "</div>" +
+      '<section class="section"><div class="note"><b>로컬 LLM 쓰는 법</b><p class="hint">Ollama·LM Studio·vLLM처럼 OpenAI 호환 API를 여는 서버를 이 서비스가 접속할 수 있는 곳에 띄우고, 호출 방법을 “OpenAI 호환 API · 로컬 LLM”으로, 주소를 <code>http://&lt;서버&gt;:11434/v1</code> 처럼 넣습니다. 생성 프롬프트는 JSON 결과를 요구하므로 지시를 잘 따르는 큰 모델(예: qwen2.5 14B 이상, llama3.1 70B)을 권합니다.</p></div></section>';
+  }
+  function renderAccount() {
+    var aiActs = actBtn("ai-edit", MY_AI ? "바꾸기" : "등록", "personal", MY_AI ? "btn-sm" : "btn-primary") + (MY_AI ? actBtn("ai-clear", "삭제", "personal") + actBtn("ai-test", "연결 확인", "personal") : "");
+    return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>내 계정</h1><p>' + esc(ME.name) + " · " + esc(ME.email) + "</p></header>" +
+      '<div class="ds-grid2">' + aiCard("내 AI 설정 <small>개인 계정</small>", MY_AI, true, aiActs) +
+      '<div class="box pad"><h3>계정</h3><dl class="kv"><div><dt>이름</dt><dd>' + esc(ME.name) + "</dd></div><div><dt>이메일</dt><dd>" + esc(ME.email) + "</dd></div><div><dt>가입</dt><dd>" + esc(fmtDate(ME.createdAt)) + '</dd></div></dl><div class="row-actions">' + actBtn("pw-change", "비밀번호 바꾸기") + actBtn("logout", "로그아웃") + "</div></div></div>";
+  }
+  function invitesBanner() {
+    if (!INVITES.length) return "";
+    return '<section class="section"><h2>받은 초대 <small>' + INVITES.length + "건</small></h2>" + INVITES.map(function (i) {
+      return '<div class="note row"><div><b>' + esc(i.projectName) + "</b> 프로젝트에 " + ROLE_LABEL[i.role] + '(으)로 초대받았습니다<p class="hint">만료 ' + esc(fmtDate(i.expiresAt)) + "</p></div><div class=\"row-actions\">" + actBtn("inv-decline", "거절", i.id) + actBtn("inv-accept", "수락", i.id, "btn-primary") + "</div></div>";
+    }).join("") + "</section>";
+  }
+
+  // ── 로그인 · 가입 · 초대 링크 ───────────────────
+  var authState = { mode: "login", invite: null, token: null, err: "" };
+  function showAuth(mode) {
+    authState.mode = mode || authState.mode;
+    document.body.classList.add("auth-on");
+    document.getElementById("side").innerHTML = "";
+    var inv = authState.invite;
+    var signup = authState.mode === "signup";
+    var html = '<div class="auth"><div class="auth-box box"><div class="brand"><b>Planning Studio</b><span>서비스 기획 산출물 관리</span></div>' +
+      (inv ? '<div class="note"><b>' + esc(inv.projectName) + "</b> 프로젝트 초대<p class=\"hint\">" + esc(inv.email) + " 계정으로 " + (inv.hasAccount ? "로그인" : "가입") + "하면 " + ROLE_LABEL[inv.role] + "(으)로 참여합니다.</p></div>" : "") +
+      '<div class="seg" role="group" aria-label="로그인 또는 가입"><button data-authmode="login" aria-pressed="' + !signup + '">로그인</button><button data-authmode="signup" aria-pressed="' + signup + '"' + (CFG.openSignup === false && !inv ? " disabled" : "") + ">회원가입</button></div>" +
+      '<form id="auth-form" class="fm" novalidate>' +
+      (signup ? fieldHtml({ name: "name", label: "이름", required: true, placeholder: "예: 홍길동" }) : "") +
+      fieldHtml({ name: "email", label: "이메일", type: "email", required: true, value: inv ? inv.email : "" }) +
+      fieldHtml({ name: "password", label: signup ? "비밀번호 (8자 이상)" : "비밀번호", type: "password", required: true }) +
+      '<p class="gen-err" id="auth-err" role="alert"' + (authState.err ? "" : " hidden") + ">" + esc(authState.err) + '</p><button type="submit" class="btn-primary wide" id="auth-submit">' + (signup ? "가입하고 시작하기" : "로그인") + "</button></form>" +
+      (!CFG.users ? '<p class="hint">첫 가입자가 이 서버에 이미 있는 프로젝트의 운영자가 됩니다.</p>' : CFG.openSignup === false ? '<p class="hint">이 서버는 초대받은 이메일만 가입할 수 있습니다.</p>' : "") + "</div></div>";
+    document.getElementById("main").innerHTML = html;
+    var first = document.querySelector("#auth-form input:not([value]), #auth-form input[value='']") || document.querySelector("#auth-form input");
+    if (first) first.focus();
+  }
+  function submitAuth(form) {
+    var signup = authState.mode === "signup";
+    var v = { email: form.elements.email.value.trim(), password: form.elements.password.value };
+    if (signup) v.name = form.elements.name.value.trim();
+    var btn = document.getElementById("auth-submit"), err = document.getElementById("auth-err");
+    btn.disabled = true;
+    api("POST", signup ? "/api/signup" : "/api/login", v).then(function (r) {
+      ME = r.user;
+      document.body.classList.remove("auth-on");
+      return enterApp();
+    }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
+  }
+  function enterApp() {
+    return api("GET", "/api/config").then(function (c) { CFG = c; }).then(refreshMe).then(function () {
+      if (authState.token) {
+        var tk = authState.token;
+        authState.token = null; authState.invite = null;
+        history.replaceState(null, "", "/");
+        return api("POST", "/api/invite-links/" + enc(tk) + "/accept").then(function (r) {
+          toast("초대를 수락했습니다");
+          return refreshMe().then(loadProjects).then(function () { return openProject(r.project); });
+        }, function (e) { toast(e.message, "err"); history.replaceState(null, "", "/"); return goHome(); });
+      }
+      var m = location.pathname.match(/^\/p\/([^/]+)/);
+      return loadProjects().then(function () {
+        if (m) return openProject(decodeURIComponent(m[1]));
+        if (location.pathname === "/account") return go({ view: "account" });
+        go({ view: "home" });
+      });
+    });
+  }
+  function bootServer() {
+    document.getElementById("main").innerHTML = '<div class="box empty">불러오는 중…</div>';
+    var m = location.pathname.match(/^\/invite\/([^/]+)/);
+    var pre = m ? api("GET", "/api/invite-links/" + enc(m[1])).then(function (r) { authState.invite = r; authState.token = m[1]; authState.mode = r.hasAccount ? "login" : "signup"; }, function (e) { authState.err = e.message; history.replaceState(null, "", "/"); }) : Promise.resolve();
+    AI.sample = {
+      json: function (input, opts) {
+        return api("POST", "/api/projects/" + enc(P().model.project.code) + "/generate", { input: input }, opts && opts.signal).then(function (r) { return r.output; }, function (e) {
+          if (e.name === "AbortError") { var c = new Error("cancelled"); c.code = "cancelled"; throw c; }
+          throw e;
+        });
+      }
+    };
+    pre.then(function () { return api("GET", "/api/config"); }).then(function (c) {
+      CFG = c;
+      return api("GET", "/api/me").then(function (r) {
+        ME = r.user;
+        if (authState.token && authState.invite && authState.invite.email !== ME.email) {
+          authState.err = "지금 로그인한 계정(" + ME.email + ")은 이 초대를 받을 수 없습니다. 로그아웃하고 초대받은 이메일로 로그인하세요.";
+          toast(authState.err, "err");
+          authState.token = null;
+        }
+        return enterApp();
+      }, function () { showAuth(); });
+    }, function (e) { document.getElementById("main").innerHTML = '<div class="box empty">서버에 연결하지 못했습니다: ' + esc(e.message) + "</div>"; });
+  }
+
   // ── 이벤트 ─────────────────────────────────────
   function go(route) { state.route = route; persist(); render(); window.scrollTo(0, 0); }
   document.addEventListener("click", function (ev) {
@@ -1484,6 +2071,7 @@
       if (lb && lb.dataset.ltarget) { layer.target = lb.dataset.ltarget; renderLayer(); return; }
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
       if (layer.kind === "review" && reviewClick(target, ev)) return;
+      if (lb && layer.kind === "form" && lb.dataset.copy != null) { copyText(lb.dataset.copy, lb, "복사함"); return; }
       if (lb && lb.dataset.cmtgen != null) { commentGen(lb.dataset.cmtgen); return; }
       if (lb && layer.kind === "gen") {
         var gin = document.getElementById("gen-in");
@@ -1498,6 +2086,10 @@
       }
       if (target.closest(".layer")) return;
     }
+    var amb = target.closest && target.closest("[data-authmode]");
+    if (amb) { authState.err = ""; showAuth(amb.dataset.authmode); return; }
+    var acb = target.closest && target.closest("[data-act]");
+    if (acb && ACTIONS[acb.dataset.act]) { ACTIONS[acb.dataset.act](acb.dataset.arg, acb); return; }
     var pvb = target.closest && target.closest("[data-preview]");
     if (pvb) { openLayer({ kind: "preview", index: Number(pvb.dataset.preview) }); return; }
     var rvb = target.closest && target.closest("[data-review]");
@@ -1535,8 +2127,9 @@
       } catch (e) { selectText(t.previousElementSibling); }
       return;
     }
-    if (d.nav === "home") go({ view: "home" });
-    else if (d.open != null) go({ view: "project", p: Number(d.open), page: "dash" });
+    if (d.nav === "home") SRV ? goHome() : go({ view: "home" });
+    else if (d.nav === "account") go({ view: "account" });
+    else if (d.open != null) SRV ? openProject(DATA.projects[Number(d.open)].model.project.code) : go({ view: "project", p: Number(d.open), page: "dash" });
     else if (d.task) go({ view: "task", p: r.p, taskId: d.task, tab: r.view === "task" ? r.tab || "flow" : "flow" });
     else if (d.page) {
       if (d.dsys) state.dsSys[P().model.project.code] = d.dsys;
@@ -1560,20 +2153,30 @@
   document.addEventListener("input", function (ev) {
     if (ev.target.id === "kb-q") { state.kbQ = ev.target.value; runSearch(); }
   });
+  document.addEventListener("submit", function (ev) {
+    if (ev.target.id === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
+    else if (ev.target.id === "auth-form") { ev.preventDefault(); submitAuth(ev.target); }
+  });
   document.addEventListener("change", function (ev) {
+    var tg = ev.target;
+    if (tg.dataset && tg.dataset.memrole) {
+      api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(tg.dataset.memrole), { role: tg.value }).then(function () { toast("권한을 바꿨습니다"); renderMembersAsync(); }, function (e) { toast(e.message, "err"); renderMembersAsync(); });
+      return;
+    }
+    if (tg.hasAttribute && tg.hasAttribute("data-aipersonal")) { aiCache = {}; ACTIONS["ai-personal"](tg.checked ? "1" : "0"); return; }
     if (ev.target.id !== "lnb-select") return;
     var v = ev.target.value;
-    if (v === "home") go({ view: "home" });
-    else if (v.charAt(0) === "p" && /^p\d+$/.test(v)) go({ view: "project", p: Number(v.slice(1)), page: "dash" });
+    if (v === "home") SRV ? goHome() : go({ view: "home" });
+    else if (v.charAt(0) === "p" && /^p\d+$/.test(v)) SRV ? openProject(DATA.projects[Number(v.slice(1))].model.project.code) : go({ view: "project", p: Number(v.slice(1)), page: "dash" });
     else go({ view: "project", p: state.route.p, page: v });
   });
   var rt = null;
   window.addEventListener("resize", function () { cancelAnimationFrame(rt); rt = requestAnimationFrame(function () { fitStages(); }); });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitStages(); });
-  rebuild();
-  render();
+  if (SRV) bootServer();
+  else { rebuild(); render(); }
   // claude.ai 뷰어에서 열리면 Claude 생성(sample)과 공유 저장(db)을 켠다. 아니면 프롬프트 복사로 대신한다
-  if (window.claude && typeof window.claude.use === "function") {
+  if (!SRV && window.claude && typeof window.claude.use === "function") {
     window.claude.use("sample").then(function (s) { AI.sample = s; if (layer && layer.kind === "gen") renderLayer(); }, function () {});
     window.claude.use("db").then(function (db) {
       AI.db = db;

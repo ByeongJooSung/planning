@@ -8,16 +8,14 @@ import path from "node:path";
 import { MODEL_FILES, type Model, type ModelFileName } from "../model/schema.js";
 import { fromFiles, readJson, saveModel, toFiles, writeJson } from "../project/store.js";
 import { buildRtm } from "../trace/rtm.js";
+import { bumpVersion, compareVersion } from "./versioning.js";
+
+export { bumpVersion, compareVersion } from "./versioning.js";
 
 export interface SnapshotMeta {
   version: string;
   takenAt: string;
   note: string;
-}
-
-export function bumpVersion(v: string, major = false): string {
-  const [ma, mi] = v.split(".").map(Number) as [number, number];
-  return major ? `${ma + 1}.0` : `${ma}.${mi + 1}`;
 }
 
 const snapDir = (dir: string, v: string) => path.join(dir, "history", `v${v}`);
@@ -67,8 +65,3 @@ export async function loadSnapshot(dir: string, version: string): Promise<Model>
   return fromFiles(await readJson(path.join(target, "project.json")), files);
 }
 
-export function compareVersion(a: string, b: string): number {
-  const [a1, a2] = a.split(".").map(Number) as [number, number];
-  const [b1, b2] = b.split(".").map(Number) as [number, number];
-  return a1 - b1 || a2 - b2;
-}

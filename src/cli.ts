@@ -506,6 +506,29 @@ program
     console.log(`뷰어를 만들었습니다: ${out} (프로젝트 ${projects.length}건)`);
   });
 
+program
+  .command("serve")
+  .description("웹 서비스 실행 — 회원가입·로그인, 프로젝트 멤버 초대, 편집, AI 생성 (환경변수 PORT, HOST, PLANNING_SECRET, ANTHROPIC_API_KEY)")
+  .option("--port <n>", "포트", process.env.PORT ?? "8080")
+  .option("--host <h>", "주소", process.env.HOST ?? "0.0.0.0")
+  .option("--closed-signup", "초대받은 이메일만 가입 (첫 가입자는 예외)")
+  .action(async (o) => {
+    const { root } = program.opts<{ root: string }>();
+    const { createApp } = await import("./server/app.js");
+    const key = process.env.ANTHROPIC_API_KEY;
+    const app = await createApp({
+      root,
+      secret: process.env.PLANNING_SECRET,
+      openSignup: !(o.closedSignup || process.env.PLANNING_SIGNUP === "closed"),
+      secureCookie: process.env.COOKIE_SECURE === "1" ? true : undefined,
+      serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
+    });
+    app.server.listen(Number(o.port), o.host, () => {
+      console.log(`Planning Studio 서비스: http://${o.host === "0.0.0.0" ? "localhost" : o.host}:${o.port}  (데이터: ${path.resolve(root)})`);
+      if (!process.env.PLANNING_SECRET) console.log("PLANNING_SECRET 이 없어 .service/secret.key 로 AI 키를 암호화합니다. 운영 환경에서는 환경변수로 지정하세요.");
+    });
+  });
+
 // 출력이 head 등으로 잘려도(EPIPE) 오류 없이 끝낸다
 process.stdout.on("error", (e: NodeJS.ErrnoException) => {
   if (e.code === "EPIPE") process.exit(0);

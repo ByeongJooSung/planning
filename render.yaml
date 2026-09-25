@@ -1,0 +1,22 @@
+# Render 블루프린트 — 저장소를 Render에 연결하면 이 설정으로 웹 서비스를 만든다 (New → Blueprint)
+services:
+  - type: web
+    name: planning-studio
+    runtime: docker
+    plan: starter            # 디스크(영구 저장)는 유료 플랜에서만 붙는다
+    healthCheckPath: /healthz
+    disk:
+      name: planning-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PLANNING_SECRET   # AI 키 암호화용 — 자동 생성, 바꾸면 저장된 키를 다시 입력해야 한다
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: PLANNING_SIGNUP   # closed 로 바꾸면 초대받은 이메일만 가입
+        value: open
+      - key: ANTHROPIC_API_KEY # 선택: 서버 기본 AI (프로젝트·개인 설정이 없을 때)
+        sync: false
+      - key: PUBLIC_URL        # 초대 링크에 쓰는 주소 (예: https://planning-studio.onrender.com)
+        sync: false

@@ -647,3 +647,50 @@ h3.cat small { color: var(--ink-3); font-weight: 400; }
 .rv-item.resolved .rv-n { background: #1d7a45; }
 .rv-n.new { background: var(--accent); }
 @media (max-width: 900px) { .rv-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .rv-side { border-left: 0; border-top: 1px solid var(--line); } }
+
+/* ── 웹 서비스 모드: 편집 버튼 · 폼 · 로그인 · 멤버 · AI 설정 ── */
+.section h2 > .btn-sm, .section h2 > .btn-primary { margin-left: 10px; vertical-align: middle; font-size: 12px; }
+.section h2 > .btn-primary { padding: 4px 12px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.row-actions.center { justify-content: center; }
+.row-actions .sp, .fm-actions .sp { flex: 1; }
+.box.pad.row-actions { margin-top: 0; }
+.btn-sm.danger { color: var(--crit); border-color: var(--crit); }
+.btn-primary.danger { background: var(--crit); }
+.btn-primary.wide { width: 100%; padding: 11px; }
+button.stage.editable { border-width: 0 1px 0 0; border-style: solid; border-color: var(--line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+button.stage.editable:hover { background: var(--surface-2); }
+button.pcard.new { cursor: pointer; text-align: left; font: inherit; color: inherit; border-style: dashed; }
+.layer-box.form { width: min(560px, 100%); }
+.fm { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; overflow: auto; }
+.fm-row { display: flex; flex-direction: column; gap: 4px; }
+.fm-row label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.fm-row .fm-req { font-style: normal; font-weight: 500; color: var(--crit); font-size: 11px; margin-left: 4px; }
+.fm input[type=text], .fm input[type=email], .fm input[type=password], .fm input[type=url], .fm select, .fm textarea { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); width: 100%; box-sizing: border-box; }
+.fm input[type=color] { width: 64px; height: 34px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
+.fm input:focus, .fm select:focus, .fm textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.fm textarea { resize: vertical; }
+.fm-check { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.fm-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.fm .cmd { margin: 0; }
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 200; display: flex; flex-direction: column; gap: 8px; max-width: min(440px, calc(100vw - 32px)); }
+.toast { background: var(--ink); color: var(--surface); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); white-space: pre-line; }
+.toast.err { background: var(--crit); color: #fff; }
+.user-foot { display: flex; flex-direction: column; gap: 2px; }
+.user-foot b { color: var(--ink); font-size: 12.5px; }
+.user-foot .row-actions { margin-top: 6px; }
+.kv { display: grid; gap: 6px; margin: 8px 0 0; }
+.kv > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; word-break: break-all; }
+.aicard h3 small { font-weight: 400; color: var(--ink-3); font-size: 12px; }
+body.auth-on .shell { grid-template-columns: 1fr; }
+body.auth-on .side { display: none; }
+.auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; box-sizing: border-box; }
+.auth-box { width: min(420px, 100%); padding: 28px 24px; display: flex; flex-direction: column; gap: 16px; }
+.auth-box .brand { padding: 0; }
+.auth-box .fm { padding: 0; }
+.auth-box .seg { align-self: flex-start; }
+.auth-box .seg button[disabled] { opacity: .4; cursor: not-allowed; }
+.mini-row a { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-row.static:has(> .btn-sm) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
