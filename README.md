@@ -38,6 +38,7 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 | `PLANNING_ROOT` | 데이터 폴더 (프로젝트 + `.service/` 계정·설정) |
 | `PLANNING_SECRET` | AI 키 암호화 비밀값. 없으면 `.service/secret.key`를 만든다. 바꾸면 저장한 키를 다시 입력해야 함 |
 | `PLANNING_SIGNUP=closed` | 초대받은 이메일만 가입 |
+| `PLANNING_ADMINS` | 서비스 관리자 이메일(쉼표 구분). 첫 가입자는 항상 관리자 — 계정 관리 화면에서 회원 목록·삭제 |
 | `ANTHROPIC_API_KEY`, `PLANNING_AI_MODEL` | 선택: 서버 기본 AI (프로젝트·개인 설정이 없을 때, 기본 모델 claude-opus-5) |
 | `PUBLIC_URL` | 초대 링크 주소 (프록시 뒤에서) |
 | `COOKIE_SECURE=1` | HTTPS 뒤에서 Secure 쿠키 |
@@ -52,6 +53,7 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
   2. 프로젝트 → Storage → Marketplace에서 **Upstash for Redis** 만들기 → 이 프로젝트에 연결 (`KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동으로 들어감)
   3. 선택: Settings → Environment Variables에 `PLANNING_SECRET`(16자 이상, 없으면 첫 실행 때 만들어 Redis에 보관), `ANTHROPIC_API_KEY`, `PLANNING_SIGNUP=closed`
   4. Deployments → Redeploy → `https://<프로젝트>.vercel.app` 접속 → 첫 가입자가 샘플 프로젝트 2개의 운영자
+  - 리전: `vercel.json`의 `regions`(현재 도쿄 `hnd1`)를 Upstash 주 저장소 지역과 맞춥니다. `/api/health`의 `kvMs`(Redis 왕복 ms)가 한 자릿수면 맞게 된 것입니다.
   - 한도: 참조자료 한 번에 3MB(Vercel 요청 4.5MB), AI 생성 최대 300초. 로컬 LLM은 Vercel에서 접속할 수 있는 공개 주소여야 합니다(사내망 주소 불가).
 - **Docker**: `docker build -t planning-studio . && docker run -p 8080:8080 -v planning-data:/data -e PLANNING_SECRET=… planning-studio` — 데이터 볼륨이 비어 있으면 샘플 프로젝트 2개를 넣습니다(`SEED_EXAMPLES=0`이면 안 넣음).
 - **Render**: 이 저장소를 Render에 연결하고 New → Blueprint를 고르면 `render.yaml`대로 웹 서비스와 영구 디스크를 만들고 `https://planning-studio-xxxx.onrender.com` 주소를 줍니다. 만든 뒤 `PUBLIC_URL`을 그 주소로 넣으세요.
