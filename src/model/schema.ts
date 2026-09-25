@@ -440,6 +440,8 @@ export const SystemDesign = z.object({
   layout: LayoutRules.optional(),
   components: z.array(DesignComponent).default([]),
   icons: z.array(z.string()).default([]),
+  /** 컴포넌트별 스타일 변수 값: { "data-table": { "--w-th-bg": "#EEF2F7" } } */
+  componentStyles: z.record(z.string(), z.record(z.string(), z.string())).default({}),
   /** 디자인 시스템 개정 번호. 미세조정할 때마다 1씩 오른다 */
   revision: z.number().int().positive().default(1),
   history: z

@@ -7,7 +7,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Model } from "../../model/schema.js";
-import { buildGenPrompts, REFINE_INSTRUCTION, type GenPrompt } from "../../ai/generate.js";
+import { buildGenPrompts, DS_SLOTS, REFINE_INSTRUCTION, type GenPrompt } from "../../ai/generate.js";
+import { ADDED_COMPONENT_VARS, COMPONENT_STYLE_VARS, DESIGN_SCOPES } from "../../design/catalog.js";
 import { buildPrompts, VIEWPORT, type PromptSet } from "../../ai/prompts.js";
 import { loadChunks } from "../../knowledge/store.js";
 import type { Chunk } from "../../knowledge/search.js";
@@ -64,7 +65,12 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
   const css = (await Promise.all(CSS_FILES.map(read))).join("\n");
   const js = (await Promise.all(JS_FILES.map(read))).join("\n");
   // </script> 로 데이터 블록이 끊기지 않도록 이스케이프
-  const json = JSON.stringify({ viewport: VIEWPORT, refine: REFINE_INSTRUCTION, ...data }).replace(/</g, "\\u003c");
+  const json = JSON.stringify({
+    viewport: VIEWPORT,
+    refine: REFINE_INSTRUCTION,
+    design: { scopes: DESIGN_SCOPES, styleVars: COMPONENT_STYLE_VARS, addedVars: ADDED_COMPONENT_VARS, slots: DS_SLOTS },
+    ...data,
+  }).replace(/</g, "\\u003c");
   const title = opts.title ?? (data.projects.length === 1 ? `${data.projects[0]!.model.project.name}` : "Planning Studio 뷰어");
   const body = `<title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">

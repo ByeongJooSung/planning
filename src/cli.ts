@@ -5,7 +5,8 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { validateModel } from "./model/validate.js";
 import { applyGenerated, GEN_KINDS, screensNeedingReview, type GenKind } from "./ai/apply.js";
-import { buildGenPrompts, REFINE_INSTRUCTION } from "./ai/generate.js";
+import { buildGenPrompts, fillDsPrompt, REFINE_INSTRUCTION } from "./ai/generate.js";
+import { scopeOf } from "./design/catalog.js";
 import { buildPrompts } from "./ai/prompts.js";
 import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
 import { search } from "./knowledge/search.js";
@@ -410,10 +411,17 @@ gen
   .description("생성 프롬프트 출력 (Claude에 붙여 넣어 JSON 결과를 받는다)")
   .option("--instruction <text>", "추가 지시 (ds는 필수)")
   .option("--refine <file>", "직전 결과 JSON 파일 — 미세조정 대화로 출력")
+  .option("--scope <scope>", "디자인 조정 범위: global | colors | type | spacing | shape | control | layout | templates | comments | cmp:<컴포넌트ID>", "global")
+  .option("--comments <text>", "디자인 댓글 (scope comments)")
   .action(async (kind: string, target: string, o) => {
     const dir = await resolveDir();
-    const g = buildGenPrompts(await loadModel(dir), await loadChunks(dir))[`${kind}:${target}`];
+    const m = await loadModel(dir);
+    const g = buildGenPrompts(m, await loadChunks(dir))[`${kind}:${target}`];
     if (!g) throw new Error(`생성 대상이 없습니다: ${kind}:${target}`);
+    if (kind === "ds") {
+      const d = m.design.systems.find((x) => x.systemCode === target)!;
+      g.prompt = fillDsPrompt(g.prompt, { scope: scopeOf(o.scope), design: { tokens: d.tokens, layout: d.layout, componentStyles: d.componentStyles, components: d.components }, comments: o.comments });
+    }
     if (g.requiresInstruction && !o.instruction && !o.refine) throw new Error("디자인 미세조정은 --instruction 이 필요합니다");
     if (o.refine) {
       const prev = await readFile(o.refine, "utf8");
@@ -424,10 +432,11 @@ gen
   .command("apply <kind> <target> <file>")
   .description("생성 결과 JSON을 모델에 반영")
   .option("--instruction <text>", "이 결과를 만든 지시 (디자인 개정 이력에 남김)")
+  .option("--scope <scope>", "디자인 조정 범위 — 범위 밖 값이 있으면 반영하지 않음")
   .action(async (kind: string, target: string, file: string, o) => {
     if (!(GEN_KINDS as readonly string[]).includes(kind)) throw new Error(`kind는 ${GEN_KINDS.join(" | ")}`);
     const output = JSON.parse(await readFile(file, "utf8"));
-    const r = await mutate((m) => applyGenerated(m, kind as GenKind, target, output, { instruction: o.instruction }));
+    const r = await mutate((m) => applyGenerated(m, kind as GenKind, target, output, { instruction: o.instruction, scope: o.scope }));
     console.log(r.summary);
     for (const c of r.changes) console.log(`  - ${c}`);
     if (kind === "ds" && r.affectedScreens.length) console.log(`다시 그려지는 화면: ${r.affectedScreens.join(", ")}`);

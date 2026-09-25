@@ -85,3 +85,43 @@ describe("생성 결과 반영", () => {
     expect(() => applyGenerated(m, "flow", "SFR-002", { ...f, edges: [{ from: "n1", to: "n9", label: "" }] })).toThrow();
   });
 });
+
+describe("디자인 시스템 섹션별 조정 · 컴포넌트 스타일", () => {
+  it("컴포넌트 스타일 변수만 바꾸고, 목록에 없는 변수·잘못된 값은 거부한다", async () => {
+    const { applyDesignPatch: apply } = await import("../src/ai/apply.js");
+    const m = await fresh();
+    const r = apply(m, "ADM", { componentStyles: { "data-table": { "--w-th-bg": "#1F2A3C", "--w-th-color": "#FFFFFF", "--w-row": "36px" } } }, { scope: "cmp:data-table", instruction: "머리글 진하게" });
+    const d = m.design.systems.find((x) => x.systemCode === "ADM")!;
+    expect(d.componentStyles["data-table"]).toEqual({ "--w-th-bg": "#1F2A3C", "--w-th-color": "#FFFFFF", "--w-row": "36px" });
+    expect(r.changes[0]).toBe("componentStyles.data-table.--w-th-bg: 기본값 → #1F2A3C");
+    expect(d.history.at(-1)!.note).toContain("[컴포넌트 data-table]");
+    expect(() => apply(m, "ADM", { componentStyles: { "data-table": { "--w-unknown": "#000000" } } })).toThrow("조정할 수 없는 스타일 변수");
+    expect(() => apply(m, "ADM", { componentStyles: { "data-table": { "--w-row": "36" } } })).toThrow("값 형식 오류");
+    expect(() => apply(m, "ADM", { componentStyles: { nope: { "--w-gen-bg": "#000000" } } })).toThrow("없는 컴포넌트");
+  });
+
+  it("조정 범위 밖의 값이 있으면 반영하지 않는다", async () => {
+    const { applyDesignPatch: apply, outOfScope } = await import("../src/ai/apply.js");
+    const m = await fresh();
+    const patch = { tokens: { color: { primary: "#123456" }, radius: { md: 10 } } };
+    expect(outOfScope(patch, "colors")).toEqual(["tokens.radius.md"]);
+    expect(() => apply(m, "ADM", patch, { scope: "colors" })).toThrow("‘색상’ 범위에서 바꿀 수 없는 값입니다: tokens.radius.md");
+    expect(outOfScope({ componentStyles: { button: { "--w-btn-r": "8px" } } }, "cmp:data-table")).toEqual(["componentStyles.button.--w-btn-r"]);
+    expect(outOfScope({ components: { add: [{ id: "x-y", name: "x", category: "data", description: "", variants: [] }] } }, "templates")).toEqual(["components.add"]);
+    expect(outOfScope({ components: { add: [{ id: "x-y", name: "x", category: "data", description: "", variants: [] }] } }, "global")).toEqual([]);
+  });
+
+  it("디자인 미세조정 프롬프트에 범위·현재 디자인·스타일 변수·댓글을 채운다", async () => {
+    const { fillDsPrompt } = await import("../src/ai/generate.js");
+    const { scopeOf } = await import("../src/design/catalog.js");
+    const m = await fresh();
+    const d = m.design.systems.find((x) => x.systemCode === "ADM")!;
+    const text = fillDsPrompt(gens["ds:ADM"]!.prompt, { scope: scopeOf("cmp:data-table"), design: d, comments: "- [목록] 1번 · 컴포넌트 data-table\n  댓글: 머리글 진하게" });
+    expect(text).toContain("- 컴포넌트 data-table: data-table의 스타일 변수만");
+    expect(text).toContain("바꿀 수 있는 경로: componentStyles.data-table");
+    expect(text).toContain("--w-th-bg(머리글 배경, color");
+    expect(text).not.toContain("--w-btn-r(");
+    expect(text).toContain("댓글: 머리글 진하게");
+    expect(text).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+});

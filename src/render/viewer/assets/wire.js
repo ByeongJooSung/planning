@@ -60,6 +60,9 @@
       "--w-btn-r": btnR, "--w-h": t.control.height + "px", "--w-row": t.control.rowHeight + "px", "--w-sp": t.spacing + "px",
       "--w-pad": (compact ? t.spacing * 2 : t.spacing * 3) + "px", "--w-max": t.grid.maxWidth + "px", "--w-shadow": shadow
     };
+    // 컴포넌트 스타일 변수(디자인 시스템 componentStyles)는 토큰 뒤에 붙여 덮어쓴다
+    var cs = ds.componentStyles || {};
+    Object.keys(cs).forEach(function (cid) { Object.keys(cs[cid] || {}).forEach(function (k) { if (/^--w-[a-z0-9-]+$/.test(k)) v[k] = cs[cid][k]; }); });
     // style="…" 속성 안에 들어가므로 큰따옴표를 작은따옴표로 바꾼다 (글꼴 이름)
     return Object.keys(v).map(function (k) { return k + ":" + String(v[k]).replace(/"/g, "'"); }).join(";");
   }
@@ -195,7 +198,7 @@
   C.tabs = function (ds, p) {
     return '<div class="wf-tabs">' + (p.items || []).map(function (t, i) { return '<span class="' + (i === (p.active || 0) ? "on" : "") + '">' + esc(t) + "</span>"; }).join("") + "</div>";
   };
-  C.breadcrumb = function (ds, p) { return '<div class="wf-bc">' + icon("home", 13) + (p.items || []).map(function (x) { return "<span>›</span><span>" + esc(x) + "</span>"; }).join("") + "</div>"; };
+  C.breadcrumb = function (ds, p) { return '<div class="wf-bc" data-cmp="breadcrumb">' + icon("home", 13) + (p.items || []).map(function (x) { return "<span>›</span><span>" + esc(x) + "</span>"; }).join("") + "</div>"; };
   C["confirm-dialog"] = function (ds, p) {
     return '<div class="wf-dialog"><b>' + esc(p.title || "확인") + "</b><p>" + esc(p.message || "처리하시겠습니까?") + '</p><div class="wf-btns end">' + btn(p.cancel || "취소", "secondary", ' data-close="1"') + btn(p.confirm || "확인", "primary", ' data-ok="1"') + "</div></div>";
   };
@@ -210,7 +213,7 @@
   C.gnb = function (ds, p, ctx) { return header(ds, ctx || {}); };
   C.lnb = function (ds, p, ctx) {
     var items = (ctx && ctx.menus) || ["하위 메뉴 1", "하위 메뉴 2", "하위 메뉴 3"];
-    return '<nav class="wf-lnb">' + items.map(function (m, i) { return '<span class="' + (i === 0 ? "on" : "") + '">' + esc(m) + "</span>"; }).join("") + "</nav>";
+    return '<nav class="wf-lnb" data-cmp="lnb">' + items.map(function (m, i) { return '<span class="' + (i === 0 ? "on" : "") + '">' + esc(m) + "</span>"; }).join("") + "</nav>";
   };
   C.footer = function (ds, p, ctx) { return footer(ds, ctx || {}); };
 
@@ -226,9 +229,12 @@
       }).join("") + "</ol>" : '<p class="wf-meta">' + esc(comp ? comp.description : "") + "</p>") + "</div>";
   }
 
+  /** 컴포넌트 하나. data-cmp로 감싸 댓글 핀·번호 라벨이 어떤 컴포넌트인지 알 수 있게 한다 */
   function component(ds, id, props, ctx, link, spec) {
     var fn = C[id];
-    return fn ? fn(ds, props || {}, ctx || {}, link, spec) : generic(ds, id, props || {});
+    var html = fn && id !== "gnb" && id !== "footer" && id !== "breadcrumb" ? fn(ds, props || {}, ctx || {}, link, spec) : fn ? fn(ds, props || {}, ctx || {}) : generic(ds, id, props || {});
+    if (id === "gnb" || id === "footer" || id === "breadcrumb") return html;
+    return '<div class="wf-c" data-cmp="' + esc(id) + '">' + html + "</div>";
   }
 
   // ── 프레임 ───────────────────────────────────
@@ -246,16 +252,16 @@
     var mega = L.nav === "top-mega" ? '<div class="wf-mega"><div class="wf-container">' + menus.slice(0, 4).map(function (m) {
       return "<div><b>" + esc(m) + "</b><span>목록</span><span>안내</span><span>자주 묻는 질문</span></div>";
     }).join("") + "</div></div>" : "";
-    return '<header class="wf-header">' + (ctx.profile === "admin" ? "" : top) + bar + (ctx.showMega ? mega : "") + "</header>";
+    return '<header class="wf-header" data-cmp="gnb">' + (ctx.profile === "admin" ? "" : top) + bar + (ctx.showMega ? mega : "") + "</header>";
   }
   function footer(ds, ctx) {
     if (ds.layout.footer === "none") return "";
-    if (ds.layout.footer === "simple") return '<footer class="wf-footer simple"><div class="wf-container"><span>' + esc(ctx.systemName || "") + "</span><span>개인정보처리방침 · 이용약관 · © 2026</span></div></footer>";
-    return '<footer class="wf-footer"><div class="wf-container">' + logo(ctx) + '<div><span>개인정보처리방침 · 저작권정책 · 웹 접근성 정책</span><span>(04500) 서울특별시 ○○구 ○○로 00 · 대표전화 000-0000</span><span>© 2026 ○○기관. All rights reserved.</span></div></div></footer>';
+    if (ds.layout.footer === "simple") return '<footer class="wf-footer simple" data-cmp="footer"><div class="wf-container"><span>' + esc(ctx.systemName || "") + "</span><span>개인정보처리방침 · 이용약관 · © 2026</span></div></footer>";
+    return '<footer class="wf-footer" data-cmp="footer"><div class="wf-container">' + logo(ctx) + '<div><span>개인정보처리방침 · 저작권정책 · 웹 접근성 정책</span><span>(04500) 서울특별시 ○○구 ○○로 00 · 대표전화 000-0000</span><span>© 2026 ○○기관. All rights reserved.</span></div></div></footer>';
   }
   function sideShell(ds, ctx, inner) {
     var menus = ctx.menus || [];
-    return '<div class="wf-sshell"><aside class="wf-side">' + logo(ctx) + '<nav>' + menus.map(function (m, i) {
+    return '<div class="wf-sshell"><aside class="wf-side" data-cmp="gnb">' + logo(ctx) + '<nav>' + menus.map(function (m, i) {
       return '<span class="' + (i === (ctx.activeMenu || 0) ? "on" : "") + '">' + icon(["home", "file", "edit", "bell", "user"][i % 5], 15) + esc(m) + "</span>";
     }).join("") + '</nav></aside><div class="wf-sbody"><div class="wf-topbar">' + C.breadcrumb(ds, { items: ctx.crumbs || [] }) +
       '<span class="wf-utl">' + icon("bell") + icon("user") + "<em>" + esc(ctx.userName || "사용자") + "</em></span></div>" +

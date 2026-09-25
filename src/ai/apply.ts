@@ -20,6 +20,7 @@ import {
   type StoryboardScreen,
 } from "../model/schema.js";
 import { validateModel } from "../model/validate.js";
+import { isValidStyleValue, scopeOf, styleVarsOf } from "../design/catalog.js";
 
 export const GEN_KINDS = ["ia", "sb", "flow", "ds"] as const;
 export type GenKind = (typeof GEN_KINDS)[number];
@@ -35,6 +36,7 @@ export const FlowOutput = Flow;
 export const DesignPatch = z.object({
   tokens: z.record(z.string(), z.unknown()).optional(),
   layout: LayoutRules.partial().optional(),
+  componentStyles: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   components: z
     .object({ add: z.array(DesignComponent.pick({ id: true, name: true, category: true, description: true, variants: true })).default([]) })
     .optional(),
@@ -49,7 +51,7 @@ export interface ApplyResult {
   affectedScreens: string[];
 }
 
-type Ctx = { now?: Date; instruction?: string };
+type Ctx = { now?: Date; instruction?: string; /** 디자인 조정 범위 (DESIGN_SCOPES id 또는 cmp:<컴포넌트ID>) */ scope?: string };
 
 /** 모델 사본에 적용해 무결성을 확인한 뒤 원본에 반영한다 */
 function commit(m: Model, work: Model) {
@@ -135,12 +137,36 @@ function deepMerge<T>(base: T, patch: unknown): T {
   return out as T;
 }
 
-/** 디자인 시스템 미세조정. 토큰·레이아웃은 바뀐 값만, 컴포넌트는 추가만 받는다 */
+/** 패치가 바꾸는 경로 (tokens.color.primary, componentStyles.data-table.--w-th-bg, components.add) */
+export function patchPaths(patch: DesignPatch): string[] {
+  const out: string[] = [];
+  const walk = (o: unknown, pre: string) => {
+    if (o && typeof o === "object" && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) walk(v, `${pre}.${k}`);
+    else out.push(pre);
+  };
+  if (patch.tokens) walk(patch.tokens, "tokens");
+  if (patch.layout) walk(patch.layout, "layout");
+  if (patch.componentStyles) walk(patch.componentStyles, "componentStyles");
+  if (patch.components?.add?.length) out.push("components.add");
+  return out;
+}
+
+/** 조정 범위 밖을 바꾸는 경로 */
+export function outOfScope(patch: DesignPatch, scopeId: string): string[] {
+  const scope = scopeOf(scopeId);
+  return patchPaths(patch).filter((p) => !scope.allowed.some((a) => p === a || p.startsWith(`${a}.`)));
+}
+
+/** 디자인 시스템 미세조정. 토큰·레이아웃·컴포넌트 스타일은 바뀐 값만, 컴포넌트는 추가만 받는다 */
 export function applyDesignPatch(m: Model, systemCode: string, output: unknown, c: Ctx = {}): ApplyResult {
   const patch = DesignPatch.parse(output);
   const work = structuredClone(m);
   const d = work.design.systems.find((x) => x.systemCode === systemCode);
   if (d?.status !== "SELECTED" || !d.tokens || !d.layout) throw new Error(`${systemCode} 디자인 시스템이 아직 없습니다. 컨셉을 먼저 선택하세요`);
+  if (c.scope) {
+    const bad = outOfScope(patch, c.scope);
+    if (bad.length) throw new Error(`‘${scopeOf(c.scope).label}’ 범위에서 바꿀 수 없는 값입니다: ${bad.join(", ")}`);
+  }
   const tokens = DesignTokens.parse(deepMerge(d.tokens, patch.tokens ?? {}));
   const layout = LayoutRules.parse({ ...d.layout, ...(patch.layout ?? {}) });
   const before = flatten({ tokens: d.tokens, layout: d.layout });
@@ -149,6 +175,22 @@ export function applyDesignPatch(m: Model, systemCode: string, output: unknown, 
     .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
     .map((k) => `${k}: ${String(before[k])} → ${String(after[k])}`);
   const now = (c.now ?? new Date()).toISOString();
+  const known = new Set([...d.components.map((x) => x.id), ...(patch.components?.add ?? []).map((x) => x.id)]);
+  const styles = structuredClone(d.componentStyles ?? {});
+  for (const [cid, vars] of Object.entries(patch.componentStyles ?? {})) {
+    if (!known.has(cid)) throw new Error(`디자인 시스템에 없는 컴포넌트입니다: ${cid}`);
+    const allowed = new Map(styleVarsOf(cid).map((x) => [x.name, x]));
+    for (const [name, value] of Object.entries(vars)) {
+      const sv = allowed.get(name);
+      if (!sv) throw new Error(`${cid}에서 조정할 수 없는 스타일 변수입니다: ${name} (가능: ${[...allowed.keys()].join(", ")})`);
+      if (!isValidStyleValue(sv.type, value)) throw new Error(`${cid} ${name} 값 형식 오류: ${value} (${sv.type === "color" ? "#RRGGBB" : sv.type === "px" ? "숫자px" : "숫자"})`);
+      const prev = styles[cid]?.[name];
+      if (prev !== value) {
+        (styles[cid] ??= {})[name] = value;
+        changes.push(`componentStyles.${cid}.${name}: ${prev ?? "기본값"} → ${value}`);
+      }
+    }
+  }
   for (const add of patch.components?.add ?? []) {
     if (d.components.some((x) => x.id === add.id)) continue;
     d.components.push(DesignComponent.parse({ ...add, origin: "ADDED", addedFor: "디자인 미세조정", addedAt: now }));
@@ -157,8 +199,9 @@ export function applyDesignPatch(m: Model, systemCode: string, output: unknown, 
   if (!changes.length) throw new Error("바뀐 내용이 없습니다");
   d.tokens = tokens;
   d.layout = layout;
+  d.componentStyles = styles;
   d.revision += 1;
-  d.history.push({ rev: d.revision, at: now, note: patch.summary ?? "", instruction: c.instruction, changes });
+  d.history.push({ rev: d.revision, at: now, note: [c.scope ? `[${scopeOf(c.scope).label}]` : "", patch.summary ?? ""].filter(Boolean).join(" "), instruction: c.instruction, changes });
   commit(m, work);
   const affectedScreens = m.storyboard.screens.filter((s) => s.systemCode === systemCode).map((s) => s.screenId);
   return { summary: `${systemCode} 디자인 시스템 r${d.revision}: 변경 ${changes.length}건 · 다시 그려지는 화면 ${affectedScreens.length}개`, changes, affectedScreens };

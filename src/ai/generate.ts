@@ -6,7 +6,8 @@
  * 결과는 applyGenerated()로 모델에 반영한다.
  */
 import type { Chunk } from "../knowledge/search.js";
-import type { Model } from "../model/schema.js";
+import { scopeOf, styleVarsOf, type DesignScope } from "../design/catalog.js";
+import type { Model, SystemDesign } from "../model/schema.js";
 import { buildRtm, STATUS_LABEL } from "../trace/rtm.js";
 import type { GenKind } from "./apply.js";
 import {
@@ -187,17 +188,20 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
   return { kind: "flow", target: requirementId, title: `${requirementId} ${req.title} 프로세스 플로우`, prompt, requiresInstruction: false };
 }
 
+/** 디자인 미세조정 프롬프트의 자리표시자 — 조정 범위·현재 디자인(적용본 포함)·댓글은 요청할 때 채운다 */
+export const DS_SLOTS = { scope: "{{SCOPE}}", design: "{{DESIGN}}", vars: "{{STYLE_VARS}}", comments: "{{COMMENTS}}" } as const;
+
 function dsGen(c: Ctx, code: string): GenPrompt {
   const d = c.design(code)!;
   const s = c.system(code);
   const screens = c.m.storyboard.screens.filter((x) => x.systemCode === code).map((x) => `${x.screenId} ${x.title}`);
   const prompt = finish([
     head(`${code} ${s?.name ?? ""} 디자인 시스템 미세조정`, "아래 디자인 시스템을 작업자의 요청대로 조정하는 패치를 만들어 주세요. 바뀌는 값만 넣습니다."),
-    section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s?.name ?? ""} (주 사용자: ${s?.users.join(", ") || "-"}) · 현재 개정 r${d.revision}`),
-    section("현재 디자인 시스템", tokensBlock(d, code)),
-    section("현재 토큰 JSON", JSON.stringify(d.tokens)),
-    section("현재 레이아웃 규칙 JSON", JSON.stringify(d.layout)),
+    section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s?.name ?? ""} (주 사용자: ${s?.users.join(", ") || "-"})`),
+    section("조정 범위 (이 범위 밖의 값은 넣지 않는다)", DS_SLOTS.scope),
+    section("현재 디자인 시스템 (적용된 조정 포함, JSON)", DS_SLOTS.design),
     section("컴포넌트", componentCatalog(d)),
+    section("조정할 수 있는 컴포넌트 스타일 변수 (componentStyles)", DS_SLOTS.vars),
     section("이 디자인 시스템을 쓰는 화면 (패치 후 한꺼번에 다시 그려짐)", screens.map((x) => `- ${x}`).join("\n") || "- (없음)"),
     section("참조 URL", urlBlock(c.urls(code))),
     section(
@@ -206,16 +210,41 @@ function dsGen(c: Ctx, code: string): GenPrompt {
         "- 색은 #RRGGBB. 글자와 배경의 명도 대비 4.5:1 이상(웹 접근성)",
         '- 글꼴(font.family)은 "Noto Sans KR", "Gothic A1", "IBM Plex Sans KR" 중 하나 + 대체 글꼴: 예 "\\"Noto Sans KR\\", \\"Malgun Gothic\\", sans-serif"',
         "- layout 값: nav top|top-mega|side · logo left|center · search header|hero|panel · list table|card · pagination numbered|numbered-size|more · button square|rounded|pill · density comfortable|compact · footer full|simple|none",
-        "- 컴포넌트는 추가만 가능(id는 영문 소문자·하이픈). 기존 컴포넌트 ID는 바꾸지 않는다(화면설계서가 ID로 참조)",
+        "- componentStyles 값: 색은 #RRGGBB, 크기는 \"12px\" 처럼 px, 굵기는 \"600\" 처럼 숫자. 위 목록에 있는 변수만 쓴다",
+        "- 새 컴포넌트는 components.add로만 추가(id는 영문 소문자·하이픈). 기존 컴포넌트 ID는 바꾸지 않는다(화면설계서가 ID로 참조)",
+        "- 댓글이 있으면 각 댓글이 가리키는 컴포넌트·위치를 근거로 고치고, summary에 댓글 번호별로 무엇을 바꿨는지 쓴다",
         "- 요청과 관계없는 값은 넣지 않는다",
       ].join("\n"),
     ),
+    section("댓글", DS_SLOTS.comments),
     section(
       "출력 형식",
-      '{"summary":"변경 요약 한 줄","tokens":{"color":{"primary":"#1F5FBF"},"radius":{"md":8}},"layout":{"button":"rounded"},"components":{"add":[{"id":"info-box","name":"안내 상자","category":"content","description":"…","variants":[]}]}}',
+      '{"summary":"변경 요약 한 줄","tokens":{"color":{"primary":"#1F5FBF"}},"layout":{"button":"rounded"},"componentStyles":{"data-table":{"--w-th-bg":"#E8EEF7","--w-row":"44px"}},"components":{"add":[{"id":"info-box","name":"안내 상자","category":"content","description":"…","variants":[]}]}}',
     ),
     "## 요청\n",
   ]);
   return { kind: "ds", target: code, title: `${code} ${s?.name ?? ""} 디자인 시스템 미세조정`, prompt, requiresInstruction: true };
+}
+
+export interface DesignFill {
+  scope: DesignScope;
+  design: Pick<SystemDesign, "tokens" | "layout" | "componentStyles" | "components">;
+  comments?: string;
+}
+
+function styleVarLines(fill: DesignFill): string {
+  const ids = fill.scope.id.startsWith("cmp:") ? [fill.scope.id.slice(4)] : fill.design.components.map((x) => x.id);
+  return ids
+    .map((id) => `- ${id}: ${styleVarsOf(id).map((v) => `${v.name}(${v.label}, ${v.type}, 기본 ${v.base}${fill.design.componentStyles?.[id]?.[v.name] ? `, 현재 ${fill.design.componentStyles[id]![v.name]}` : ""})`).join(" · ")}`)
+    .join("\n");
+}
+
+/** 디자인 미세조정 프롬프트의 자리표시자를 채운다 (뷰어 viewer.js의 fillDs와 같은 규칙) */
+export function fillDsPrompt(template: string, fill: DesignFill): string {
+  return template
+    .replace(DS_SLOTS.scope, `- ${fill.scope.label}: ${fill.scope.hint}\n- 바꿀 수 있는 경로: ${fill.scope.allowed.join(", ")}`)
+    .replace(DS_SLOTS.design, JSON.stringify({ tokens: fill.design.tokens, layout: fill.design.layout, componentStyles: fill.design.componentStyles ?? {} }))
+    .replace(DS_SLOTS.vars, styleVarLines(fill))
+    .replace(DS_SLOTS.comments, fill.comments || "- (없음)");
 }
 

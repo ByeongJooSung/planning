@@ -612,3 +612,38 @@ h3.cat small { color: var(--ink-3); font-weight: 400; }
 .layer-f .sp { flex: 1; }
 .btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 900px) { .gen-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .gen-left { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+/* ── 디자인 시스템: 섹션별 조정 · 이미지 댓글 ── */
+.sec-tune { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.sec-tune .st-label { font-size: 11.5px; font-weight: 600; color: var(--st-done); white-space: nowrap; }
+.sec-tune input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 5px 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.sec-tune input:focus { outline: 2px solid var(--st-done); outline-offset: 0; }
+.section > .sec-tune, .twrap + .sec-tune { border-top: 0; }
+.cmt-bar { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.cmt-bar > div { flex: 1 1 360px; }
+.rv-open { cursor: pointer; }
+.rv-open:hover, .rv-open:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.scope-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--st-done-bg); font-size: 12.5px; }
+.rv-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; flex: 1; min-height: 0; overflow: hidden; }
+.rv-main { overflow: auto; padding: 16px; background: var(--surface-2); }
+.rv-side { border-left: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.rv-side > .btn-sm { align-self: flex-start; }
+.stage.rv { box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+.rv-catch { position: absolute; inset: 0; z-index: 5; cursor: crosshair; }
+.rv-mark { position: absolute; z-index: 6; border: 0; cursor: pointer; font: 700 12px var(--mono); }
+.rv-pin { width: 26px; height: 26px; border-radius: 50% 50% 50% 0; transform: translate(-4px, -26px) rotate(0deg); background: #e5484d; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.rv-pin.resolved { background: #1d7a45; opacity: 0.75; }
+.rv-pin.new { background: var(--accent); outline: 2px dashed #fff; }
+.rv-lbl { min-width: 20px; height: 20px; padding: 0 5px; border-radius: 4px; background: #2563eb; color: #fff; opacity: 0.92; box-shadow: 0 0 0 2px #fff; }
+.rv-lbl:hover { opacity: 1; background: #1d4ed8; }
+.rv-new { border: 1px solid var(--accent); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--accent-soft); }
+.rv-new-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#rv-in { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); resize: vertical; }
+.rv-list { display: flex; flex-direction: column; gap: 6px; }
+.rv-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: start; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 12.5px; }
+.rv-item p { margin: 4px 0 0; }
+.rv-item.resolved { opacity: 0.7; }
+.rv-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #e5484d; color: #fff; font: 700 11px var(--mono); }
+.rv-item.resolved .rv-n { background: #1d7a45; }
+.rv-n.new { background: var(--accent); }
+@media (max-width: 900px) { .rv-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .rv-side { border-left: 0; border-top: 1px solid var(--line); } }
