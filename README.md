@@ -16,6 +16,8 @@
 - 요구사항 등록 시 시스템별 Task 자동 생성(규칙 기반) 또는 수동 생성
 - 시스템별 디자인 시스템: 컨셉 3종 제안 → 선택 → 생성 → 컴포넌트 추가
 - 뷰어: 프로젝트 목록 → 프로젝트 상세 → Task 상세(플로우·화면설계서·프로토타입), 통합 산출물
+- 설계 화면 실제 규격(1920×1080) 고정 배치 후 축소 표시 — 줄바꿈 없음
+- AI 요청: 화면설계서·정보구조도·프로토타입·디자인 시스템별 Figma 그리기 / Claude 요청 프롬프트(참조 URL·참조자료 근거 포함)
 
 ## 시작하기
 ```bash
@@ -45,12 +47,15 @@ planning design propose CVL            # 시스템별 디자인 컨셉 3종
 planning design select CVL A           # 선택 → 디자인 시스템 생성
 planning design component-add ADM review-timeline --name "심사 이력 타임라인" --category data --for SFR-003-T01
 
+planning link add https://www.krds.go.kr --label "KRDS"   # 참조 URL (--kind SERVICE|FIGMA|REFERENCE)
+planning prompt sb CVL_INF_REG_010 --for figma           # AI 요청 프롬프트 (sb|proto|ia|ds)
+
 planning rtm --view matrix     # 요구사항 × 시스템
 planning rtm --write           # rtm/ 에 rtm.md, rtm.json, rtm-*.csv 저장
 planning check                 # 무결성·누락·근거 없는 산출물
 planning snapshot --note "착수 기준선"
 planning diff 0.1              # v0.1 대비 현재 변경 사항
-planning view                  # outputs/viewer.html — 브라우저로 여는 프로젝트 뷰어
+planning view [--url <공유 주소>] # outputs/viewer.html — 브라우저로 여는 프로젝트 뷰어
 ```
 
 기존 서비스는 `--type EXISTING --scope NEW_MENU|MODIFY|RENEWAL`로 만듭니다. `MODIFY`이면 정보구조도 단계는 패스하고 영향 화면 ID만 등록합니다.

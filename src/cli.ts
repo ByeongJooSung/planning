@@ -4,6 +4,7 @@ import { readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { validateModel } from "./model/validate.js";
+import { buildPrompts } from "./ai/prompts.js";
 import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
 import { search } from "./knowledge/search.js";
 import { addKnowledgeFile, loadChunks, removeKnowledgeFile } from "./knowledge/store.js";
@@ -360,6 +361,47 @@ kb.command("rm <sourceId>").action(async (id: string) => {
   console.log(`${id}를 삭제했습니다`);
 });
 
+const link = program.command("link").description("참조 URL (운영 서비스·Figma 파일·참고 사이트·공유 뷰어) — AI 요청 프롬프트에 함께 담긴다");
+link
+  .command("add <url>")
+  .requiredOption("--label <label>")
+  .addOption(new Option("--kind <k>").choices(["SERVICE", "FIGMA", "REFERENCE", "VIEWER", "OTHER"]).default("REFERENCE"))
+  .option("--system <code>", "특정 시스템에만 해당")
+  .action(async (url: string, o) => {
+    await mutate((m) => {
+      if (o.system && !m.systems.some((s) => s.code === o.system)) throw new Error(`등록되지 않은 시스템입니다: ${o.system}`);
+      if (m.project.links.some((l) => l.url === url)) throw new Error(`이미 있는 URL입니다: ${url}`);
+      m.project.links.push({ label: o.label, url, kind: o.kind, systemCode: o.system });
+    });
+    console.log(`참조 URL을 추가했습니다: ${o.label} ${url}`);
+  });
+link.command("list").action(async () => {
+  const m = await loadModel(await resolveDir());
+  m.project.links.forEach((l, i) => console.log(`${i + 1}\t${l.kind}\t${l.label}${l.systemCode ? ` (${l.systemCode})` : ""}\t${l.url}`));
+});
+link.command("rm <url>").action(async (url: string) => {
+  await mutate((m) => {
+    const before = m.project.links.length;
+    m.project.links = m.project.links.filter((l) => l.url !== url);
+    if (m.project.links.length === before) throw new Error(`등록되지 않은 URL입니다: ${url}`);
+  });
+  console.log(`${url}를 삭제했습니다`);
+});
+
+program
+  .command("prompt <kind> [target]")
+  .description("AI 요청 프롬프트 출력 — kind: sb <화면ID> | proto <TaskID> | ia [시스템|ALL] | ds <시스템>")
+  .addOption(new Option("--for <t>", "대상").choices(["figma", "claude"]).default("claude"))
+  .option("--url <viewerUrl>", "공유 뷰어 주소 (프롬프트 참조 URL에 포함)")
+  .action(async (kind: string, target: string | undefined, o) => {
+    const dir = await resolveDir();
+    const prompts = buildPrompts(await loadModel(dir), await loadChunks(dir), { viewerUrl: o.url });
+    const key = `${kind}:${target ?? "ALL"}`;
+    const p = prompts[key];
+    if (!p) throw new Error(`프롬프트가 없습니다: ${key} (가능: ${Object.keys(prompts).join(", ")})`);
+    process.stdout.write(o.for === "figma" ? p.figma : p.claude);
+  });
+
 const design = program.command("design").description("시스템별 디자인 시스템");
 design
   .command("propose <system>")
@@ -406,13 +448,14 @@ program
   .option("--all", "루트의 모든 프로젝트를 한 뷰어에 담기")
   .option("--out <file>", "출력 파일 (기본: 프로젝트 폴더의 outputs/viewer.html, --all이면 루트/viewer.html)")
   .option("--fragment", "문서 뼈대(<html>, <head>) 없이 본문 조각만 출력")
+  .option("--url <viewerUrl>", "이 뷰어를 올릴 주소 (AI 요청 프롬프트의 참조 URL로 들어감)")
   .action(async (o) => {
     const { root } = program.opts<{ root: string }>();
     const dirs = o.all ? (await listProjectCodes(root)).map((c) => projectDir(root, c)) : [await resolveDir()];
     if (!dirs.length) throw new Error(`프로젝트가 없습니다 (${root})`);
     const now = new Date();
-    const projects = await Promise.all(dirs.map((d) => collectViewerProject(d, now)));
-    const html = await renderViewer({ generatedAt: now.toISOString(), projects }, { standalone: !o.fragment });
+    const projects = await Promise.all(dirs.map((d) => collectViewerProject(d, now, { viewerUrl: o.url })));
+    const html = await renderViewer({ generatedAt: now.toISOString(), viewerUrl: o.url, projects }, { standalone: !o.fragment });
     const out = o.out ?? (o.all ? path.join(root, "viewer.html") : path.join(dirs[0]!, "outputs", "viewer.html"));
     await writeFile(out, html);
     console.log(`뷰어를 만들었습니다: ${out} (프로젝트 ${projects.length}건)`);

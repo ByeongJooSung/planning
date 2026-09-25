@@ -107,6 +107,41 @@
         "ORIGINAL"
       ]
     },
+    "links": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "kind": {
+            "default": "REFERENCE",
+            "type": "string",
+            "enum": [
+              "SERVICE",
+              "FIGMA",
+              "REFERENCE",
+              "VIEWER",
+              "OTHER"
+            ]
+          },
+          "systemCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ]
+      }
+    },
     "version": {
       "default": "0.1",
       "type": "string",

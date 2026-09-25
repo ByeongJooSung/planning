@@ -16,6 +16,14 @@
     "popupSuffix": "_P{nn}"
   },
   "requirementIdMode": "GENERATED",
+  "links": [
+    {
+      "label": "운영 중인 주문 내역 화면(예시 주소)",
+      "url": "https://shop.example.com/my/orders",
+      "kind": "SERVICE",
+      "systemCode": "USR"
+    }
+  ],
   "version": "0.1",
   "stages": {
     "S0": "CONFIRMED",

@@ -100,6 +100,42 @@
     return '<div class="cmd"><code>' + esc(cmd) + '</code><button class="btn-sm" data-copy="' + esc(cmd) + '">복사</button></div>';
   }
 
+  // ── 실제 규격 스테이지 ─────────────────────────
+  // 설계 화면은 항상 1920px 폭으로 배치한 뒤 통째로 축소한다(transform). 반응형 재배치가 없으므로 줄바꿈이 생기지 않는다.
+  var VW = DATA.viewport ? DATA.viewport.width : 1920, VH = DATA.viewport ? DATA.viewport.height : 1080;
+  function stage(html, o) {
+    o = o || {};
+    var w = o.w || VW, h = o.h;
+    var cls = "stage-in " + (h ? "fixed" : "full") + (o.page ? " pg" : "");
+    return '<div class="stage' + (o.cls ? " " + o.cls : "") + '" data-w="' + w + '"' + (h ? ' data-h="' + h + '"' : "") + (o.max ? ' data-max="' + o.max + '"' : "") + '><div class="' + cls + '" style="width:' + w + "px" + (h ? ";height:" + h + "px" : "") + '">' + html +
+      (o.page ? '<div class="fold" style="top:' + VH + 'px"><span>' + VH + "px · 첫 화면 끝</span></div>" : "") + "</div></div>" +
+      (o.cap === false ? "" : '<div class="stage-cap"><span>' + esc(o.label || (w + " × " + (h || "가변"))) + '</span><span class="pct"></span></div>');
+  }
+  function fitStages(root) {
+    (root || document).querySelectorAll(".stage").forEach(function (st) {
+      var inner = st.firstElementChild, w = Number(st.dataset.w), avail = st.clientWidth;
+      if (!avail || !inner) return;
+      var sc = Math.min(Number(st.dataset.max || 1), avail / w);
+      inner.style.transform = "scale(" + sc + ")";
+      var h = st.dataset.h ? Number(st.dataset.h) : inner.offsetHeight;
+      st.style.height = Math.ceil(h * sc) + "px";
+      var fold = inner.querySelector(":scope > .fold");
+      if (fold) fold.hidden = inner.offsetHeight <= VH + 4;
+      var cap = st.nextElementSibling;
+      if (cap && cap.classList.contains("stage-cap")) cap.querySelector(".pct").textContent = "실제 크기의 " + Math.round(sc * 1000) / 10 + "%";
+    });
+  }
+  var previews = [];
+  function previewBtn(title, html, h, label) {
+    previews.push({ title: title, html: html, h: h });
+    return '<button class="btn-sm" data-preview="' + (previews.length - 1) + '">' + esc(label || "크게 보기") + "</button>";
+  }
+  function aiBtn(key, label) {
+    var p = P();
+    if (!p.prompts || !p.prompts[key]) return "";
+    return '<button class="ai-btn" data-ai="' + esc(key) + '"><span aria-hidden="true">✦</span> ' + esc(label || "AI 요청") + "</button>";
+  }
+
   /** 와이어프레임 틀에 넣을 시스템·메뉴·위치 정보 */
   function wireCtx(p, code, screenId) {
     var s = sysOf(p, code) || { name: code, users: [], channels: [] };
@@ -161,6 +197,7 @@
 
   // ── 본문 ────────────────────────────────────────
   function render() {
+    previews = [];
     renderLnb();
     var r = state.route, html;
     if (r.view === "home") html = renderHome();
@@ -188,6 +225,7 @@
     var r = state.route;
     if (r.view === "task" && r.tab === "proto") renderProto();
     if (r.view === "project" && r.page === "kb") runSearch();
+    fitStages();
   }
 
   // ── 프로젝트 목록 ───────────────────────────────
@@ -432,12 +470,13 @@
       if (!sb) return '<article class="box sheet">' + headRow + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.</div></article>';
       var wire = screenWire(p, sb, true);
       var ds = designOf(p, sb.systemCode);
-      var left = wire ? '<div class="wire-box"><div class="zoom z55">' + wire + "</div></div>" :
+      var left = wire ? '<div class="wire-box">' + stage(wire, { page: true, label: VW + " × 가변 (첫 화면 " + VH + ")" }) + "</div>" :
         '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
       var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
         return '<tr><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
       }).join("") + "</tbody></table>";
-      return '<article class="box sheet">' + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
+      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>";
+      return '<article class="box sheet">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
     }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다. 공공기관 제출 양식으로 내보내면 장표 단위로 나뉘고, 한 장을 넘으면 같은 화면 ID로 “다음 페이지에 계속”이 붙습니다(S4 출력 기능).</p>';
   }
 
@@ -465,15 +504,16 @@
     var cur = state.proto[t.taskId];
     if (list.indexOf(cur) < 0) cur = state.proto[t.taskId] = list[0];
     var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === cur; });
-    var wire = screenWire(p, sb, false);
+    var wire = screenWire(p, sb, false), ds = selectedDesign(p, sb.systemCode);
     box.innerHTML = '<div class="proto-bar"><span class="hint">화면</span>' + list.map(function (s) {
       var own = t.screens.indexOf(s) >= 0;
       return '<button class="chip-s' + (s === cur ? " on" : "") + '" data-pscreen="' + esc(s) + '">' + esc(s) + (own ? "" : ' <em>연결</em>') + "</button>";
-    }).join("") + "</div>" +
-      (wire ? '<div class="proto-frame" id="proto-frame"><div class="zoom z75">' + wire + "</div></div>" : '<div class="box empty">' + esc(sb.systemCode) + " 디자인 시스템 컨셉을 먼저 선택해야 프로토타입을 볼 수 있습니다.</div>") +
-      '<p class="hint">화면설계서로 자동 생성한 프로토타입입니다. 목록 행, 버튼을 눌러 이동해 보세요. 필수 항목을 비우고 신청하면 설계한 오류 문구가 나옵니다. <em>연결</em> 표시는 이 Task 화면에서 이동하는 다른 화면입니다.</p>';
+    }).join("") + '<span class="sp"></span>' + aiBtn("proto:" + t.taskId, "AI 요청 · Figma / Claude") + "</div>" +
+      (wire ? '<div class="proto-frame" id="proto-frame">' + stage('<div class="wf-vp" style="' + Wire.vars(ds) + '">' + wire + "</div>", { w: VW, h: VH, label: VW + " × " + VH + " 뷰포트 · 화면 안에서 스크롤" }) + "</div>" : '<div class="box empty">' + esc(sb.systemCode) + " 디자인 시스템 컨셉을 먼저 선택해야 프로토타입을 볼 수 있습니다.</div>") +
+      '<p class="hint">원본 ' + VW + "×" + VH + ' 화면을 비율만 줄여 보여 줍니다. 화면설계서로 자동 생성한 프로토타입입니다. 목록 행, 버튼을 눌러 이동해 보세요. 필수 항목을 비우고 신청하면 설계한 오류 문구가 나옵니다. <em>연결</em> 표시는 이 Task 화면에서 이동하는 다른 화면입니다.</p>';
+    fitStages(box);
   }
-  function protoRoot() { var f = document.getElementById("proto-frame"); return f ? f.querySelector(".wf") : null; }
+  function protoRoot() { var f = document.getElementById("proto-frame"); return f ? f.querySelector(".wf-vp") : null; }
   function protoToast(msg, tone) {
     var root = protoRoot();
     if (!root) return;
@@ -565,6 +605,8 @@
     toast: { message: "저장했습니다." },
     modal: { title: "승인·반려 처리", body: "<p style=\"margin:0\">처리 결과를 선택하세요.</p>" }
   };
+  var FULLW = { gnb: 1, footer: 1 };
+  var WIDE = /search-panel|data-table|card-list|hero-banner|quick-links|stat-cards|step-indicator|tabs|detail-table|notice-list|breadcrumb|review/;
   function sample(ds, c, ctx) {
     var props = SAMPLE_PROPS[c.id];
     if (!props) {
@@ -573,11 +615,15 @@
       P().model.storyboard.screens.forEach(function (s) { s.components.forEach(function (x) { if (x.ui && x.ui.component === c.id) sbc = x; }); });
       if (sbc) props = sbc.ui.props;
     }
-    return '<div class="wf ds-sample" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>";
+    var w = FULLW[c.id] ? VW : WIDE.test(c.id) || !SAMPLE_PROPS[c.id] ? ds.tokens.grid.maxWidth : 560;
+    var html = '<div class="wf ds-sample' + (FULLW[c.id] ? " flush" : "") + '" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>";
+    return stage(html, { w: w, label: FULLW[c.id] ? "뷰포트 폭 " + w + "px" : w === 560 ? "기준 폭 560px" : "콘텐츠 최대 폭 " + w + "px" });
   }
-  function thumbs(ds, ctx, scaleCls) {
+  function thumbs(ds, ctx, title) {
     return '<div class="thumbs">' + TEMPLATES.map(function (t) {
-      return '<figure class="thumb"><div class="thumb-in"><div class="zoom ' + scaleCls + '">' + Wire.template(ds, t[0], ctx) + '</div></div><figcaption>' + t[1] + "</figcaption></figure>";
+      var html = Wire.template(ds, t[0], ctx);
+      previews.push({ title: (title ? title + " · " : "") + t[1], html: html, h: VH });
+      return '<figure class="thumb"><button class="thumb-in" data-preview="' + (previews.length - 1) + '" aria-label="' + esc(t[1]) + ' 실제 규격으로 크게 보기">' + stage(html, { w: VW, h: VH, cap: false }) + "</button><figcaption>" + t[1] + '<span class="hint">' + VW + "×" + VH + "</span></figcaption></figure>";
     }).join("") + "</div>";
   }
   function asDs(concept) { return { tokens: concept.tokens, layout: concept.layout, components: [] }; }
@@ -607,7 +653,7 @@
     if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.' + copyBox("planning -p " + p.model.project.code + " design propose " + code) + "</div>";
     else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
-    return '<section class="section">' + chips + "</section>" + body;
+    return '<section class="section"><div class="toolbar">' + chips + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div></section>" + body;
   }
 
   function renderProposals(p, d, ctx) {
@@ -615,9 +661,9 @@
       var ds = asDs(c);
       return '<article class="box concept"><div class="concept-h"><span class="cid">' + esc(c.id) + '</span><div><b>' + esc(c.name) + "</b><p>" + esc(c.summary) + '</p></div></div><p class="fit"><b>어울리는 경우</b> ' + esc(c.fit) + "</p>" +
         swatches(c.tokens) + '<p class="hint">글꼴 ' + esc(fontName(c.tokens.font.family)) + " · 본문 " + c.tokens.font.scale.body + "px · 버튼 높이 " + c.tokens.control.height + "px</p>" + layoutChips(c.layout) +
-        thumbs(ds, ctx, "z20") + '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div></article>";
+        thumbs(ds, ctx, c.id + ". " + c.name) + '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div></article>";
     }).join("");
-    return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p></div>" +
+    return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 미리보기는 모두 " + VW + "×" + VH + " 실제 규격을 축소한 것이고, 누르면 크게 볼 수 있습니다. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p></div>" +
       '<div class="concepts">' + cols + "</div>";
   }
 
@@ -656,7 +702,7 @@
     return '<div class="ds-head box"><div><span class="eyebrow">선택한 컨셉</span><h2>' + esc(chosen.id + ". " + chosen.name) + "</h2><p>" + esc(chosen.summary) + '</p><p class="hint">선택 ' + esc(fmtDate(d.selectedAt)) + " · 컴포넌트 " + d.components.length + "개(추가 " + d.components.filter(function (x) { return x.origin === "ADDED"; }).length + "개) · 아이콘 " + d.icons.length + '개</p></div><div class="pminis">' + others + "</div></div>" +
       '<section class="section"><h2>기초 <small>색상 · 글꼴 · 간격 · 모서리</small></h2>' + foundation + "</section>" +
       '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
-      '<section class="section"><h2>화면 템플릿 <small>화면설계서가 이 틀로 그려집니다</small></h2>' + thumbs(d, ctx, "z30") + "</section>" +
+      '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 크게 보기</small></h2>" + thumbs(d, ctx, chosen.name) + "</section>" +
       '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개</small></h2>" + comps +
       '<div class="note"><b>새 컴포넌트가 필요할 때</b><p class="hint">화면을 그리다 없는 컴포넌트가 필요하면 먼저 디자인 시스템에 추가한 뒤 화면설계서에서 씁니다. 디자인 시스템에 없는 컴포넌트를 쓰면 검사에서 오류가 납니다.</p>' +
       copyBox("planning -p " + p.model.project.code + " design component-add " + d.systemCode + ' <컴포넌트-id> --name "<이름>" --category data --for <Task ID>') + "</div></section>" +
@@ -755,7 +801,8 @@
       return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + " · 화면 " + nodes.filter(function (n) { return n.kind !== "MENU"; }).length + (d ? " · 디자인 " + esc(d.selectedId) : "") + "</span></h3>" +
         (roots.length ? '<ul class="tree">' + roots.map(li).join("") + "</ul>" : '<div class="empty">등록된 화면이 없습니다.</div>') + "</div>";
     }).join("");
-    return '<section class="section"><div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 설계완료 " + done + "개. 화면 옆 상태는 연결된 Task의 진행 상태입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
+    var aiBar = '<div class="ai-bar"><span class="hint">AI 요청</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
+    return '<section class="section">' + aiBar + '<div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 설계완료 " + done + "개. 화면 옆 상태는 연결된 Task의 진행 상태입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
       (m.project.stages.S2 === "SKIPPED" ? '<p class="hint">기존 메뉴 수정(MODIFY) 프로젝트라 정보구조도 단계는 패스했습니다. 영향받는 기존 화면만 표시합니다.</p>' : "") +
       '<div class="ia-cols">' + cols + "</div></section>";
   }
@@ -805,10 +852,70 @@
   }
   function val(v) { return v === undefined ? "(없음)" : typeof v === "string" ? v : JSON.stringify(v); }
 
+  // ── 레이어 팝업: AI 요청 미리보기 · 실제 규격 미리보기 ──
+  var layer = null, lastFocus = null;
+  function openLayer(l) {
+    lastFocus = document.activeElement;
+    layer = l;
+    renderLayer();
+  }
+  function closeLayer() {
+    layer = null;
+    document.getElementById("layer").innerHTML = "";
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  function renderLayer() {
+    var root = document.getElementById("layer");
+    if (!layer) { root.innerHTML = ""; return; }
+    var body;
+    if (layer.kind === "ai") {
+      var ps = P().prompts[layer.key], text = ps[layer.target];
+      var TARGET = {
+        figma: ["Figma에 그리기", "Figma MCP가 연결된 Claude(Claude Code, Claude 앱)에 붙여 넣으면 Figma 파일에 바로 그립니다. 등록된 Figma 파일이 없으면 새 파일을 만들어 링크를 알려 줍니다."],
+        claude: ["Claude에 요청", "Claude에 붙여 넣으면 검토 결과와 planning 도구에 다시 넣을 수 있는 형식의 결과를 돌려줍니다."]
+      };
+      body = '<header class="layer-h"><div><span class="eyebrow">AI 요청 미리보기</span><h2 id="layer-t">' + esc(ps.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+        '<div class="layer-tools"><div class="seg" role="group" aria-label="요청 대상">' + ["figma", "claude"].map(function (k) {
+          return '<button data-ltarget="' + k + '" aria-pressed="' + (layer.target === k) + '">' + TARGET[k][0] + "</button>";
+        }).join("") + '</div><p class="hint">' + TARGET[layer.target][1] + "</p></div>" +
+        '<div class="layer-meta"><div><b>포함된 참조 URL</b>' + (ps.urls.length ? "<ul>" + ps.urls.map(function (u) { return "<li>" + esc(u.label) + ' <a href="' + esc(u.url) + '" target="_blank" rel="noopener">' + esc(u.url) + "</a></li>"; }).join("") + "</ul>" : '<p class="hint">등록된 참조 URL이 없습니다. <code>planning link add &lt;URL&gt; --label "…"</code></p>') +
+        '</div><div><b>참조자료 근거</b><p class="hint">' + (ps.evidence ? "관련 문단 " + ps.evidence + "개를 프롬프트에 넣었습니다." : "관련 문단을 찾지 못했습니다.") + "</p></div></div>" +
+        '<pre id="layer-pre" class="layer-pre" tabindex="0">' + esc(text) + "</pre>" +
+        '<footer class="layer-f"><span class="hint">' + text.length.toLocaleString() + '자</span><button class="btn-primary" data-copy-layer>프롬프트 복사</button></footer>';
+    } else {
+      var pv = previews[layer.index];
+      body = '<header class="layer-h"><div><span class="eyebrow">실제 규격 미리보기 · ' + VW + " × " + (pv.h || "가변") + '</span><h2 id="layer-t">' + esc(pv.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+        '<div class="layer-stage">' + stage(pv.html, { w: VW, h: pv.h, page: !pv.h }) + "</div>";
+    }
+    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "preview" ? " wide" : "") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
+    fitStages(root);
+    var x = root.querySelector("[data-close-layer]");
+    if (x) x.focus();
+  }
+  function copyLayer(btn) {
+    var ps = P().prompts[layer.key], text = ps[layer.target];
+    var ok = function () { btn.textContent = "복사했습니다"; setTimeout(function () { btn.textContent = "프롬프트 복사"; }, 1800); };
+    var fail = function () { selectText(document.getElementById("layer-pre")); btn.textContent = "선택했습니다. Ctrl+C로 복사하세요"; };
+    try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); }
+  }
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && layer) closeLayer(); });
+
   // ── 이벤트 ─────────────────────────────────────
   function go(route) { state.route = route; persist(); render(); window.scrollTo(0, 0); }
   document.addEventListener("click", function (ev) {
     var target = ev.target;
+    if (layer) {
+      if (target.hasAttribute && target.hasAttribute("data-backdrop")) { closeLayer(); return; }
+      var lb = target.closest("button");
+      if (lb && lb.hasAttribute("data-close-layer")) { closeLayer(); return; }
+      if (lb && lb.dataset.ltarget) { layer.target = lb.dataset.ltarget; renderLayer(); return; }
+      if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
+      if (target.closest(".layer")) return;
+    }
+    var pvb = target.closest && target.closest("[data-preview]");
+    if (pvb) { openLayer({ kind: "preview", index: Number(pvb.dataset.preview) }); return; }
+    var aib = target.closest && target.closest("[data-ai]");
+    if (aib) { openLayer({ kind: "ai", key: aib.dataset.ai, target: "figma" }); return; }
     var frame = target.closest && target.closest("#proto-frame");
     if (frame) { if (protoClick(target)) ev.preventDefault(); return; }
     var t = target.closest("button");
@@ -853,5 +960,8 @@
     else if (v.charAt(0) === "p" && /^p\d+$/.test(v)) go({ view: "project", p: Number(v.slice(1)), page: "dash" });
     else go({ view: "project", p: state.route.p, page: v });
   });
+  var rt = null;
+  window.addEventListener("resize", function () { cancelAnimationFrame(rt); rt = requestAnimationFrame(function () { fitStages(); }); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitStages(); });
   render();
 })();

@@ -2,14 +2,26 @@
 .wf {
   position: relative; background: var(--w-bg); color: var(--w-text); font-family: var(--w-font); font-size: var(--w-body);
   line-height: 1.5; text-align: left; overflow: hidden; color-scheme: light;
+  display: flex; flex-direction: column; min-height: 100%;
 }
+.wf > .wf-main { flex: 1 0 auto; }
+.stage-in.fixed > .wf { height: 100%; }
+.stage-in.pg > .wf { min-height: 1080px; }
+/* 프로토타입: 1920×1080 뷰포트 안에서 화면이 스크롤된다. 확인 창·토스트는 뷰포트(.wf-vp)에 붙는다 */
+.wf-vp { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: var(--w-font); }
+.wf-vp > .wf { height: 100%; overflow-y: auto; }
+/* 실제 규격 고정 배치: 한 줄 요소는 줄바꿈하지 않는다 */
+.wf-menu span, .wf-utl, .wf-logo, .wf-bc, .wf-lbl, .wf-badge, .wf-btn, .wf-tabs span, .wf-steps li, .wf-opt, .wf-sf span,
+.wf-table th, .wf-table td, .wf-thead, .wf-pg, .wf-ql span, .wf-links span, .wf-stat span, .wf-mega span, .wf-mega b,
+.wf-side nav span, .wf-footer span, .wf-utilbar span, .wf-hsearch, .wf-dtable th, .wf-gh b, .wf-meta, .wf-card b, .wf-files span { white-space: nowrap; }
+.wf-notice li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .wf * { box-sizing: border-box; }
 .wf button { font: inherit; }
 .wf .wf-ic { flex: none; }
 .wf-container { max-width: var(--w-max); margin: 0 auto; padding: 0 calc(var(--w-pad)); display: flex; align-items: center; gap: calc(var(--w-sp) * 3); }
 .wf-main { padding-block: calc(var(--w-pad) * 1.2) calc(var(--w-pad) * 2); }
 .wf-main > .wf-container { display: block; }
-.wf-bare { min-height: 520px; display: grid; place-items: center; padding: 40px; }
+.wf-bare { flex: 1 0 auto; min-height: 520px; display: grid; place-items: center; padding: 40px; }
 
 /* 헤더 */
 .wf-header { background: var(--w-nav); color: var(--w-on-nav); border-bottom: 1px solid var(--w-border); }
@@ -38,7 +50,7 @@
 .wf-mega b { color: var(--w-text); font-size: var(--w-body); margin-bottom: 4px; }
 
 /* 사이드 레이아웃 */
-.wf-sshell { display: grid; grid-template-columns: 220px 1fr; min-height: 560px; }
+.wf-sshell { display: grid; grid-template-columns: 240px 1fr; flex: 1 0 auto; min-height: 560px; }
 .wf-side { background: var(--w-nav); color: var(--w-on-nav); padding: 18px 12px; display: flex; flex-direction: column; gap: 22px; }
 .wf-side .wf-logo b { font-size: var(--w-body); }
 .wf-side nav { display: flex; flex-direction: column; gap: 2px; }
@@ -78,6 +90,7 @@
 .wf-row { display: flex; align-items: center; gap: 6px; }
 .wf-tilde { color: var(--w-muted); }
 .wf-field { display: flex; flex-direction: column; gap: 6px; }
+.wf-field > .wf-input { flex: none; }
 .wf-lbl { font-weight: 600; font-size: var(--w-small); }
 .wf-req { color: var(--w-danger); font-style: normal; }
 .wf-opts { display: flex; gap: 20px; min-height: var(--w-h); align-items: center; }

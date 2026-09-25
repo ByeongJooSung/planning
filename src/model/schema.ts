@@ -48,6 +48,14 @@ export const RequirementIdMode = z.enum([
   "ORIGINAL", // RFP 원본 ID(SFR-001 등)를 그대로 ID로 사용
 ]);
 
+export const ProjectLink = z.object({
+  label: z.string().min(1),
+  url: z.url(),
+  kind: z.enum(["SERVICE", "FIGMA", "REFERENCE", "VIEWER", "OTHER"]).default("REFERENCE"),
+  /** 특정 시스템에만 해당하면 시스템 코드 */
+  systemCode: z.string().optional(),
+});
+
 export const Project = z.object({
   schemaVersion: z.literal(1).default(1),
   code: z.string().regex(/^[A-Za-z0-9_-]{2,40}$/),
@@ -59,6 +67,8 @@ export const Project = z.object({
   screenIdRule: ScreenIdRule.default(ScreenIdRule.parse({})),
   requirementIdMode: RequirementIdMode.default("GENERATED"),
   /** 현재 작업 버전. 스냅샷을 찍으면 이 번호로 고정되고 다음 번호로 올라간다. */
+  /** 참조 URL — 운영 서비스, Figma 파일, 참고 사이트, 공유 뷰어. AI 요청 프롬프트에 함께 담긴다 */
+  links: z.array(ProjectLink).default([]),
   version: z.string().regex(/^\d+\.\d+$/).default("0.1"),
   stages: z.partialRecord(StageId, StageStatus).default({}),
   createdAt: z.string(),
@@ -455,6 +465,7 @@ export type ModelFileName = keyof typeof MODEL_FILES;
 export type StageId = z.infer<typeof StageId>;
 export type StageStatus = z.infer<typeof StageStatus>;
 export type Project = z.infer<typeof Project>;
+export type ProjectLink = z.infer<typeof ProjectLink>;
 export type System = z.infer<typeof System>;
 export type Source = z.infer<typeof Source>;
 export type Requirement = z.infer<typeof Requirement>;

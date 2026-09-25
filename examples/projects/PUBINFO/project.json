@@ -16,6 +16,19 @@
     "popupSuffix": "_P{nn}"
   },
   "requirementIdMode": "ORIGINAL",
+  "links": [
+    {
+      "label": "범정부 UI/UX 디자인 시스템(KRDS)",
+      "url": "https://www.krds.go.kr",
+      "kind": "REFERENCE"
+    },
+    {
+      "label": "정보공개포털(연계 대상)",
+      "url": "https://www.open.go.kr",
+      "kind": "REFERENCE",
+      "systemCode": "EXT"
+    }
+  ],
   "version": "0.1",
   "stages": {
     "S0": "CONFIRMED",

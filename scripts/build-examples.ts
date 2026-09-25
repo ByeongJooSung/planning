@@ -47,6 +47,10 @@ export async function buildPubInfo(root: string): Promise<string> {
   const m = await loadModel(dir);
   addSystem(m, { code: "EXT", name: "외부 연계", users: ["국가 정보공개 포털"], hasScreens: false, color: "#7C3AED" });
   m.project.stages = { S0: "CONFIRMED", S1: "DRAFTED", S2: "DRAFTED", S3: "DRAFTED", S4: "DRAFTED", S5: "NOT_STARTED" };
+  m.project.links.push(
+    { label: "범정부 UI/UX 디자인 시스템(KRDS)", url: "https://www.krds.go.kr", kind: "REFERENCE" },
+    { label: "정보공개포털(연계 대상)", url: "https://www.open.go.kr", kind: "REFERENCE", systemCode: "EXT" },
+  );
 
   // 참조자료 → 프로젝트 지식 (SRC-001 제안요청서, SRC-002 회의록)
   await addKnowledgeFile(dir, m, path.join(FIXTURES, "PUBINFO", "제안요청서_요약.md"), { title: "제안요청서(요약)", now: FIXED_NOW });
@@ -368,6 +372,7 @@ export async function buildShopMy(root: string): Promise<string> {
   );
   const m = await loadModel(dir);
   m.project.stages = { S0: "CONFIRMED", S0A: "CONFIRMED", S1: "CONFIRMED", S2: "SKIPPED", S3: "NOT_STARTED", S4: "DRAFTED", S5: "NOT_STARTED" };
+  m.project.links.push({ label: "운영 중인 주문 내역 화면(예시 주소)", url: "https://shop.example.com/my/orders", kind: "SERVICE", systemCode: "USR" });
 
   addRequirement(m, { title: "주문 내역 기간 조회 필터 추가" }, c);
   addTask(m, "REQ-001", { systemCode: "USR", actor: "회원", action: "기간(1개월/3개월/6개월/직접입력)으로 주문 내역 조회" }, c);
