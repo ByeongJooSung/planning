@@ -86,7 +86,6 @@ describe("Vercel 함수", () => {
   beforeAll(async () => {
     process.env.KV_REST_API_URL = up.url;
     process.env.KV_REST_API_TOKEN = "tok";
-    process.env.PLANNING_SECRET = "vercel-test-secret-1234";
     const { default: handler } = await import("../src/server/vercel.js");
     fn = createServer((req, res) => void handler(req, res));
     await new Promise<void>((r) => fn.listen(0, "127.0.0.1", r));
@@ -96,7 +95,6 @@ describe("Vercel 함수", () => {
     fn.close();
     delete process.env.KV_REST_API_URL;
     delete process.env.KV_REST_API_TOKEN;
-    delete process.env.PLANNING_SECRET;
   });
 
   it("샘플 프로젝트를 넣고 첫 가입자가 운영자가 된다", async () => {
@@ -115,16 +113,16 @@ describe("Vercel 함수", () => {
     expect((await cmd.json()).project.snapshots.length).toBe(one.project.snapshots.length + 1);
   });
 
-  it("설정이 빠지면 안내 화면", async () => {
+  it("저장소 연결이 빠지면 안내 화면", async () => {
     const { default: handler } = await import("../src/server/vercel.js");
-    const saved = process.env.PLANNING_SECRET;
-    delete process.env.PLANNING_SECRET;
+    const saved = process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_URL;
     const s = createServer((req, res) => void handler(req, res));
     await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
     const res = await fetch(`http://127.0.0.1:${(s.address() as AddressInfo).port}/`);
     expect(res.status).toBe(503);
-    expect(await res.text()).toContain("PLANNING_SECRET");
+    expect(await res.text()).toContain("Upstash");
     s.close();
-    process.env.PLANNING_SECRET = saved;
+    process.env.KV_REST_API_URL = saved;
   });
 });

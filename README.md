@@ -50,7 +50,7 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 - **Vercel** (서버리스 + Upstash Redis):
   1. Vercel → Add New → Project → GitHub `byeongjoosung/planning` 가져오기 (Framework: Other — 나머지는 `vercel.json`이 정함)
   2. 프로젝트 → Storage → Marketplace에서 **Upstash for Redis** 만들기 → 이 프로젝트에 연결 (`KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동으로 들어감)
-  3. Settings → Environment Variables에 `PLANNING_SECRET` (16자 이상 임의 문자열, 한 번 정하면 바꾸지 않기). 선택: `ANTHROPIC_API_KEY`, `PLANNING_SIGNUP=closed`
+  3. 선택: Settings → Environment Variables에 `PLANNING_SECRET`(16자 이상, 없으면 첫 실행 때 만들어 Redis에 보관), `ANTHROPIC_API_KEY`, `PLANNING_SIGNUP=closed`
   4. Deployments → Redeploy → `https://<프로젝트>.vercel.app` 접속 → 첫 가입자가 샘플 프로젝트 2개의 운영자
   - 한도: 참조자료 한 번에 3MB(Vercel 요청 4.5MB), AI 생성 최대 300초. 로컬 LLM은 Vercel에서 접속할 수 있는 공개 주소여야 합니다(사내망 주소 불가).
 - **Docker**: `docker build -t planning-studio . && docker run -p 8080:8080 -v planning-data:/data -e PLANNING_SECRET=… planning-studio` — 데이터 볼륨이 비어 있으면 샘플 프로젝트 2개를 넣습니다(`SEED_EXAMPLES=0`이면 안 넣음).
