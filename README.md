@@ -18,6 +18,7 @@
 - 뷰어: 프로젝트 목록 → 프로젝트 상세 → Task 상세(플로우·화면설계서·프로토타입), 통합 산출물
 - 설계 화면 실제 규격(1920×1080) 고정 배치 후 축소 표시 — 줄바꿈 없음
 - AI 요청: 화면설계서·정보구조도·프로토타입·디자인 시스템별 Figma 그리기 / Claude 요청 프롬프트(참조 URL·참조자료 근거 포함)
+- AI 생성·미세조정: 정보구조도·화면설계서·프로세스 플로우 1차 생성 → 후속 프롬프트로 미세조정 → 적용. 디자인 시스템 미세조정은 이를 쓰는 모든 화면에 컴포넌트 단위로 일괄 반영
 
 ## 시작하기
 ```bash
@@ -49,6 +50,10 @@ planning design component-add ADM review-timeline --name "심사 이력 타임�
 
 planning link add https://www.krds.go.kr --label "KRDS"   # 참조 URL (--kind SERVICE|FIGMA|REFERENCE)
 planning prompt sb CVL_INF_REG_010 --for figma           # AI 요청 프롬프트 (sb|proto|ia|ds)
+planning gen prompt ia ADM                                # AI 생성 프롬프트 (ia|sb|flow|ds) → Claude에서 JSON 받기
+planning gen prompt sb ADM_INF_REV_010 --refine v1.json --instruction "검색 조건에 신청인 추가"   # 미세조정
+planning gen apply ds ADM patch.json --instruction "주 색을 더 진하게"   # 반영 (디자인 개정 r+1)
+planning gen review                                       # 디자인 변경 뒤 다시 검토할 화면
 
 planning rtm --view matrix     # 요구사항 × 시스템
 planning rtm --write           # rtm/ 에 rtm.md, rtm.json, rtm-*.csv 저장

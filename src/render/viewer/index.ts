@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Model } from "../../model/schema.js";
+import { buildGenPrompts, REFINE_INSTRUCTION, type GenPrompt } from "../../ai/generate.js";
 import { buildPrompts, VIEWPORT, type PromptSet } from "../../ai/prompts.js";
 import { loadChunks } from "../../knowledge/store.js";
 import type { Chunk } from "../../knowledge/search.js";
@@ -25,6 +26,8 @@ export interface ViewerProject {
   chunks: Chunk[];
   /** AI 요청 프롬프트 (키: sb:화면ID, proto:TaskID, ia:시스템|ALL, ds:시스템) */
   prompts: Record<string, PromptSet>;
+  /** AI 생성 프롬프트 (키: ia:시스템, sb:화면ID, flow:요구사항ID, ds:시스템) */
+  gens: Record<string, GenPrompt>;
 }
 
 export interface ViewerData {
@@ -39,7 +42,7 @@ export async function collectViewerProject(dir: string, now = new Date(), opts: 
   const last = snapshots.at(-1);
   const diff = last ? { from: last.version, entries: diffModels(await loadSnapshot(dir, last.version), model) } : null;
   const chunks = await loadChunks(dir);
-  return { model, rtm: buildRtm(model, now), snapshots, diff, chunks, prompts: buildPrompts(model, chunks, opts) };
+  return { model, rtm: buildRtm(model, now), snapshots, diff, chunks, prompts: buildPrompts(model, chunks, opts), gens: buildGenPrompts(model, chunks, opts) };
 }
 
 const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets");
@@ -61,7 +64,7 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
   const css = (await Promise.all(CSS_FILES.map(read))).join("\n");
   const js = (await Promise.all(JS_FILES.map(read))).join("\n");
   // </script> 로 데이터 블록이 끊기지 않도록 이스케이프
-  const json = JSON.stringify({ viewport: VIEWPORT, ...data }).replace(/</g, "\\u003c");
+  const json = JSON.stringify({ viewport: VIEWPORT, refine: REFINE_INSTRUCTION, ...data }).replace(/</g, "\\u003c");
   const title = opts.title ?? (data.projects.length === 1 ? `${data.projects[0]!.model.project.name}` : "Planning Studio 뷰어");
   const body = `<title>${escapeHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">

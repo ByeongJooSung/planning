@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { readdir, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command, Option } from "commander";
 import { validateModel } from "./model/validate.js";
+import { applyGenerated, GEN_KINDS, screensNeedingReview, type GenKind } from "./ai/apply.js";
+import { buildGenPrompts, REFINE_INSTRUCTION } from "./ai/generate.js";
 import { buildPrompts } from "./ai/prompts.js";
 import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
 import { search } from "./knowledge/search.js";
@@ -401,6 +403,40 @@ program
     if (!p) throw new Error(`프롬프트가 없습니다: ${key} (가능: ${Object.keys(prompts).join(", ")})`);
     process.stdout.write(o.for === "figma" ? p.figma : p.claude);
   });
+
+const gen = program.command("gen").description("AI 생성 — ia <시스템> | sb <화면ID> | flow <요구사항ID> | ds <시스템>(미세조정)");
+gen
+  .command("prompt <kind> <target>")
+  .description("생성 프롬프트 출력 (Claude에 붙여 넣어 JSON 결과를 받는다)")
+  .option("--instruction <text>", "추가 지시 (ds는 필수)")
+  .option("--refine <file>", "직전 결과 JSON 파일 — 미세조정 대화로 출력")
+  .action(async (kind: string, target: string, o) => {
+    const dir = await resolveDir();
+    const g = buildGenPrompts(await loadModel(dir), await loadChunks(dir))[`${kind}:${target}`];
+    if (!g) throw new Error(`생성 대상이 없습니다: ${kind}:${target}`);
+    if (g.requiresInstruction && !o.instruction && !o.refine) throw new Error("디자인 미세조정은 --instruction 이 필요합니다");
+    if (o.refine) {
+      const prev = await readFile(o.refine, "utf8");
+      process.stdout.write(`[1] 사용자\n${g.prompt}${g.requiresInstruction ? "(처음 요청)" : ""}\n\n[2] Claude\n${prev.trim()}\n\n[3] 사용자\n${REFINE_INSTRUCTION}${o.instruction ?? ""}\n`);
+    } else process.stdout.write(g.prompt + (o.instruction ? `\n${g.requiresInstruction ? "" : "## 추가 지시\n"}${o.instruction}\n` : ""));
+  });
+gen
+  .command("apply <kind> <target> <file>")
+  .description("생성 결과 JSON을 모델에 반영")
+  .option("--instruction <text>", "이 결과를 만든 지시 (디자인 개정 이력에 남김)")
+  .action(async (kind: string, target: string, file: string, o) => {
+    if (!(GEN_KINDS as readonly string[]).includes(kind)) throw new Error(`kind는 ${GEN_KINDS.join(" | ")}`);
+    const output = JSON.parse(await readFile(file, "utf8"));
+    const r = await mutate((m) => applyGenerated(m, kind as GenKind, target, output, { instruction: o.instruction }));
+    console.log(r.summary);
+    for (const c of r.changes) console.log(`  - ${c}`);
+    if (kind === "ds" && r.affectedScreens.length) console.log(`다시 그려지는 화면: ${r.affectedScreens.join(", ")}`);
+  });
+gen.command("review").description("디자인 변경 뒤 다시 검토할 화면").action(async () => {
+  const list = screensNeedingReview(await loadModel(await resolveDir()));
+  if (!list.length) console.log("다시 검토할 화면이 없습니다");
+  for (const x of list) console.log(`${x.screenId}\t${x.systemCode}\t디자인 r${x.from ?? 1} → r${x.to}`);
+});
 
 const design = program.command("design").description("시스템별 디자인 시스템");
 design

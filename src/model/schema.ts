@@ -298,6 +298,8 @@ export const StoryboardScreen = z.object({
   taskIds: z.array(z.string()).default([]),
   components: z.array(ComponentSpec).default([]),
   status: z.enum(["DRAFT", "REVIEWED"]).default("DRAFT"),
+  /** 이 화면을 마지막으로 작성·검토할 때의 디자인 시스템 개정 번호 */
+  designRevision: z.number().int().optional(),
 });
 
 export const Storyboard = z.object({ screens: z.array(StoryboardScreen).default([]) });
@@ -438,6 +440,19 @@ export const SystemDesign = z.object({
   layout: LayoutRules.optional(),
   components: z.array(DesignComponent).default([]),
   icons: z.array(z.string()).default([]),
+  /** 디자인 시스템 개정 번호. 미세조정할 때마다 1씩 오른다 */
+  revision: z.number().int().positive().default(1),
+  history: z
+    .array(
+      z.object({
+        rev: z.number().int(),
+        at: z.string(),
+        note: z.string().default(""),
+        instruction: z.string().optional(),
+        changes: z.array(z.string()).default([]),
+      }),
+    )
+    .default([]),
 });
 
 export const Design = z.object({ systems: z.array(SystemDesign).default([]) });

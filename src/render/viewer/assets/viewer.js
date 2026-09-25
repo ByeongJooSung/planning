@@ -1,6 +1,8 @@
 (function () {
   "use strict";
   var DATA = JSON.parse(document.getElementById("planning-data").textContent);
+  // 저장소 기준 모델. AI 적용본(overlay)은 이 위에 덧씌워 p.model을 만든다
+  DATA.projects.forEach(function (p) { p.base = JSON.parse(JSON.stringify(p.model)); });
   var Wire = window.Wire, Flow = window.Flow, KB = window.KB;
 
   var STATUS = { NOT_STARTED: "미착수", IN_DESIGN: "설계중", DESIGNED: "설계완료", REVIEWED: "검토완료", EXCLUDED: "제외" };
@@ -204,10 +206,17 @@
     else if (r.view === "task") html = renderTask();
     else {
       var info = PAGES[r.page] || PAGES.dash, pr = P().model.project;
-      html = '<header class="page-head"><span class="eyebrow">' + esc(pr.name) + '</span><h1>' + info[0] + "</h1><p>" + esc(info[1]) + "</p></header>" + renderPage(r.page);
+      html = '<header class="page-head"><span class="eyebrow">' + esc(pr.name) + '</span><h1>' + info[0] + "</h1><p>" + esc(info[1]) + "</p></header>" + overlayBanner() + renderPage(r.page);
     }
     document.getElementById("main").innerHTML = html;
     afterRender();
+  }
+  function overlayBanner() {
+    var p = P();
+    if (!p.appliedCount) return "";
+    var list = Object.keys(overlays).map(function (k) { return overlays[k]; }).filter(function (o) { return o.project === p.model.project.code && o.applied; });
+    return '<div class="note ov"><b>AI 적용본 ' + list.length + '건이 반영된 화면입니다</b><p class="hint">' + list.map(function (o) { return esc((p.gens[o.kind + ":" + o.target] || {}).title || o.target) + " v" + o.applied; }).join(" · ") +
+      ". 저장소 반영 전이라 요구사항 추적표·누락 수치는 저장소 기준입니다. 저장소에 반영하려면 Claude에 “뷰어의 AI 적용본을 저장소에 반영해 줘”라고 요청하거나 JSON을 <code>planning gen apply</code>로 넣으세요.</p></div>";
   }
   function renderPage(page) {
     switch (page) {
@@ -404,7 +413,7 @@
     var sbCount = t.screens.filter(function (s) { return p.model.storyboard.screens.some(function (x) { return x.screenId === s; }); }).length;
     var tabs = [["flow", "프로세스 플로우"], ["sb", "화면설계서 " + sbCount + "/" + t.screens.length], ["proto", "프로토타입"]];
     var body = tab === "sb" ? taskSheets(p, t) : tab === "proto" ? '<div id="proto"></div>' : taskFlow(p, t);
-    return '<header class="page-head"><nav class="crumbs"><button data-page="req">요구사항·Task</button><span>›</span><span>' + esc(row.requirementId) + " " + esc(row.title) + "</span></nav>" +
+    return overlayBanner() + '<header class="page-head"><nav class="crumbs"><button data-page="req">요구사항·Task</button><span>›</span><span>' + esc(row.requirementId) + " " + esc(row.title) + "</span></nav>" +
       '<h1><span class="mono">' + esc(shortTask(t.taskId, row.requirementId)) + "</span> " + esc(t.action) + "</h1>" +
       '<div class="meta">' + sysChip(t.systemCode) + '<span class="tag">' + esc((sysOf(p, t.systemCode) || {}).name || "") + "</span>" + (t.actor ? '<span class="tag">행위자 ' + esc(t.actor) + "</span>" : "") + pill(t.status) + '<span class="tag mono">' + esc(t.taskId) + "</span></div></header>" +
       '<dl class="box info">' + info.map(function (i) { return "<div><dt>" + i[0] + "</dt><dd>" + i[1] + "</dd></div>"; }).join("") + "</dl>" +
@@ -413,6 +422,10 @@
   }
 
   function taskFlow(p, t) {
+    var fbar = '<div class="ai-bar">' + genBtn("flow:" + t.requirementId, "이 요구사항 플로우 AI 생성·조정") + "</div>";
+    return fbar + taskFlowBody(p, t);
+  }
+  function taskFlowBody(p, t) {
     var ids = p.rtm.rows.find(function (r) { return r.requirementId === t.requirementId; }).tasks.map(function (x) { return x.taskId; });
     var flows = p.model.flows.filter(function (f) { return f.nodes.some(function (n) { return n.taskIds.some(function (id) { return ids.indexOf(id) >= 0; }); }); });
     if (!flows.length) return '<div class="box empty">이 요구사항의 Task는 아직 프로세스 플로우에 연결되지 않았습니다. 다이어그램 단계(S3)에서 만듭니다.</div>';
@@ -467,7 +480,7 @@
       var ctx = wireCtx(p, node.systemCode || t.systemCode, sid);
       var headRow = '<table class="sheet-head"><tbody><tr><th>화면 ID</th><td class="mono">' + esc(sid) + "</td><th>화면명</th><td>" + esc(node.name || (sb && sb.title) || "") + "</td><th>시스템</th><td>" + esc(ctx.systemName) + "</td></tr>" +
         "<tr><th>Location</th><td colspan=\"3\">" + esc(ctx.crumbs.join(" > ")) + "</td><th>화면 유형</th><td>" + esc(KIND[node.kind] || "") + (sb && sb.template ? " · " + esc(sb.template) : "") + "</td></tr></tbody></table>";
-      if (!sb) return '<article class="box sheet">' + headRow + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.</div></article>';
+      if (!sb) return '<article class="box sheet">' + headRow + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.<div class="ai-bar center">' + genBtn("sb:" + sid, "AI로 화면설계서 생성") + "</div></div></article>";
       var wire = screenWire(p, sb, true);
       var ds = designOf(p, sb.systemCode);
       var left = wire ? '<div class="wire-box">' + stage(wire, { page: true, label: VW + " × 가변 (첫 화면 " + VH + ")" }) + "</div>" :
@@ -475,7 +488,7 @@
       var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
         return '<tr><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
       }).join("") + "</tbody></table>";
-      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>";
+      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + revBadge(p, sb);
       return '<article class="box sheet">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
     }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다. 공공기관 제출 양식으로 내보내면 장표 단위로 나뉘고, 한 장을 넘으면 같은 화면 ID로 “다음 페이지에 계속”이 붙습니다(S4 출력 기능).</p>';
   }
@@ -623,7 +636,8 @@
     return '<div class="thumbs">' + TEMPLATES.map(function (t) {
       var html = Wire.template(ds, t[0], ctx);
       previews.push({ title: (title ? title + " · " : "") + t[1], html: html, h: VH });
-      return '<figure class="thumb"><button class="thumb-in" data-preview="' + (previews.length - 1) + '" aria-label="' + esc(t[1]) + ' 실제 규격으로 크게 보기">' + stage(html, { w: VW, h: VH, cap: false }) + "</button><figcaption>" + t[1] + '<span class="hint">' + VW + "×" + VH + "</span></figcaption></figure>";
+      // 미리보기 안에 버튼이 있으므로 감싸는 요소는 button이 아니라 role=button (버튼 중첩 금지)
+      return '<figure class="thumb"><div class="thumb-in" role="button" tabindex="0" data-preview="' + (previews.length - 1) + '" aria-label="' + esc(t[1]) + ' 실제 규격으로 크게 보기">' + stage(html, { w: VW, h: VH, cap: false }) + "</div><figcaption>" + t[1] + '<span class="hint">' + VW + "×" + VH + "</span></figcaption></figure>";
     }).join("") + "</div>";
   }
   function asDs(concept) { return { tokens: concept.tokens, layout: concept.layout, components: [] }; }
@@ -699,7 +713,10 @@
           '<div class="comp-demo' + (x.id === "gnb" || x.id === "footer" ? " flush" : "") + '">' + sample(d, x, ctx) + "</div></article>";
       }).join("") + "</div>";
     }).join("");
-    return '<div class="ds-head box"><div><span class="eyebrow">선택한 컨셉</span><h2>' + esc(chosen.id + ". " + chosen.name) + "</h2><p>" + esc(chosen.summary) + '</p><p class="hint">선택 ' + esc(fmtDate(d.selectedAt)) + " · 컴포넌트 " + d.components.length + "개(추가 " + d.components.filter(function (x) { return x.origin === "ADDED"; }).length + "개) · 아이콘 " + d.icons.length + '개</p></div><div class="pminis">' + others + "</div></div>" +
+    var tune = p.gens["ds:" + d.systemCode] ? '<section class="box tune"><div class="tune-h"><b>디자인 시스템 미세조정</b><span class="pill DESIGNED mono">r' + d.revision + '</span><span class="hint">바꾸고 싶은 점을 적으면 AI가 토큰·레이아웃 패치를 만들고, 적용하면 이 디자인 시스템을 쓰는 화면설계서·프로토타입 ' + p.model.storyboard.screens.filter(function (x) { return x.systemCode === d.systemCode; }).length + '개가 컴포넌트 단위로 한꺼번에 바뀝니다.</span></div>' +
+      '<label class="sr" for="ds-tune">미세조정 요청</label><textarea id="ds-tune" rows="3" placeholder="예: 주 색을 조금 더 진한 파랑으로, 버튼 모서리를 둥글게, 목록을 더 촘촘하게"></textarea>' +
+      '<div class="tune-f">' + dsHistory(d) + '<button class="btn-primary" data-dstune="' + esc(d.systemCode) + '">미세조정 생성</button></div></section>' : "";
+    return tune + '<div class="ds-head box"><div><span class="eyebrow">선택한 컨셉 · 개정 r' + d.revision + '</span><h2>' + esc(chosen.id + ". " + chosen.name) + "</h2><p>" + esc(chosen.summary) + '</p><p class="hint">선택 ' + esc(fmtDate(d.selectedAt)) + " · 컴포넌트 " + d.components.length + "개(추가 " + d.components.filter(function (x) { return x.origin === "ADDED"; }).length + "개) · 아이콘 " + d.icons.length + '개</p></div><div class="pminis">' + others + "</div></div>" +
       '<section class="section"><h2>기초 <small>색상 · 글꼴 · 간격 · 모서리</small></h2>' + foundation + "</section>" +
       '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
       '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 크게 보기</small></h2>" + thumbs(d, ctx, chosen.name) + "</section>" +
@@ -774,34 +791,42 @@
   }
 
   // ── 통합: 정보구조도 ───────────────────────────
-  function renderIa() {
-    var p = P(), m = p.model;
+  function statusByScreen(p) {
     var st = {};
     allTasks(p).forEach(function (t) { t.screens.forEach(function (s) { (st[s] = st[s] || []).push(t.status); }); });
+    return st;
+  }
+  /** 정보구조 트리. mark: {added:{id:true}} 이면 추가 노드를 강조 */
+  function iaTree(nodes, st, mark) {
+    var ids = {};
+    nodes.forEach(function (n) { ids[n.id] = true; });
+    function children(pid) { return nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; }); }
+    function li(n) {
+      var kids = children(n.id), status = minStatus(st[n.id] || []);
+      var tk = n.kind === "MENU" ? "" : n.taskIds.length ? '<span class="tk">' + n.taskIds.map(function (t) { return mark ? esc(t) : '<button class="lnk" data-task="' + esc(t) + '">' + esc(t) + "</button>"; }).join(", ") + "</span>" :
+        n.change === "KEPT" ? "" : '<span class="tk none">연결된 요구사항 없음</span>';
+      return '<li><div class="node ' + n.kind + (mark && mark.added[n.id] ? " gen-added" : "") + '"><div class="top">' + (n.kind === "MENU" ? "" : '<span class="sid">' + esc(n.id) + "</span>") +
+        '<span class="nm">' + esc(n.name) + "</span>" + (n.kind !== "MENU" && n.kind !== "PAGE" ? '<span class="kind">' + (KIND[n.kind] || n.kind) + "</span>" : "") +
+        (n.loginRequired ? '<span class="kind">로그인</span>' : "") + '<span class="chg ' + n.change + '">' + (CHG[n.change] || n.change) + "</span>" + (status && !mark ? pill(status) : "") + (mark && mark.added[n.id] ? '<span class="pill IN_DESIGN">AI 추가</span>' : "") + "</div>" + tk +
+        (n.changeReason ? '<span class="tk">' + esc(n.changeReason) + "</span>" : "") + "</div>" +
+        (kids.length ? "<ul>" + kids.map(li).join("") + "</ul>" : "") + "</li>";
+    }
+    var roots = children(null);
+    return roots.length ? '<ul class="tree">' + roots.map(li).join("") + "</ul>" : '<div class="empty">등록된 화면이 없습니다.</div>';
+  }
+  function renderIa() {
+    var p = P(), m = p.model;
+    var st = statusByScreen(p);
     var screens = m.ia.nodes.filter(function (n) { return n.kind !== "MENU"; });
     var done = screens.filter(function (n) { var s = minStatus(st[n.id] || []); return s === "DESIGNED" || s === "REVIEWED"; }).length;
     var cols = m.systems.filter(function (s) { return sysOn(s.code); }).map(function (s) {
       var nodes = m.ia.nodes.filter(function (n) { return n.systemCode === s.code; });
       if (!s.hasScreens) return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + '</span></h3><div class="empty">화면 없는 시스템 (프로세스 플로우 레인으로만 표시)</div></div>';
-      var ids = {};
-      nodes.forEach(function (n) { ids[n.id] = true; });
-      function children(pid) { return nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; }); }
-      function li(n) {
-        var kids = children(n.id), status = minStatus(st[n.id] || []);
-        var tk = n.kind === "MENU" ? "" : n.taskIds.length ? '<span class="tk">' + n.taskIds.map(function (t) { return '<button class="lnk" data-task="' + esc(t) + '">' + esc(t) + "</button>"; }).join(", ") + "</span>" :
-          n.change === "KEPT" ? "" : '<span class="tk none">연결된 요구사항 없음</span>';
-        return '<li><div class="node ' + n.kind + '"><div class="top">' + (n.kind === "MENU" ? "" : '<span class="sid">' + esc(n.id) + "</span>") +
-          '<span class="nm">' + esc(n.name) + "</span>" + (n.kind !== "MENU" && n.kind !== "PAGE" ? '<span class="kind">' + KIND[n.kind] + "</span>" : "") +
-          (n.loginRequired ? '<span class="kind">로그인</span>' : "") + '<span class="chg ' + n.change + '">' + CHG[n.change] + "</span>" + (status ? pill(status) : "") + "</div>" + tk +
-          (n.changeReason ? '<span class="tk">' + esc(n.changeReason) + "</span>" : "") + "</div>" +
-          (kids.length ? "<ul>" + kids.map(li).join("") + "</ul>" : "") + "</li>";
-      }
-      var roots = children(null);
-      var d = selectedDesign(p, s.code);
+      var d = selectedDesign(p, s.code), ov = appliedOverlay("ia:" + s.code);
       return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + " · 화면 " + nodes.filter(function (n) { return n.kind !== "MENU"; }).length + (d ? " · 디자인 " + esc(d.selectedId) : "") + "</span></h3>" +
-        (roots.length ? '<ul class="tree">' + roots.map(li).join("") + "</ul>" : '<div class="empty">등록된 화면이 없습니다.</div>') + "</div>";
+        '<div class="col-tools">' + genBtn("ia:" + s.code, ov ? "AI 적용본 v" + ov.applied + " · 조정" : "AI 생성·조정") + "</div>" + iaTree(nodes, st) + "</div>";
     }).join("");
-    var aiBar = '<div class="ai-bar"><span class="hint">AI 요청</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
+    var aiBar = '<div class="ai-bar"><span class="hint">AI 요청(프롬프트 복사)</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
     return '<section class="section">' + aiBar + '<div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 설계완료 " + done + "개. 화면 옆 상태는 연결된 Task의 진행 상태입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
       (m.project.stages.S2 === "SKIPPED" ? '<p class="hint">기존 메뉴 수정(MODIFY) 프로젝트라 정보구조도 단계는 패스했습니다. 영향받는 기존 화면만 표시합니다.</p>' : "") +
       '<div class="ia-cols">' + cols + "</div></section>";
@@ -821,7 +846,8 @@
       if (!g) return "";
       return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="box flow-box">' + Flow.svg(g, { color: sysColor }) + "</div></section>";
     }).join("") || '<div class="box empty">이 시스템이 들어간 플로우가 없습니다.</div>';
-    return '<section class="section">' + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
+    var genBar = '<div class="ai-bar"><span class="hint">AI 생성·조정</span>' + p.rtm.rows.filter(function (r) { return p.gens["flow:" + r.requirementId]; }).map(function (r) { return genBtn("flow:" + r.requirementId, r.requirementId + " " + r.title); }).join("") + "</div>";
+    return '<section class="section">' + genBar + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
   }
 
   // ── 버전 ───────────────────────────────────────
@@ -852,6 +878,269 @@
   }
   function val(v) { return v === undefined ? "(없음)" : typeof v === "string" ? v : JSON.stringify(v); }
 
+  // ── AI 생성 · 미세조정 · 적용 ─────────────────────
+  // 생성 결과는 db의 gens 컬렉션에 (프로젝트, 대상)마다 문서 하나로 쌓인다: {versions:[…], applied:n}.
+  // 적용본은 저장소 모델 위에 덧씌워져 화면설계서·프로토타입·정보구조도·플로우에 바로 반영된다.
+  var AI = { sample: null, db: null, dbWrite: true };
+  var overlays = {};
+  function ovId(code, key) { return code + "__" + key.replace(":", "__"); }
+  function overlayOf(key, p) { p = p || P(); return overlays[ovId(p.model.project.code, key)]; }
+  function appliedOverlay(key, p) { var o = overlayOf(key, p); return o && o.applied ? o : null; }
+  function appliedOutput(o) { var v = (o.versions || []).find(function (x) { return x.n === o.applied; }); return v ? v.output : null; }
+  function genBtn(key, label) {
+    var p = P();
+    if (!p.gens || !p.gens[key]) return "";
+    return '<button class="gen-btn" data-gen="' + esc(key) + '"><span aria-hidden="true">✦</span> ' + esc(label) + "</button>";
+  }
+  function merge(base, patch) {
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) return patch === undefined ? base : patch;
+    var out = Object.assign({}, base);
+    Object.keys(patch).forEach(function (k) { out[k] = merge(out[k], patch[k]); });
+    return out;
+  }
+  function flat(o, pre, out) {
+    out = out || {};
+    if (o && typeof o === "object" && !Array.isArray(o)) Object.keys(o).forEach(function (k) { flat(o[k], pre ? pre + "." + k : k, out); });
+    else out[pre] = o;
+    return out;
+  }
+  function designWithPatch(d, patch, rev) {
+    var nd = JSON.parse(JSON.stringify(d));
+    nd.tokens = merge(d.tokens, patch.tokens || {});
+    nd.layout = Object.assign({}, d.layout, patch.layout || {});
+    ((patch.components && patch.components.add) || []).forEach(function (c) {
+      if (!nd.components.some(function (x) { return x.id === c.id; })) nd.components.push(Object.assign({ variants: [], description: "" }, c, { origin: "ADDED", addedFor: "디자인 미세조정" }));
+    });
+    if (rev) nd.revision = rev;
+    return nd;
+  }
+  function designChanges(before, after) {
+    var a = flat({ tokens: before.tokens, layout: before.layout }), b = flat({ tokens: after.tokens, layout: after.layout });
+    var out = Object.keys(b).filter(function (k) { return JSON.stringify(a[k]) !== JSON.stringify(b[k]); }).map(function (k) { return k + ": " + a[k] + " → " + b[k]; });
+    after.components.forEach(function (c) { if (!before.components.some(function (x) { return x.id === c.id; })) out.push("컴포넌트 추가 " + c.id); });
+    return out;
+  }
+  /** 저장소 모델 + 적용본 → 화면에 쓰는 모델 */
+  function rebuild() {
+    DATA.projects.forEach(function (p) {
+      var m = JSON.parse(JSON.stringify(p.base)), code = m.project.code, n = 0;
+      var mine = Object.keys(overlays).map(function (k) { return overlays[k]; }).filter(function (o) { return o.project === code && o.applied; });
+      var order = { ds: 0, ia: 1, sb: 2, flow: 3 };
+      mine.sort(function (a, b) { return order[a.kind] - order[b.kind]; }).forEach(function (o) {
+        var out = appliedOutput(o);
+        if (!out) return;
+        n++;
+        try {
+          if (o.kind === "ds") {
+            m.design.systems = m.design.systems.map(function (d) { return d.systemCode === o.target && d.status === "SELECTED" ? designWithPatch(d, out, o.appliedRev) : d; });
+          } else if (o.kind === "ia") {
+            m.ia.nodes = m.ia.nodes.filter(function (x) { return x.systemCode !== o.target; }).concat(out.nodes.map(function (x) { return Object.assign({ roles: [], taskIds: [], loginRequired: false, change: "NEW", parentId: null }, x, { systemCode: o.target }); }));
+          } else if (o.kind === "sb") {
+            var node = m.ia.nodes.find(function (x) { return x.id === o.target; }) || {};
+            var prev = m.storyboard.screens.find(function (x) { return x.screenId === o.target; });
+            var ds = m.design.systems.find(function (x) { return x.systemCode === node.systemCode; });
+            var next = { screenId: o.target, systemCode: node.systemCode || (prev && prev.systemCode), title: prev ? prev.title : node.name, template: out.template || (prev && prev.template), taskIds: prev ? prev.taskIds : [], components: out.components, status: "DRAFT", designRevision: o.designRev || (ds && ds.revision) };
+            m.storyboard.screens = prev ? m.storyboard.screens.map(function (x) { return x.screenId === o.target ? next : x; }) : m.storyboard.screens.concat([next]);
+          } else if (o.kind === "flow") {
+            m.flows = m.flows.some(function (f) { return f.id === out.id; }) ? m.flows.map(function (f) { return f.id === out.id ? out : f; }) : m.flows.concat([out]);
+          }
+        } catch (e) { n--; }
+      });
+      p.model = m;
+      p.appliedCount = n;
+    });
+  }
+  function revBadge(p, sb) {
+    var d = selectedDesign(p, sb.systemCode);
+    if (!d || (sb.designRevision || 1) >= d.revision) return "";
+    return '<div class="rev-note"><span class="pill IN_DESIGN">디자인 r' + d.revision + " 반영됨</span> 디자인 시스템이 r" + (sb.designRevision || 1) + "에서 r" + d.revision + "로 바뀌어 이 화면이 새 디자인으로 다시 그려졌습니다. 내용을 다시 검토하세요.</div>";
+  }
+  function dsHistory(d) {
+    var o = appliedOverlay("ds:" + d.systemCode);
+    var h = (d.history || []).map(function (x) { return "r" + x.rev + " " + (x.note || x.changes.length + "건"); });
+    if (o) {
+      var v = (o.versions || []).find(function (x) { return x.n === o.applied; }) || {};
+      var ins = v.root || v.instruction || "";
+      h.push("r" + d.revision + " AI 적용본 v" + o.applied + (ins ? " “" + ins.slice(0, 40) + "”" : ""));
+    }
+    return '<span class="hint">개정 이력: ' + (h.length ? esc(h.join(" · ")) : "r1 (컨셉 선택)") + "</span>";
+  }
+  /** 저장소 기준 디자인 시스템 (미세조정 패치는 항상 이것을 기준으로 한다) */
+  function baseDesign(p, code) { return p.base.design.systems.find(function (d) { return d.systemCode === code && d.status === "SELECTED"; }); }
+  function validateOutput(kind, target, out, p) {
+    var errs = [], warns = [];
+    if (!out || typeof out !== "object") return { errs: ["JSON 객체가 아닙니다"], warns: warns };
+    if (kind === "ia") {
+      if (!Array.isArray(out.nodes) || !out.nodes.length) errs.push("nodes 배열이 없습니다");
+      else {
+        var ids = {};
+        out.nodes.forEach(function (n) {
+          if (!n.id || !n.name) errs.push("id·name이 없는 노드가 있습니다");
+          if (ids[n.id]) errs.push("중복 ID " + n.id);
+          ids[n.id] = true;
+          if (["MENU", "PAGE", "POPUP", "LAYER", "TAB", "EXTERNAL"].indexOf(n.kind) < 0) errs.push(n.id + " kind 값 오류: " + n.kind);
+          if ((p.base.ia.retiredIds || []).indexOf(n.id) >= 0) errs.push("폐기된 ID 재사용 " + n.id);
+        });
+        out.nodes.forEach(function (n) { if (n.parentId && !ids[n.parentId]) errs.push(n.id + "의 상위 " + n.parentId + "가 없습니다"); });
+        var tasks = allTasks(p).filter(function (t) { return t.systemCode === target && !t.screenless; });
+        tasks.forEach(function (t) { if (!out.nodes.some(function (n) { return (n.taskIds || []).indexOf(t.taskId) >= 0; })) warns.push(t.taskId + " 에 연결된 화면이 없습니다"); });
+        p.base.storyboard.screens.forEach(function (sbx) { if (sbx.systemCode === target && !ids[sbx.screenId]) warns.push("화면설계서가 있는 " + sbx.screenId + "가 빠졌습니다"); });
+      }
+    } else if (kind === "sb") {
+      if (!Array.isArray(out.components) || !out.components.length) errs.push("components 배열이 없습니다");
+      else {
+        var node = p.model.ia.nodes.find(function (n) { return n.id === target; }) || {};
+        var ds = selectedDesign(p, node.systemCode);
+        out.components.forEach(function (c, i) {
+          if (!c.label) errs.push((i + 1) + "번 항목에 label이 없습니다");
+          if (c.ui && ds && !ds.components.some(function (x) { return x.id === c.ui.component; })) errs.push(c.no + ". " + c.ui.component + " 는 디자인 시스템에 없는 컴포넌트입니다");
+          if (c.ui && c.ui.link && !p.model.ia.nodes.some(function (n) { return n.id === c.ui.link; })) warns.push(c.no + ". 이동 화면 " + c.ui.link + " 가 정보구조도에 없습니다");
+          if (/API|DB|쿼리|서버|백엔드/.test((c.planner || "") + (c.customer || ""))) warns.push(c.no + ". 개발자 관점 표현이 들어 있습니다");
+        });
+        if (!ds) warns.push("디자인 시스템 컨셉이 없어 와이어프레임은 글로만 보입니다");
+      }
+    } else if (kind === "flow") {
+      if (!Array.isArray(out.nodes) || !Array.isArray(out.edges) || !Array.isArray(out.lanes)) errs.push("lanes·nodes·edges 배열이 필요합니다");
+      else {
+        var nid = {};
+        out.nodes.forEach(function (n) { nid[n.id] = true; if (!Array.isArray(n.taskIds)) n.taskIds = []; });
+        out.edges.forEach(function (e) { if (!nid[e.from] || !nid[e.to]) errs.push("없는 노드를 잇는 연결 " + e.from + "→" + e.to); });
+        if (!out.id) errs.push("flow id가 없습니다");
+      }
+    } else if (kind === "ds") {
+      var d0 = baseDesign(p, target);
+      var nd = designWithPatch(d0, out);
+      var hex = /^#[0-9A-Fa-f]{6}$/;
+      Object.keys(nd.tokens.color).forEach(function (k) { if (!hex.test(nd.tokens.color[k])) errs.push("색상 " + k + " 값 오류: " + nd.tokens.color[k]); });
+      var allowed = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
+      Object.keys(nd.layout).forEach(function (k) { if (allowed[k] && allowed[k].indexOf(nd.layout[k]) < 0) errs.push("레이아웃 " + k + " 값 오류: " + nd.layout[k]); });
+      if (!designChanges(d0, nd).length) errs.push("바뀐 내용이 없습니다");
+    }
+    return { errs: errs, warns: warns };
+  }
+  function saveOverlay(key, doc) {
+    var p = P(), id = ovId(p.model.project.code, key);
+    overlays[id] = doc;
+    rebuild();
+    if (!AI.db || !AI.dbWrite) return Promise.resolve(false);
+    return AI.db.collection("gens").doc(id).set(doc).then(function () { return true; }, function (e) {
+      if (e && e.code === "invalid_argument") AI.dbWrite = false;
+      return false;
+    });
+  }
+  var SAMPLE_ERR = {
+    not_granted: "이 페이지에서 Claude 사용이 허락되지 않았습니다.", sampling_disabled: "이 계정에서는 Claude를 쓸 수 없습니다.",
+    rate_limited: "요청이 많습니다. 잠시 뒤 다시 눌러 주세요.", invalid_json: "결과를 JSON으로 읽지 못했습니다. 다시 생성하거나 요청을 줄여 주세요.",
+    prompt_too_large: "보낼 내용이 너무 깁니다. 요청을 줄여 주세요.", refused: "Claude가 이 요청을 처리하지 않았습니다. 요청을 바꿔 주세요.",
+    session_expired: "다시 로그인해 주세요.", empty_completion: "결과가 비었습니다. 요청을 바꿔 다시 시도해 주세요."
+  };
+  function genRun(instruction) {
+    var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
+    var base = layer.sel != null ? doc.versions[layer.sel] : null;
+    if (g.requiresInstruction && !base && !instruction) { layer.err = "조정 요청을 적어 주세요."; renderLayer(); return; }
+    if (base && !instruction) { layer.err = "미세조정 프롬프트를 적어 주세요."; renderLayer(); return; }
+    var first = g.prompt + (g.requiresInstruction ? (base ? base.root || base.instruction || "" : instruction) : (!base && instruction ? "\n## 추가 지시\n" + instruction + "\n" : ""));
+    var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: DATA.refine + instruction }] : first;
+    layer.ctl = new AbortController();
+    layer.busy = true; layer.err = ""; layer.stream = 0;
+    renderLayer();
+    AI.sample.json(input, { signal: layer.ctl.signal, cache: false, onText: function (u) { layer.stream = u.text.length; var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; } })
+      .then(function (out) {
+        var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
+        var v = { n: n, instruction: instruction || "(1차 생성)", from: base ? base.n : null, root: g.requiresInstruction ? (base ? base.root || base.instruction : instruction) : null, output: out, at: new Date().toISOString() };
+        doc = Object.assign({}, doc, { versions: doc.versions.concat([v]).slice(-8), updatedAt: v.at });
+        layer.sel = doc.versions.length - 1;
+        layer.draft = "";
+        return saveOverlay(key, doc).then(function (saved) { layer.saved = saved; });
+      }, function (e) {
+        layer.err = e && e.code === "cancelled" ? "" : (SAMPLE_ERR[e && e.code] || "생성하지 못했습니다(" + (e && e.code) + "). 다시 눌러 주세요.");
+      })
+      .then(function () { layer.busy = false; layer.ctl = null; if (layer) { render(); renderLayer(); } });
+  }
+  function genApply(apply) {
+    var p = P(), key = layer.key, doc = Object.assign({}, overlayOf(key));
+    var v = doc.versions[layer.sel];
+    if (apply) {
+      var chk = validateOutput(doc.kind, doc.target, v.output, p);
+      if (chk.errs.length) { layer.err = "적용할 수 없습니다: " + chk.errs[0]; renderLayer(); return; }
+      doc.applied = v.n;
+      if (doc.kind === "ds") {
+        var d0 = p.base.design.systems.find(function (x) { return x.systemCode === doc.target; });
+        doc.appliedRev = (doc.appliedRev || d0.revision) + 1;
+      }
+      if (doc.kind === "sb") { var nd = p.model.ia.nodes.find(function (x) { return x.id === doc.target; }) || {}; var ds = selectedDesign(p, nd.systemCode); doc.designRev = ds ? ds.revision : null; }
+    } else { doc.applied = null; if (doc.kind === "ds") doc.appliedRev = null; }
+    saveOverlay(key, doc).then(function (saved) { layer.saved = saved; render(); renderLayer(); });
+  }
+
+  function genPreview(p, g, out) {
+    if (!out) return '<div class="empty">아직 생성한 결과가 없습니다. 왼쪽에서 생성하세요.</div>';
+    if (g.kind === "ia") {
+      var before = {};
+      p.base.ia.nodes.forEach(function (n) { if (n.systemCode === g.target) before[n.id] = true; });
+      var added = {}, nodes = out.nodes.map(function (n) { if (!before[n.id]) added[n.id] = true; return Object.assign({ roles: [], taskIds: [], change: "NEW" }, n); });
+      var removed = Object.keys(before).filter(function (id) { return !nodes.some(function (n) { return n.id === id; }); });
+      return '<p class="hint">추가 ' + Object.keys(added).length + " · 삭제 " + removed.length + (removed.length ? " (" + removed.map(esc).join(", ") + ")" : "") + "</p>" + iaTree(nodes, statusByScreen(p), { added: added });
+    }
+    if (g.kind === "flow") return '<div class="flow-box">' + Flow.svg(out, { color: sysColor, suffix: "-gen" }) + "</div>";
+    if (g.kind === "sb") {
+      var node = p.model.ia.nodes.find(function (n) { return n.id === g.target; }) || {};
+      var sb = { screenId: g.target, systemCode: node.systemCode, title: node.name, template: out.template, components: out.components || [] };
+      var wire = screenWire(p, sb, true);
+      var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
+        return '<tr><td><span class="no">' + esc(c.no) + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span></td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
+      }).join("") + "</tbody></table>";
+      return (wire ? stage(wire, { page: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>";
+    }
+    if (g.kind === "ds") {
+      var d0 = baseDesign(p, g.target), nd = designWithPatch(d0, out, d0.revision + 1), ch = designChanges(d0, nd), ctx = wireCtx(p, g.target, null);
+      var screens = p.model.storyboard.screens.filter(function (x) { return x.systemCode === g.target; });
+      var shots = screens.slice(0, 4).map(function (sb) {
+        var node = p.model.ia.nodes.find(function (n) { return n.id === sb.screenId; }) || {};
+        var c2 = wireCtx(p, sb.systemCode, sb.screenId);
+        if (node.kind === "POPUP") { c2.popup = true; c2.parent = p.model.storyboard.screens.find(function (s) { return s.screenId === node.parentId; }); }
+        return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.screen(nd, sb, c2), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + esc(sb.screenId) + "</figcaption></figure>";
+      }).join("");
+      return (out.summary ? "<p><b>" + esc(out.summary) + "</b></p>" : "") + '<ul class="changes">' + ch.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
+        '<h4 class="gen-sub">바뀐 디자인으로 다시 그린 화면 <small>이 디자인 시스템을 쓰는 화면 ' + screens.length + "개 중 " + Math.min(4, screens.length) + "개</small></h4>" + '<div class="thumbs">' + shots + "</div>" +
+        '<h4 class="gen-sub">템플릿</h4><div class="thumbs">' + ["list", "form", "confirm", "modal"].map(function (t) { return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.template(nd, t, ctx), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + t + "</figcaption></figure>"; }).join("") + "</div>";
+    }
+    return "";
+  }
+
+  function renderGenLayer() {
+    var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { versions: [], applied: null };
+    if (layer.sel == null && doc.versions.length) layer.sel = doc.versions.findIndex ? Math.max(0, doc.versions.findIndex(function (v) { return v.n === doc.applied; })) : 0;
+    if (layer.sel != null && layer.sel >= doc.versions.length) layer.sel = doc.versions.length - 1;
+    var sel = layer.sel != null ? doc.versions[layer.sel] : null;
+    var vlist = doc.versions.map(function (v, i) {
+      return '<button class="ver-item' + (i === layer.sel ? " on" : "") + '" data-gsel="' + i + '"><b>v' + v.n + "</b>" + (v.n === doc.applied ? '<span class="pill DESIGNED">적용 중</span>' : "") + "<span>" + esc(v.from ? "v" + v.from + "에서 조정: " : "") + esc(v.instruction) + '</span><em class="hint">' + esc(fmtDate(v.at)) + "</em></button>";
+    }).join("");
+    var canGen = !!AI.sample;
+    var label = !sel ? (g.requiresInstruction ? "조정 요청" : "추가 지시 (선택)") : "미세조정 프롬프트 · v" + sel.n + " 기준";
+    var ph = !sel ? (g.requiresInstruction ? "예: 주 색을 더 진하게, 버튼을 둥글게" : "예: 목록은 50건까지 보이게, 반려 사유 보기 버튼 추가") : "예: 검색 조건에 '신청인' 추가, 버튼 문구를 '공개 신청하기'로";
+    var chk = sel ? validateOutput(g.kind, g.target, sel.output, p) : null;
+    var left = '<div class="gen-left"><div class="gen-status">' + (doc.applied ? '<span class="pill DESIGNED">적용: v' + doc.applied + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') +
+      (AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
+      (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
+      (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
+        '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
+        : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
+      (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + "</p>" : "") +
+      (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
+    var right = '<div class="gen-right">' + (sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 Claude가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
+    var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (sel.n === doc.applied ? " 적용 중" : " 미리보기") : "") + '</span><span class="sp"></span>' +
+      (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (doc.applied ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
+      (sel && sel.n !== doc.applied ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
+    return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 미세조정</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+      '<div class="gen-body">' + left + right + "</div>" + foot;
+  }
+  function copyText(text, btn, okLabel) {
+    var old = btn.textContent;
+    var ok = function () { btn.textContent = okLabel || "복사했습니다"; setTimeout(function () { btn.textContent = old; }, 1600); };
+    try { navigator.clipboard.writeText(text).then(ok, function () { btn.textContent = "복사하지 못했습니다"; }); } catch (e) { btn.textContent = "복사하지 못했습니다"; }
+  }
+
   // ── 레이어 팝업: AI 요청 미리보기 · 실제 규격 미리보기 ──
   var layer = null, lastFocus = null;
   function openLayer(l) {
@@ -868,7 +1157,11 @@
     var root = document.getElementById("layer");
     if (!layer) { root.innerHTML = ""; return; }
     var body;
-    if (layer.kind === "ai") {
+    var draftEl = document.getElementById("gen-in");
+    if (draftEl && layer.kind === "gen") layer.draft = draftEl.value;
+    if (layer.kind === "gen") {
+      body = renderGenLayer();
+    } else if (layer.kind === "ai") {
       var ps = P().prompts[layer.key], text = ps[layer.target];
       var TARGET = {
         figma: ["Figma에 그리기", "Figma MCP가 연결된 Claude(Claude Code, Claude 앱)에 붙여 넣으면 Figma 파일에 바로 그립니다. 등록된 Figma 파일이 없으면 새 파일을 만들어 링크를 알려 줍니다."],
@@ -887,10 +1180,11 @@
       body = '<header class="layer-h"><div><span class="eyebrow">실제 규격 미리보기 · ' + VW + " × " + (pv.h || "가변") + '</span><h2 id="layer-t">' + esc(pv.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
         '<div class="layer-stage">' + stage(pv.html, { w: VW, h: pv.h, page: !pv.h }) + "</div>";
     }
-    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "preview" ? " wide" : "") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
+    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
     fitStages(root);
-    var x = root.querySelector("[data-close-layer]");
-    if (x) x.focus();
+    var gi = document.getElementById("gen-in");
+    if (gi && !layer.busy) gi.focus();
+    else { var x = root.querySelector("[data-close-layer]"); if (x) x.focus(); }
   }
   function copyLayer(btn) {
     var ps = P().prompts[layer.key], text = ps[layer.target];
@@ -898,22 +1192,46 @@
     var fail = function () { selectText(document.getElementById("layer-pre")); btn.textContent = "선택했습니다. Ctrl+C로 복사하세요"; };
     try { navigator.clipboard.writeText(text).then(ok, fail); } catch (e) { fail(); }
   }
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && layer) closeLayer(); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && layer) { if (layer.busy && layer.ctl) layer.ctl.abort(); closeLayer(); return; }
+    var pv = ev.target.closest && ev.target.closest("[data-preview][role=button]");
+    if (pv && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); pv.click(); }
+  });
 
   // ── 이벤트 ─────────────────────────────────────
   function go(route) { state.route = route; persist(); render(); window.scrollTo(0, 0); }
   document.addEventListener("click", function (ev) {
     var target = ev.target;
     if (layer) {
-      if (target.hasAttribute && target.hasAttribute("data-backdrop")) { closeLayer(); return; }
+      if (target.hasAttribute && target.hasAttribute("data-backdrop")) { if (layer.busy) return; closeLayer(); return; }
       var lb = target.closest("button");
-      if (lb && lb.hasAttribute("data-close-layer")) { closeLayer(); return; }
+      if (lb && lb.hasAttribute("data-close-layer")) { if (layer.ctl) layer.ctl.abort(); closeLayer(); return; }
       if (lb && lb.dataset.ltarget) { layer.target = lb.dataset.ltarget; renderLayer(); return; }
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
+      if (lb && layer.kind === "gen") {
+        var gin = document.getElementById("gen-in");
+        if (lb.dataset.gsel != null) { layer.sel = Number(lb.dataset.gsel); layer.err = ""; renderLayer(); return; }
+        if (lb.hasAttribute("data-grun")) { genRun(gin ? gin.value.trim() : ""); return; }
+        if (lb.hasAttribute("data-gnew")) { layer.sel = null; layer.err = ""; renderLayer(); return; }
+        if (lb.hasAttribute("data-gstop")) { if (layer.ctl) layer.ctl.abort(); return; }
+        if (lb.hasAttribute("data-gapply")) { genApply(true); return; }
+        if (lb.hasAttribute("data-gunapply")) { genApply(false); return; }
+        if (lb.hasAttribute("data-gjson")) { var dj = overlayOf(layer.key); copyText(JSON.stringify(dj.versions[layer.sel].output, null, 2), lb); return; }
+        if (lb.hasAttribute("data-gcopy")) { copyText(P().gens[layer.key].prompt, lb); return; }
+      }
       if (target.closest(".layer")) return;
     }
     var pvb = target.closest && target.closest("[data-preview]");
     if (pvb) { openLayer({ kind: "preview", index: Number(pvb.dataset.preview) }); return; }
+    var gb = target.closest && target.closest("[data-gen]");
+    if (gb) { openLayer({ kind: "gen", key: gb.dataset.gen, sel: null }); return; }
+    var tb = target.closest && target.closest("[data-dstune]");
+    if (tb) {
+      var ta = document.getElementById("ds-tune"), txt = ta ? ta.value.trim() : "";
+      openLayer({ kind: "gen", key: "ds:" + tb.dataset.dstune, sel: null, draft: txt });
+      if (txt && AI.sample) genRun(txt);
+      return;
+    }
     var aib = target.closest && target.closest("[data-ai]");
     if (aib) { openLayer({ kind: "ai", key: aib.dataset.ai, target: "figma" }); return; }
     var frame = target.closest && target.closest("#proto-frame");
@@ -963,5 +1281,23 @@
   var rt = null;
   window.addEventListener("resize", function () { cancelAnimationFrame(rt); rt = requestAnimationFrame(function () { fitStages(); }); });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitStages(); });
+  rebuild();
   render();
+  // claude.ai 뷰어에서 열리면 Claude 생성(sample)과 공유 저장(db)을 켠다. 아니면 프롬프트 복사로 대신한다
+  if (window.claude && typeof window.claude.use === "function") {
+    window.claude.use("sample").then(function (s) { AI.sample = s; if (layer && layer.kind === "gen") renderLayer(); }, function () {});
+    window.claude.use("db").then(function (db) {
+      AI.db = db;
+      if (!db) return;
+      try {
+        db.collection("gens").onSnapshot(function (snap) {
+          var next = {};
+          snap.docs.forEach(function (d) { if (d.exists) next[d.id] = d.data(); });
+          overlays = next;
+          rebuild();
+          if (!(layer && layer.busy)) { render(); if (layer) renderLayer(); }
+        }, function () {});
+      } catch (e) { /* 구독 실패: 이 화면에서만 동작 */ }
+    }, function () {});
+  }
 })();

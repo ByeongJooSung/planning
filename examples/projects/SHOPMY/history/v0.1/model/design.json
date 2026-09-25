@@ -198,7 +198,9 @@
         }
       ],
       "components": [],
-      "icons": []
+      "icons": [],
+      "revision": 1,
+      "history": []
     },
     {
       "systemCode": "ADM",
@@ -398,7 +400,9 @@
         }
       ],
       "components": [],
-      "icons": []
+      "icons": [],
+      "revision": 1,
+      "history": []
     }
   ]
 }

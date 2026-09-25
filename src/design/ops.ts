@@ -20,7 +20,7 @@ export function proposeDesign(m: Model, systemCode: string): SystemDesign {
   if (!system.hasScreens) throw new Error(`${systemCode}는 화면이 없는 시스템이라 디자인 시스템이 필요 없습니다`);
   const existing = getSystemDesign(m, systemCode);
   if (existing?.status === "SELECTED") throw new Error(`${systemCode}는 이미 컨셉 ${existing.selectedId}로 디자인 시스템이 만들어졌습니다`);
-  const d: SystemDesign = { systemCode, status: "PROPOSED", proposals: proposeConcepts(system), components: [], icons: [] };
+  const d: SystemDesign = { systemCode, status: "PROPOSED", proposals: proposeConcepts(system), components: [], icons: [], revision: 1, history: [] };
   m.design.systems = m.design.systems.filter((x) => x.systemCode !== systemCode).concat(d);
   return d;
 }

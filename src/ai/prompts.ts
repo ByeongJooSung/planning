@@ -43,8 +43,8 @@ const LAYOUT: Record<string, [string, Record<string, string>]> = {
   density: ["밀도", { comfortable: "여유", compact: "촘촘" }],
   footer: ["푸터", { full: "기관 정보 전체", simple: "간단", none: "없음" }],
 };
-const KIND: Record<string, string> = { MENU: "메뉴", PAGE: "페이지", POPUP: "팝업", LAYER: "레이어", TAB: "탭", EXTERNAL: "외부" };
-const CHANGE: Record<string, string> = { NEW: "신규", CHANGED: "변경", DELETED: "삭제", KEPT: "유지" };
+export const KIND: Record<string, string> = { MENU: "메뉴", PAGE: "페이지", POPUP: "팝업", LAYER: "레이어", TAB: "탭", EXTERNAL: "외부" };
+export const CHANGE: Record<string, string> = { NEW: "신규", CHANGED: "변경", DELETED: "삭제", KEPT: "유지" };
 const TIMING: Record<string, string> = { ON_INPUT: "입력 중", ON_BLUR: "입력칸을 벗어날 때", ON_SUBMIT: "제출 시" };
 
 export function buildPrompts(m: Model, chunks: Chunk[], opts: PromptOptions = {}): Record<string, PromptSet> {
@@ -59,7 +59,7 @@ export function buildPrompts(m: Model, chunks: Chunk[], opts: PromptOptions = {}
   return out;
 }
 
-class Ctx {
+export class Ctx {
   constructor(
     readonly m: Model,
     readonly chunks: Chunk[],
@@ -117,17 +117,17 @@ const KIND_LABEL: Record<string, string> = { SERVICE: "운영 서비스", FIGMA:
 
 // ── 공통 블록 ───────────────────────────────────────
 
-function projectLine(c: Ctx) {
+export function projectLine(c: Ctx) {
   const p = c.m.project;
   const type = p.serviceType === "NEW" ? "신규 구축" : `기존 서비스 개선(${p.changeScope})`;
   return `- 프로젝트: ${p.name} (${p.code}, 작업 버전 v${p.version}, ${type}, 제출 양식 ${p.submissionTemplate === "PUBLIC" ? "공공기관 제출용" : "일반"})`;
 }
 
-function urlBlock(urls: PromptUrl[]) {
+export function urlBlock(urls: PromptUrl[]) {
   return urls.length ? urls.map((u) => `- ${u.label}: ${u.url}`).join("\n") : "- (등록된 참조 URL 없음 — `planning link add <URL>`로 추가)";
 }
 
-function tokensBlock(d: SystemDesign | undefined, code: string): string {
+export function tokensBlock(d: SystemDesign | undefined, code: string): string {
   if (!d || d.status !== "SELECTED" || !d.tokens || !d.layout) {
     return `- ${code} 디자인 시스템 컨셉이 아직 선택되지 않았습니다. 컨셉을 선택한 뒤 다시 요청하세요. (planning design select ${code} <A|B|C>)`;
   }
@@ -145,7 +145,7 @@ function tokensBlock(d: SystemDesign | undefined, code: string): string {
   ].join("\n");
 }
 
-function componentLines(sb: StoryboardScreen): string {
+export function componentLines(sb: StoryboardScreen): string {
   return sb.components
     .map((comp) => {
       const lines = [`${comp.no}. ${comp.label} — ${comp.ui ? `컴포넌트 \`${comp.ui.component}\`` : `(와이어프레임 미작성, 유형 ${comp.kind})`}${comp.ui?.link ? ` → 이동: ${comp.ui.link}` : ""}`];
@@ -168,17 +168,17 @@ function componentLines(sb: StoryboardScreen): string {
     .join("\n");
 }
 
-function componentCatalog(d: SystemDesign | undefined, used?: Set<string>): string {
+export function componentCatalog(d: SystemDesign | undefined, used?: Set<string>): string {
   if (!d || d.status !== "SELECTED") return "- (디자인 시스템 미선택)";
   const list: DesignComponent[] = used ? d.components.filter((x) => used.has(x.id)) : d.components;
   return list.map((x) => `- \`${x.id}\` ${x.name}${x.variants.length ? ` (변형: ${x.variants.join(", ")})` : ""}${x.origin === "ADDED" ? ` [추가 · ${x.addedFor ?? ""}]` : ""} — ${x.description}`).join("\n");
 }
 
-function section(title: string, body: string) {
+export function section(title: string, body: string) {
   return body ? `## ${title}\n${body}\n` : "";
 }
 
-function finish(lines: string[]) {
+export function finish(lines: string[]) {
   return lines.filter(Boolean).join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
 

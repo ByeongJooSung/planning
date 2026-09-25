@@ -701,6 +701,47 @@
             "items": {
               "type": "string"
             }
+          },
+          "revision": {
+            "default": 1,
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "history": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rev": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "at": {
+                  "type": "string"
+                },
+                "note": {
+                  "default": "",
+                  "type": "string"
+                },
+                "instruction": {
+                  "type": "string"
+                },
+                "changes": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "rev",
+                "at"
+              ]
+            }
           }
         },
         "required": [
