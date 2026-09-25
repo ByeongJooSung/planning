@@ -108,6 +108,8 @@ export class HttpError extends Error {
 export interface AccountsOptions {
   /** AI 키 암호화 비밀값 (32바이트 키로 변환) */
   secret: string;
+  /** 서비스 관리자 이메일 (없으면 첫 가입자만 관리자) */
+  admins?: string[];
   /** 서버 기본 AI (환경변수 ANTHROPIC_API_KEY 등) — 프로젝트·개인 설정이 없을 때 */
   serverAi?: Omit<AiResolved, "source"> | null;
   now?: () => Date;
@@ -160,6 +162,46 @@ export class Accounts {
   }
   publicUser(u: User) {
     return { id: u.id, email: u.email, name: u.name, createdAt: u.createdAt };
+  }
+
+  // ── 서비스 관리자 ────────────────────────────
+  /** 서비스 관리자: 첫 가입자, 또는 PLANNING_ADMINS 에 적은 이메일 */
+  async isAdmin(u: User): Promise<boolean> {
+    if ((this.opts.admins ?? []).map(normEmail).includes(u.email)) return true;
+    return (await this.kv.get("acc:first")) === u.id;
+  }
+  /** 전체 회원과 참여 프로젝트 (관리자 화면) */
+  async listUsers() {
+    const ids = await this.kv.smembers(K.users);
+    const docs = await this.kv.mget(ids.map(K.user));
+    const first = await this.kv.get("acc:first");
+    const admins = (this.opts.admins ?? []).map(normEmail);
+    const out = [];
+    for (let i = 0; i < ids.length; i++) {
+      if (!docs[i]) continue;
+      const u = User.parse(JSON.parse(docs[i]!));
+      const projects = [];
+      for (const code of await this.projectsOf(u.id)) {
+        const m = await this.membership(code, u.id);
+        if (m) projects.push({ code, role: m.role });
+      }
+      out.push({ ...this.publicUser(u), projects, isAdmin: u.id === first || admins.includes(u.email) });
+    }
+    return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  /** 회원 삭제 — 혼자 운영자인 프로젝트가 있으면 막는다 (운영자를 먼저 넘기거나 프로젝트를 지워야 함) */
+  async deleteUser(userId: string) {
+    const u = await this.getUser(userId);
+    if (!u) throw new HttpError(404, "없는 회원입니다");
+    const codes = await this.projectsOf(userId);
+    const sole: string[] = [];
+    for (const code of codes) if ((await this.membership(code, userId))?.role === "OWNER" && (await this.ownerCount(code)) === 1) sole.push(code);
+    if (sole.length) throw new HttpError(409, `${u.email} 님이 혼자 운영하는 프로젝트가 있어 삭제할 수 없습니다: ${sole.join(", ")}. 다른 멤버를 운영자로 지정하거나 프로젝트를 먼저 삭제하세요`);
+    for (const code of codes) await this.kv.hdel(K.members(code), userId);
+    // 세션은 회원 문서가 없어지면 더 이상 로그인으로 인정되지 않는다 (sessionUser → 없음)
+    await this.kv.del(K.uproj(userId), K.user(userId), K.email(u.email));
+    await this.kv.srem(K.users, userId);
+    return { email: u.email, projects: codes.length };
   }
 
   /** 가입. first=true면 이 서버의 첫 가입자다 */

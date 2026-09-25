@@ -189,6 +189,26 @@ describe("시나리오", () => {
     expect((await editor.req("GET", "/api/projects")).body.projects).toEqual([]);
   });
 
+  it("서비스 관리자: 첫 가입자만 회원 목록·삭제", async () => {
+    expect((await owner.req("GET", "/api/me")).body.user.isAdmin).toBe(true);
+    expect((await editor.req("GET", "/api/me")).body.user.isAdmin).toBe(false);
+    expect((await editor.req("GET", "/api/admin/users")).status).toBe(403);
+    const list = await owner.req("GET", "/api/admin/users");
+    expect(list.body.users.map((u: { email: string }) => u.email)).toContain("stranger@example.com");
+    const id = (e: string) => list.body.users.find((u: { email: string }) => u.email === e).id;
+    // 혼자 운영하는 프로젝트가 있으면 삭제 불가
+    expect((await editor.req("POST", "/api/projects", { code: "EDOWN", name: "작업자 프로젝트" })).status).toBe(200);
+    const blocked = await owner.req("DELETE", `/api/admin/users/${id("editor@example.com")}`);
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toMatch(/EDOWN/);
+    // 관리자 자신은 삭제 불가
+    expect((await owner.req("DELETE", `/api/admin/users/${id("owner@example.com")}`)).status).toBe(400);
+    // 삭제하면 바로 로그아웃되고 같은 이메일로 다시 가입할 수 있다
+    expect((await owner.req("DELETE", `/api/admin/users/${id("stranger@example.com")}`)).status).toBe(200);
+    expect((await stranger.req("GET", "/api/me")).status).toBe(401);
+    expect((await new Client().req("POST", "/api/signup", { email: "stranger@example.com", name: "다시", password: "password-1" })).status).toBe(200);
+  });
+
   it("앱 화면을 서버 모드로 내려준다", async () => {
     const r = await fetch(base + "/");
     const html = await r.text();

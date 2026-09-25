@@ -694,3 +694,5 @@ body.auth-on .side { display: none; }
 .auth-box .seg button[disabled] { opacity: .4; cursor: not-allowed; }
 .mini-row a { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mini-row.static:has(> .btn-sm) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+#adm-q { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); min-width: 220px; }
+.toolbar .sp { flex: 1; }

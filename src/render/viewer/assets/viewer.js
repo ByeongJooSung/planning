@@ -170,8 +170,8 @@
   function renderLnb() {
     var r = state.route, html = '<div class="brand"><b>Planning Studio</b><span>서비스 기획 산출물 관리</span></div>';
     var opts = [];
-    if (r.view === "home" || r.view === "account") {
-      html += '<nav class="nav-group"><span class="side-label">메뉴</span>' + navItem("전체 프로젝트", 'data-nav="home"', r.view === "home", DATA.projects.length) + (SRV ? navItem("내 계정 · AI 설정", 'data-nav="account"', r.view === "account") : "") + "</nav>";
+    if (r.view === "home" || r.view === "account" || r.view === "admin") {
+      html += '<nav class="nav-group"><span class="side-label">메뉴</span>' + navItem("전체 프로젝트", 'data-nav="home"', r.view === "home", DATA.projects.length) + (SRV ? navItem("내 계정 · AI 설정", 'data-nav="account"', r.view === "account") : "") + (SRV && ME && ME.isAdmin ? navItem("계정 관리 (관리자)", 'data-nav="admin"', r.view === "admin") : "") + "</nav>";
       html += '<nav class="nav-group"><span class="side-label">프로젝트 바로가기</span>' + DATA.projects.map(function (p, i) {
         return navItem(p.model.project.name, 'data-open="' + i + '"', false);
       }).join("") + "</nav>";
@@ -197,7 +197,7 @@
       });
       opts.unshift(["home", "← 전체 프로젝트"]);
     }
-    var cur = r.view === "home" || r.view === "account" ? "home" : r.view === "task" ? "req" : r.page;
+    var cur = r.view === "home" || r.view === "account" || r.view === "admin" ? "home" : r.view === "task" ? "req" : r.page;
     html += '<label class="sr" for="lnb-select">메뉴</label><select id="lnb-select" class="lnb-select">' + opts.map(function (o) {
       return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>";
     }).join("") + "</select>";
@@ -213,6 +213,7 @@
     var r = state.route, html;
     if (r.view === "home") html = renderHome();
     else if (r.view === "account") html = renderAccount();
+    else if (r.view === "admin") html = renderAdmin();
     else if (r.view === "task") html = renderTask();
     else {
       var info = PAGES[r.page] || PAGES.dash, pr = P().model.project;
@@ -1556,7 +1557,7 @@
         });
       });
   }
-  function role() { var p = SRV && state.route.view !== "home" && state.route.view !== "account" ? P() : null; return p ? p.role : null; }
+  function role() { var p = SRV && state.route.view !== "home" && state.route.view !== "account" && state.route.view !== "admin" ? P() : null; return p ? p.role : null; }
   function canEdit() { var r = role(); return r === "OWNER" || r === "EDITOR"; }
   function isOwner() { return role() === "OWNER"; }
   function actBtn(act, label, arg, cls) { return '<button class="' + (cls || "btn-sm") + '" data-act="' + act + '"' + (arg != null ? ' data-arg="' + esc(arg) + '"' : "") + ">" + label + "</button>"; }
@@ -1603,7 +1604,7 @@
   }
   function syncUrl() {
     if (!SRV) return;
-    var r = state.route, want = r.view === "project" || r.view === "task" ? "/p/" + P().model.project.code : r.view === "account" ? "/account" : "/";
+    var r = state.route, want = r.view === "project" || r.view === "task" ? "/p/" + P().model.project.code : r.view === "account" ? "/account" : r.view === "admin" ? "/admin" : "/";
     if (location.pathname !== want && location.pathname.indexOf("/invite/") !== 0) history.replaceState(null, "", want);
   }
 
@@ -1983,6 +1984,58 @@
     }).join("") + "</section>";
   }
 
+  // ── 계정 관리 (서비스 관리자) ──────────────────
+  var adminCache = null, adminSel = {};
+  function renderAdmin() {
+    if (!ME || !ME.isAdmin) return '<div class="box empty">서비스 관리자만 볼 수 있습니다.</div>';
+    if (!adminCache) {
+      api("GET", "/api/admin/users").then(function (r) { adminCache = r; adminSel = {}; render(); }, function (e) { toast(e.message, "err"); });
+      return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>계정 관리</h1></header><div class="box empty">불러오는 중…</div>';
+    }
+    var users = adminCache.users, nSel = Object.keys(adminSel).filter(function (k) { return adminSel[k]; }).length;
+    var rows = users.map(function (u) {
+      var locked = u.isAdmin || u.id === adminCache.me;
+      var owns = u.projects.filter(function (p) { return p.role === "OWNER"; }).length;
+      return '<tr data-admrow="' + esc((u.name + " " + u.email).toLowerCase()) + '"><td>' + (locked ? "" : '<input type="checkbox" data-admsel="' + esc(u.id) + '"' + (adminSel[u.id] ? " checked" : "") + ' aria-label="' + esc(u.email) + ' 선택">') + "</td><td><b>" + esc(u.name) + "</b>" +
+        (u.isAdmin ? ' <span class="pill REVIEWED">관리자</span>' : "") + (u.id === adminCache.me ? ' <span class="tag">나</span>' : "") + '</td><td class="mono">' + esc(u.email) + "</td><td>" + esc(fmtDate(u.createdAt)) + "</td><td>" +
+        (u.projects.length ? u.projects.map(function (p) { return '<span class="tag mono">' + esc(p.code) + " · " + ROLE_LABEL[p.role] + "</span>"; }).join(" ") : '<span class="dash">—</span>') + "</td><td>" +
+        (locked ? "" : actBtn("adm-del", "삭제", u.id, "btn-sm danger")) + (owns ? '<br><span class="hint">운영 ' + owns + "개</span>" : "") + "</td></tr>";
+    }).join("");
+    var test = users.filter(function (u) { return /^claude-qa-/.test(u.email) && !u.isAdmin; }).length;
+    return '<header class="page-head"><span class="eyebrow">Planning Studio · 서비스 관리자</span><h1>계정 관리</h1><p>회원 ' + users.length + "명. 혼자 운영하는 프로젝트가 있는 회원은 삭제할 수 없습니다(다른 멤버를 운영자로 지정하거나 프로젝트를 먼저 삭제). 삭제하면 그 회원은 바로 로그아웃되고 모든 프로젝트에서 빠집니다.</p></header>" +
+      '<section class="section"><div class="toolbar"><input id="adm-q" type="search" placeholder="이름·이메일 검색" autocomplete="off" aria-label="회원 검색">' +
+      (test ? actBtn("adm-seltest", "테스트 계정 " + test + "개 선택 (claude-qa-)") : "") + '<span class="sp"></span>' + actBtn("adm-delsel", "선택 삭제 (" + nSel + ")", null, nSel ? "btn-primary danger" : "btn-sm") + actBtn("adm-reload", "새로고침") + "</div>" +
+      '<div class="box twrap"><table><thead><tr><th></th><th>이름</th><th>이메일</th><th>가입</th><th>프로젝트 · 권한</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>" +
+      '<p class="hint">관리자는 첫 가입자입니다. 관리자를 더 두려면 서버 환경변수 <code>PLANNING_ADMINS</code>에 이메일을 쉼표로 적습니다.</p></section>';
+  }
+  function deleteUsers(ids) {
+    var done = [], fail = [];
+    return ids.reduce(function (pr, id) {
+      return pr.then(function () {
+        return api("DELETE", "/api/admin/users/" + enc(id)).then(function (r) { done.push(r.email); }, function (e) { fail.push(e.message); });
+      });
+    }, Promise.resolve()).then(function () {
+      adminCache = null;
+      render();
+      if (done.length) toast("삭제했습니다: " + done.length + "명");
+      if (fail.length) toast(fail.join("\n"), "err");
+    });
+  }
+  ACTIONS["adm-del"] = function (id) {
+    var u = adminCache.users.find(function (x) { return x.id === id; });
+    confirmAct("회원 삭제", u.name + " (" + u.email + ") 계정을 삭제할까요? 되돌릴 수 없습니다.", "삭제", function () { return deleteUsers([id]); });
+  };
+  ACTIONS["adm-delsel"] = function () {
+    var ids = Object.keys(adminSel).filter(function (k) { return adminSel[k]; });
+    if (!ids.length) { toast("삭제할 회원을 선택하세요"); return; }
+    confirmAct("선택한 회원 삭제", ids.length + "명의 계정을 삭제할까요? 되돌릴 수 없습니다.", ids.length + "명 삭제", function () { return deleteUsers(ids); });
+  };
+  ACTIONS["adm-seltest"] = function () {
+    adminCache.users.forEach(function (u) { if (/^claude-qa-/.test(u.email) && !u.isAdmin && u.id !== adminCache.me) adminSel[u.id] = true; });
+    render();
+  };
+  ACTIONS["adm-reload"] = function () { adminCache = null; render(); };
+
   // ── 로그인 · 가입 · 초대 링크 ───────────────────
   var authState = { mode: "login", invite: null, token: null, err: "" };
   function showAuth(mode) {
@@ -2031,6 +2084,7 @@
       return loadProjects().then(function () {
         if (m) return openProject(decodeURIComponent(m[1]));
         if (location.pathname === "/account") return go({ view: "account" });
+        if (location.pathname === "/admin" && ME && ME.isAdmin) return go({ view: "admin" });
         go({ view: "home" });
       });
     });
@@ -2130,6 +2184,7 @@
     }
     if (d.nav === "home") SRV ? goHome() : go({ view: "home" });
     else if (d.nav === "account") go({ view: "account" });
+    else if (d.nav === "admin") { adminCache = null; go({ view: "admin" }); }
     else if (d.open != null) SRV ? openProject(DATA.projects[Number(d.open)].model.project.code) : go({ view: "project", p: Number(d.open), page: "dash" });
     else if (d.task) go({ view: "task", p: r.p, taskId: d.task, tab: r.view === "task" ? r.tab || "flow" : "flow" });
     else if (d.page) {
@@ -2153,6 +2208,10 @@
   }
   document.addEventListener("input", function (ev) {
     if (ev.target.id === "kb-q") { state.kbQ = ev.target.value; runSearch(); }
+    if (ev.target.id === "adm-q") {
+      var q = ev.target.value.trim().toLowerCase();
+      document.querySelectorAll("[data-admrow]").forEach(function (tr) { tr.hidden = q && tr.getAttribute("data-admrow").indexOf(q) < 0; });
+    }
   });
   document.addEventListener("submit", function (ev) {
     if (ev.target.id === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
@@ -2164,6 +2223,7 @@
       api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(tg.dataset.memrole), { role: tg.value }).then(function () { toast("권한을 바꿨습니다"); renderMembersAsync(); }, function (e) { toast(e.message, "err"); renderMembersAsync(); });
       return;
     }
+    if (tg.dataset && tg.dataset.admsel) { adminSel[tg.dataset.admsel] = tg.checked; render(); return; }
     if (tg.hasAttribute && tg.hasAttribute("data-aipersonal")) { aiCache = {}; ACTIONS["ai-personal"](tg.checked ? "1" : "0"); return; }
     if (ev.target.id !== "lnb-select") return;
     var v = ev.target.value;

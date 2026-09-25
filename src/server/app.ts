@@ -38,6 +38,8 @@ export interface AppOptions {
   openSignup?: boolean;
   /** 한 번에 올릴 수 있는 참조자료 크기(MB). Vercel 함수는 요청 본문이 4.5MB까지다 */
   maxUploadMb?: number;
+  /** 서비스 관리자 이메일 (PLANNING_ADMINS). 첫 가입자는 항상 관리자 */
+  admins?: string[];
   /** 첫 요청 전에 한 번 실행 (샘플 프로젝트 넣기 등) */
   init?: () => Promise<void>;
   /** 테스트용 AI 호출 대체 */
@@ -62,7 +64,7 @@ interface Ctx {
 
 export async function createApp(opts: AppOptions): Promise<{ handle: Handler; accounts: Accounts }> {
   const { kv, repo } = opts;
-  const acc = new Accounts(kv, { secret: opts.secret, serverAi: opts.serverAi, now: opts.now });
+  const acc = new Accounts(kv, { secret: opts.secret, serverAi: opts.serverAi, now: opts.now, admins: opts.admins });
   const ai = opts.aiCaller ?? callAi;
   const maxUploadMb = opts.maxUploadMb ?? 22;
   const bodyLimit = Math.ceil(maxUploadMb * 1.4 + 2) * 1024 * 1024; // base64 부풀림 + 여유
@@ -154,7 +156,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("GET", "/api/me", async (c) => {
     const invites = await acc.invitesFor(c.user!.email);
     return {
-      user: acc.publicUser(c.user!),
+      user: { ...acc.publicUser(c.user!), isAdmin: await acc.isAdmin(c.user!) },
       ai: acc.aiPublic(await acc.userAi(c.user!.id), true),
       invites: await Promise.all(invites.map(async (i) => ({ ...i, projectName: await projectName(i.project) }))),
     };
@@ -163,6 +165,28 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("PUT", "/api/me/ai", async (c) => (await acc.setUserAi(c.user!.id, c.body ?? {}), { ai: acc.aiPublic(await acc.userAi(c.user!.id), true) }));
   on("DELETE", "/api/me/ai", async (c) => (await acc.clearUserAi(c.user!.id), { ai: null }));
   on("POST", "/api/me/ai/test", async (c) => testAi(c, null));
+
+  // 서비스 관리자 — 회원 목록·정리
+  const needAdmin = async (c: Ctx) => {
+    if (!(await acc.isAdmin(c.user!))) throw new HttpError(403, "서비스 관리자만 할 수 있습니다");
+  };
+  on("GET", "/api/admin/users", async (c) => (await needAdmin(c), { users: await acc.listUsers(), me: c.user!.id }));
+  on("DELETE", "/api/admin/users/:id", async (c, p) => {
+    await needAdmin(c);
+    if (p.id === c.user!.id) throw new HttpError(400, "자기 계정은 여기서 삭제할 수 없습니다");
+    const target = await acc.getUser(p.id!);
+    if (target && (await acc.isAdmin(target))) throw new HttpError(400, "서비스 관리자 계정은 삭제할 수 없습니다");
+    return await acc.deleteUser(p.id!);
+  });
+
+  // 상태 — 함수 리전과 저장소 왕복 시간 (배포 리전 맞추기용, 비밀값 없음)
+  on("GET", "/api/health", async () => {
+    const t0 = Date.now();
+    await kv.get("sys:ping");
+    const t1 = Date.now();
+    await kv.get("sys:ping");
+    return { ok: true, region: process.env.VERCEL_REGION ?? "local", kvMs: [t1 - t0, Date.now() - t1] };
+  }, false);
 
   // 초대
   on("POST", "/api/invites/:id/accept", async (c, p) => {
@@ -381,7 +405,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
       if (!url.pathname.startsWith("/api/")) {
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "허용되지 않는 요청");
         if (url.pathname === "/healthz") return send(res, 200, "ok", "text/plain");
-        if (url.pathname === "/" || url.pathname === "/account" || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/p/")) return send(res, 200, shell, "text/html; charset=utf-8");
+        if (url.pathname === "/" || url.pathname === "/account" || url.pathname === "/admin" || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/p/")) return send(res, 200, shell, "text/html; charset=utf-8");
         throw new HttpError(404, "없는 페이지입니다");
       }
       if (opts.init) ready ??= opts.init().catch((e) => {

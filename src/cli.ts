@@ -520,6 +520,7 @@ program
       root,
       secret: process.env.PLANNING_SECRET,
       openSignup: !(o.closedSignup || process.env.PLANNING_SIGNUP === "closed"),
+      admins: (process.env.PLANNING_ADMINS ?? "").split(",").map((x) => x.trim()).filter(Boolean),
       secureCookie: process.env.COOKIE_SECURE === "1" ? true : undefined,
       serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
     });

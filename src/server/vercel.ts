@@ -36,6 +36,7 @@ async function build(): Promise<Handler> {
     repo,
     secret: await secretOf(kv),
     openSignup: process.env.PLANNING_SIGNUP !== "closed",
+    admins: (process.env.PLANNING_ADMINS ?? "").split(",").map((x) => x.trim()).filter(Boolean),
     maxUploadMb: 3, // Vercel 함수 요청 본문 한도 4.5MB (base64 포함)
     serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
     init: async () => {
