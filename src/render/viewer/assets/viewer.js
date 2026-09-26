@@ -1519,19 +1519,45 @@
 
   // ── 레이어 팝업: AI 요청 미리보기 · 실제 규격 미리보기 ──
   var layer = null, lastFocus = null;
+  /** 모달이 열려 있는 동안 뒤 페이지를 고정한다 (스크롤·끌기·터치 스크롤이 뒤로 새지 않게) */
+  var scrollLock = null;
+  function lockScroll(on) {
+    var html = document.documentElement, body = document.body;
+    if (on && !scrollLock) {
+      scrollLock = { y: window.scrollY || html.scrollTop || 0 };
+      body.style.top = -scrollLock.y + "px";
+      html.classList.add("layer-open");
+    } else if (!on && scrollLock) {
+      var y = scrollLock.y;
+      scrollLock = null;
+      html.classList.remove("layer-open");
+      body.style.top = "";
+      window.scrollTo(0, y);
+    }
+  }
+  // 모달 바깥(어두운 배경)을 끌어도 아무것도 움직이지 않게
+  document.addEventListener("touchmove", function (ev) {
+    if (layer && !(ev.target.closest && ev.target.closest(".layer-box"))) ev.preventDefault();
+  }, { passive: false });
+  document.addEventListener("wheel", function (ev) {
+    if (layer && !(ev.target.closest && ev.target.closest(".layer-box"))) ev.preventDefault();
+  }, { passive: false });
   function openLayer(l) {
     lastFocus = document.activeElement;
     layer = l;
+    lockScroll(true);
     renderLayer();
   }
   function closeLayer() {
     layer = null;
     document.getElementById("layer").innerHTML = "";
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    lockScroll(false);
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   }
   function renderLayer() {
     var root = document.getElementById("layer");
-    if (!layer) { root.innerHTML = ""; return; }
+    if (!layer) { root.innerHTML = ""; lockScroll(false); return; }
+    lockScroll(true);
     var body;
     var draftEl = document.getElementById("gen-in");
     if (draftEl && layer.kind === "gen") layer.draft = draftEl.value;

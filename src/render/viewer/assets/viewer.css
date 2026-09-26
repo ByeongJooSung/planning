@@ -752,3 +752,11 @@ body.auth-on .side { display: none; }
 .applied-note { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--st-done); background: var(--st-done-bg); color: var(--st-done); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
 .applied-note span { color: var(--ink); }
 .applied-note .changes { margin: 4px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 12px; }
+
+/* ── 모달이 열리면 뒤 페이지 고정 ── */
+html.layer-open { overflow: hidden; }
+html.layer-open body { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
+html.layer-open .shell { user-select: none; -webkit-user-select: none; }
+.layer { overscroll-behavior: contain; touch-action: none; }
+.layer-box { touch-action: auto; }
+.layer-box, .layer-box * { overscroll-behavior: contain; }
