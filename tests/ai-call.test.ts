@@ -7,6 +7,7 @@ import { callAi, listModels, parseJson, probeModels } from "../src/server/ai.js"
 let base = "";
 let srv: Server;
 const seen: { auth?: string; body?: any }[] = [];
+let busy = 0;
 beforeAll(async () => {
   srv = createServer((req, res) => {
     let b = "";
@@ -24,6 +25,20 @@ beforeAll(async () => {
       if (req.url === "/auth/v1/models") {
         res.statusCode = 401;
         return res.end(JSON.stringify({ error: { message: "Unauthorized" } }));
+      }
+      if (req.url === "/busy/v1/chat/completions") {
+        busy++;
+        if (busy <= 2) {
+          res.statusCode = 503;
+          res.setHeader("retry-after", "1");
+          return res.end(JSON.stringify({ error: "ResourceExhausted: Worker local total request limit reached (74/16)" }));
+        }
+        return res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }] }));
+      }
+      if (req.url === "/down/v1/chat/completions") {
+        res.statusCode = 503;
+        res.setHeader("retry-after", "1");
+        return res.end(JSON.stringify({ error: "ResourceExhausted: Worker local total request limit reached (74/16)" }));
       }
       if (req.url === "/v1/chat/completions") {
         if (body.max_tokens > 4096) {
@@ -84,6 +99,13 @@ describe("OpenAI 호환 호출", () => {
     expect((await probeModels({ provider: "openai-compatible", baseUrl: "https://pc.tail1234.ts.net/v1" }, { VERCEL: "1" })).code).not.toBe("TAILSCALE_ADDRESS");
     expect(await probeModels({ provider: "openai-compatible", baseUrl: "not a url" }, {})).toMatchObject({ ok: false, error: expect.stringMatching(/URL/) });
   });
+  it("요청이 몰려 503이면 두 번까지 다시 보내고, 계속 실패하면 알기 쉽게 알린다", async () => {
+    const root = base.replace(/\/v1$/, "");
+    const r = await callAi({ source: "project", provider: "openai-compatible", baseUrl: `${root}/busy/v1`, model: "m" }, "hi");
+    expect(r.output).toEqual({ ok: true });
+    expect(busy).toBe(3);
+    await expect(callAi({ source: "project", provider: "openai-compatible", baseUrl: `${root}/down/v1`, model: "m" }, "hi")).rejects.toThrow(/요청이 몰려.*다른 모델/);
+  }, 20000);
   it("parseJson", () => {
     expect(parseJson('설명\n{"a":1}\n끝')).toEqual({ a: 1 });
   });

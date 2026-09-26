@@ -39,6 +39,17 @@ describe("서비스 코어", () => {
     expect(reverted.history.at(-1)!.note).toBe("되돌리기");
   });
 
+  it("디자인 미세조정: AI가 돌려준 \"30px\"·\"#fff\" 같은 값도 반영한다", () => {
+    let s = execute(base(), { op: "design.select", systemCode: "PUB", conceptId: "A" }, now).state;
+    s = execute(s, { op: "gen.apply", kind: "ds", target: "PUB", output: { tokens: { font: { scale: { display: "30px", h1: "28" } }, color: { primary: "#0af" } }, componentStyles: { "data-table": { "--w-th-bg": "#123", "--w-row": 40 } } } }, now).state;
+    const d = s.model.design.systems.find((x) => x.systemCode === "PUB")!;
+    expect(d.tokens!.font.scale.display).toBe(30);
+    expect(d.tokens!.font.scale.h1).toBe(28);
+    expect(d.tokens!.color.primary).toBe("#00AAFF");
+    expect(d.componentStyles["data-table"]).toEqual({ "--w-th-bg": "#112233", "--w-row": "40px" });
+    expect(d.revision).toBe(2);
+  });
+
   it("참조자료: 문단을 조각으로 색인하고 같은 파일은 한 번만", () => {
     const seg = [{ locator: "문단 1", text: "정보공개 청구는 10일 안에 결정한다." }];
     let r = execute(base(), { op: "kb.add", fileName: "회의록.txt", sha256: "abc", segments: seg }, now);

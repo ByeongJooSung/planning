@@ -158,8 +158,59 @@ export function outOfScope(patch: DesignPatch, scopeId: string): string[] {
 }
 
 /** 디자인 시스템 미세조정. 토큰·레이아웃·컴포넌트 스타일은 바뀐 값만, 컴포넌트는 추가만 받는다 */
+/**
+ * AI가 돌려준 값을 기준 값의 형태에 맞춘다 — 로컬·소형 모델은 "30px", "30", "#fff" 처럼 돌려주기도 한다.
+ * 기준이 숫자면 숫자로, 기준이 색이면 #RRGGBB 로 바꾼다.
+ */
+export function coerceLike(base: unknown, patch: unknown): unknown {
+  if (patch === null || patch === undefined) return patch;
+  if (typeof base === "number" && typeof patch === "string") {
+    const m = patch.trim().match(/^(-?\d+(?:\.\d+)?)\s*(px|rem)?$/i);
+    if (m) return m[2]?.toLowerCase() === "rem" ? Math.round(Number(m[1]) * 16) : Number(m[1]);
+    return patch;
+  }
+  if (typeof base === "string" && /^#[0-9A-Fa-f]{6}$/.test(base) && typeof patch === "string") return normHex(patch);
+  if (base && typeof base === "object" && !Array.isArray(base) && patch && typeof patch === "object" && !Array.isArray(patch)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(patch as Record<string, unknown>)) out[k] = coerceLike((base as Record<string, unknown>)[k], v);
+    return out;
+  }
+  return patch;
+}
+function normHex(v: string): string {
+  const t = v.trim();
+  const short = t.match(/^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toUpperCase();
+  const full = t.match(/^#?([0-9a-f]{6})$/i);
+  return full ? `#${full[1]!.toUpperCase()}` : t;
+}
+/** 컴포넌트 스타일 변수: 숫자로 오면 형식(px·number)에 맞춰 글자로, 색은 #RRGGBB 로 */
+function coerceStyles(styles: unknown): unknown {
+  if (!styles || typeof styles !== "object") return styles;
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [cid, vars] of Object.entries(styles as Record<string, Record<string, unknown>>)) {
+    const allowed = new Map(styleVarsOf(cid).map((x) => [x.name, x.type]));
+    out[cid] = {};
+    for (const [name, v] of Object.entries(vars ?? {})) {
+      const type = allowed.get(name);
+      let val: unknown = v;
+      if (type === "px") val = typeof v === "number" ? `${v}px` : /^\s*\d+(\.\d+)?\s*$/.test(String(v)) ? `${String(v).trim()}px` : String(v).replace(/\s+/g, "");
+      else if (type === "color") val = normHex(String(v));
+      else if (type) val = String(v).replace(/px$/i, "").trim();
+      out[cid]![name] = val;
+    }
+  }
+  return out;
+}
+export function normalizeDesignPatch(output: unknown, base: { tokens?: unknown }): unknown {
+  if (!output || typeof output !== "object") return output;
+  const o = output as Record<string, unknown>;
+  return { ...o, ...(o.tokens ? { tokens: coerceLike(base.tokens, o.tokens) } : {}), ...(o.componentStyles ? { componentStyles: coerceStyles(o.componentStyles) } : {}) };
+}
+
 export function applyDesignPatch(m: Model, systemCode: string, output: unknown, c: Ctx = {}): ApplyResult {
-  const patch = DesignPatch.parse(output);
+  const cur = m.design.systems.find((x) => x.systemCode === systemCode);
+  const patch = DesignPatch.parse(normalizeDesignPatch(output, { tokens: cur?.tokens }));
   const work = structuredClone(m);
   const d = work.design.systems.find((x) => x.systemCode === systemCode);
   if (d?.status !== "SELECTED" || !d.tokens || !d.layout) throw new Error(`${systemCode} 디자인 시스템이 아직 없습니다. 컨셉을 먼저 선택하세요`);

@@ -96,7 +96,7 @@ describe("디자인 시스템 섹션별 조정 · 컴포넌트 스타일", () =>
     expect(r.changes[0]).toBe("componentStyles.data-table.--w-th-bg: 기본값 → #1F2A3C");
     expect(d.history.at(-1)!.note).toContain("[컴포넌트 data-table]");
     expect(() => apply(m, "ADM", { componentStyles: { "data-table": { "--w-unknown": "#000000" } } })).toThrow("조정할 수 없는 스타일 변수");
-    expect(() => apply(m, "ADM", { componentStyles: { "data-table": { "--w-row": "36" } } })).toThrow("값 형식 오류");
+    expect(() => apply(m, "ADM", { componentStyles: { "data-table": { "--w-row": "abc" } } })).toThrow("값 형식 오류");
     expect(() => apply(m, "ADM", { componentStyles: { nope: { "--w-gen-bg": "#000000" } } })).toThrow("없는 컴포넌트");
   });
 

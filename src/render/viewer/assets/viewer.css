@@ -749,3 +749,6 @@ body.auth-on .side { display: none; }
 .ac-probe.fail { background: var(--crit-bg); border-color: var(--crit); color: var(--crit); }
 .ac-probe.fail .fix, .ac-probe.fail span:last-child { color: var(--ink); }
 .ac-probe.busy { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink-2); }
+.applied-note { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--st-done); background: var(--st-done-bg); color: var(--st-done); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+.applied-note span { color: var(--ink); }
+.applied-note .changes { margin: 4px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 12px; }

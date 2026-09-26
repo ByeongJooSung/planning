@@ -204,19 +204,29 @@ async function callOpenAiCompatible(cfg: AiResolved, turns: Turn[], signal?: Abo
     }
   };
   type Body = { choices?: { message?: { content?: string; reasoning_content?: string }; finish_reason?: string }[]; error?: { message?: string } | string; detail?: string } | null;
-  let res = await post(true);
+  // 요청이 몰려 잠깐 거절(429·503·502·504)하면 조금 쉬었다 두 번까지 다시 보낸다 (Retry-After 를 따름)
+  const send = async (withMax: boolean) => {
+    for (let attempt = 0; ; attempt++) {
+      const r = await post(withMax);
+      if (![429, 502, 503, 504].includes(r.status) || attempt >= 2 || signal?.aborted) return r;
+      const ra = Number(r.headers.get("retry-after"));
+      await new Promise((ok) => setTimeout(ok, Math.min(Number.isFinite(ra) && ra > 0 ? ra * 1000 : [3000, 8000][attempt]!, 15000)));
+    }
+  };
+  let res = await send(true);
   let body = (await res.json().catch(() => null)) as Body;
   // 모델마다 출력 한도가 달라 max_tokens 를 거부하면 빼고 한 번 더 보낸다
   const errText = (b: Body) => (typeof b?.error === "string" ? b.error : b?.error?.message) ?? b?.detail ?? "";
   if (!res.ok && (res.status === 400 || res.status === 422) && /max_tokens|max_completion|maximum|token/i.test(errText(body))) {
-    res = await post(false);
+    res = await send(false);
     body = (await res.json().catch(() => null)) as Body;
   }
   if (!res.ok) {
     const msg = errText(body) || res.statusText;
     if (res.status === 401 || res.status === 403) throw new HttpError(502, "AI API 키가 올바르지 않습니다. AI 설정을 확인하세요");
     if (res.status === 404) throw new HttpError(502, `모델 또는 주소를 찾을 수 없습니다: ${msg}`.slice(0, 240));
-    if (res.status === 429) throw new HttpError(429, "AI 요청이 많습니다. 잠시 뒤 다시 시도하세요");
+    if (res.status === 429 || res.status === 503 || /ResourceExhausted|rate limit|too many requests|overloaded/i.test(msg))
+      throw new HttpError(503, `AI 서버가 지금 요청이 몰려 처리하지 못했습니다 (${res.status}${/ResourceExhausted/i.test(msg) ? " ResourceExhausted" : ""}). 자동으로 3번 시도했습니다. 1~2분 뒤 다시 누르거나, AI 드롭다운에서 다른 모델로 바꿔 보세요. NVIDIA 무료 API는 인기 모델에 요청이 몰리면 이렇게 거절합니다. — 원문: ${msg}`.slice(0, 400));
     throw new HttpError(502, `AI API 오류 (${res.status}): ${msg}`.slice(0, 240));
   }
   const choice = body?.choices?.[0];
