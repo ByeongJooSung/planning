@@ -1553,6 +1553,7 @@
   function api(method, url, body, signal) {
     return fetch(url, { method: method, credentials: "same-origin", signal: signal, headers: { "content-type": "application/json", "x-planning": "1" }, body: method === "GET" ? undefined : JSON.stringify(body === undefined ? {} : body) })
       .then(function (res) {
+        checkVersion(res.headers.get("x-app-version"));
         return res.text().then(function (t) {
           var j;
           try { j = t ? JSON.parse(t) : {}; } catch (e) { j = { error: "응답을 읽지 못했습니다 (" + res.status + ")" }; }
@@ -2167,6 +2168,67 @@
     render();
   };
   ACTIONS["adm-reload"] = function () { adminCache = null; render(); };
+
+  // ── 새 버전 알림 ────────────────────────────────
+  // 서버가 SSE(/api/events)로 버전을 밀어 주고, 모든 API 응답 머리(x-app-version)에도 버전이 실린다.
+  // 다르면 자동으로 새로고침하지 않고 "저장한 뒤 새로고침"을 안내한다.
+  var APP_VERSION = DATA.version || null, newVersion = null, updateHidden = false, es = null, lastAct = Date.now();
+  var IDLE_MS = 10 * 60 * 1000;
+  function checkVersion(v) {
+    if (!SRV || !v || !APP_VERSION || v === APP_VERSION || newVersion === v) return;
+    newVersion = v;
+    updateHidden = false;
+    sseOff();
+    showUpdate();
+  }
+  function hasUnsaved() {
+    if (!layer) return false;
+    if (layer.kind === "form" || layer.kind === "aiconn") return true;
+    if (layer.kind === "gen") { var g = document.getElementById("gen-in"); return !!(layer.busy || (g && g.value.trim())); }
+    if (layer.kind === "review") { var r = document.getElementById("rv-in"); return !!(layer.pending || (r && r.value.trim())); }
+    return false;
+  }
+  function showUpdate() {
+    var bar = document.getElementById("update-bar");
+    if (!bar) { bar = document.createElement("div"); bar.id = "update-bar"; document.body.appendChild(bar); }
+    if (!newVersion) { bar.remove(); return; }
+    bar.className = updateHidden ? "mini" : "";
+    bar.setAttribute("role", updateHidden ? "status" : "alert");
+    bar.innerHTML = updateHidden ? '<button data-upd="open">새 버전 · 새로고침</button>' :
+      '<div class="upd-t"><b>새 버전이 배포됐습니다</b><span>작업 중인 내용을 먼저 저장한 뒤 새로고침하세요. 저장하지 않은 입력은 새로고침하면 사라집니다.</span></div>' +
+      '<div class="upd-a"><button class="btn-sm" data-upd="later">나중에</button><button class="btn-primary" data-upd="reload">저장했어요 · 새로고침</button></div>';
+  }
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("[data-upd]");
+    if (!b) return;
+    ev.stopPropagation();
+    var a = b.getAttribute("data-upd");
+    if (a === "later") { updateHidden = true; showUpdate(); }
+    else if (a === "open") { updateHidden = false; showUpdate(); }
+    else if (a === "reload") {
+      if (hasUnsaved() && !window.confirm("열려 있는 창에 저장하지 않은 입력이 있습니다. 새로고침하면 사라집니다. 계속할까요?")) return;
+      location.reload();
+    }
+  }, true);
+  function sseOn() {
+    if (!SRV || es || newVersion || document.hidden || Date.now() - lastAct > IDLE_MS || typeof EventSource === "undefined") return;
+    es = new EventSource("/api/events");
+    es.addEventListener("version", function (e) { try { checkVersion(JSON.parse(e.data).version); } catch (x) { /* 무시 */ } });
+  }
+  function sseOff() { if (es) { es.close(); es = null; } }
+  function versionPing() {
+    fetch("/api/events?once=1", { method: "HEAD", cache: "no-store" }).then(function (r) { checkVersion(r.headers.get("x-app-version")); }, function () {});
+  }
+  if (SRV) {
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) sseOff();
+      else { lastAct = Date.now(); versionPing(); sseOn(); }
+    });
+    ["pointerdown", "keydown"].forEach(function (t) { document.addEventListener(t, function () { var idle = Date.now() - lastAct > IDLE_MS; lastAct = Date.now(); if (idle) versionPing(); if (!es) sseOn(); }, { passive: true, capture: true }); });
+    // 10분 넘게 조작이 없으면 연결을 쉰다 (서버 비용). 다시 움직이면 버전부터 확인한다
+    setInterval(function () { if (Date.now() - lastAct > IDLE_MS) sseOff(); }, 60 * 1000);
+    window.addEventListener("load", sseOn);
+  }
 
   // ── 설치형 앱 (PWA) ────────────────────────────
   // Chrome·Edge가 설치할 수 있다고 알려 주면(beforeinstallprompt) 메뉴에 "앱으로 설치" 버튼을 띄운다

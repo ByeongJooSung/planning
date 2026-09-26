@@ -35,6 +35,8 @@ export interface ViewerData {
   generatedAt: string;
   /** static: 파일 하나로 여는 읽기 전용 뷰어, server: `planning serve` 웹 서비스 (로그인·편집) */
   mode?: "static" | "server";
+  /** 배포 버전 — 서버 모드에서 새 버전이 뜨면 새로고침 안내에 쓴다 */
+  version?: string;
   viewerUrl?: string;
   projects: ViewerProject[];
 }

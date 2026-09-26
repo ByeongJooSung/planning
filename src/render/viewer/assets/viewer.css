@@ -729,3 +729,14 @@ body.auth-on .side { display: none; }
 .ai-switch { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); max-width: 100%; }
 .gen-ai { display: flex; align-items: center; gap: 6px; width: 100%; font-size: 12px; }
 .gen-ai .ai-switch { flex: 1; min-width: 0; }
+
+/* ── 새 버전 알림 ── */
+#update-bar { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 300; width: min(720px, calc(100vw - 32px)); background: var(--ink); color: var(--surface); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.3); padding: 14px 16px; display: flex; gap: 12px 16px; align-items: center; flex-wrap: wrap; box-sizing: border-box; }
+#update-bar .upd-t { flex: 1 1 320px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+#update-bar .upd-t b { font-size: 14px; }
+#update-bar .upd-t span { opacity: .85; }
+#update-bar .upd-a { display: flex; gap: 8px; }
+#update-bar .btn-sm { background: transparent; color: var(--surface); border-color: color-mix(in srgb, var(--surface) 45%, transparent); }
+#update-bar .btn-primary { background: #f2b441; color: #16202c; }
+#update-bar.mini { width: auto; padding: 0; background: none; box-shadow: none; left: auto; right: 16px; top: auto; bottom: 16px; transform: none; }
+#update-bar.mini button { border: 0; border-radius: 999px; padding: 8px 14px; background: #f2b441; color: #16202c; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.25); }

@@ -51,6 +51,8 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 - 인터넷 배포(Vercel)에서는 `localhost`에 닿지 않습니다. LM Studio·Ollama는 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널)를 넣거나, 같은 네트워크에서 `planning serve`로 띄우세요.
 - 최대 출력 토큰은 연결마다 정할 수 있고(기본 8192), 모델이 그 값을 거부하면 빼고 다시 보냅니다.
 
+**새 버전 알림** — 새 버전이 배포되면 열려 있는 화면 위에 "새 버전이 배포됐습니다. 작업 중인 내용을 먼저 저장한 뒤 새로고침하세요" 알림이 뜹니다(자동 새로고침 없음, 입력 중인 창이 있으면 한 번 더 확인). 서버가 SSE(`/api/events`)로 버전을 알려 주고 모든 API 응답 머리 `x-app-version`에도 버전이 실립니다. Vercel 함수는 WebSocket을 지원하지 않아 SSE를 씁니다. 탭이 숨겨졌거나 10분간 조작이 없으면 연결을 쉬고, 다시 돌아오면 버전부터 확인합니다. 버전은 Vercel이면 커밋, 그 밖에는 `PLANNING_VERSION` 또는 화면 내용 해시입니다.
+
 ### 배포
 - **Vercel** (서버리스 + Upstash Redis):
   1. Vercel → Add New → Project → GitHub `byeongjoosung/planning` 가져오기 (Framework: Other — 나머지는 `vercel.json`이 정함)

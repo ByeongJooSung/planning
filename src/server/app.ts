@@ -42,6 +42,10 @@ export interface AppOptions {
   admins?: string[];
   /** 첫 요청 전에 한 번 실행 (샘플 프로젝트 넣기 등) */
   init?: () => Promise<void>;
+  /** 배포 버전 (기본: 커밋·환경변수·화면 해시) */
+  version?: string;
+  /** 새 버전 알림 스트림을 한 번에 열어 두는 시간(ms) — 끝나면 브라우저가 다시 연결한다 */
+  eventsWindowMs?: number;
   /** 테스트용 AI 호출 대체 */
   aiCaller?: typeof callAi;
   /** 테스트용 모델 목록 대체 */
@@ -64,14 +68,17 @@ interface Ctx {
   body?: any;
 }
 
-export async function createApp(opts: AppOptions): Promise<{ handle: Handler; accounts: Accounts }> {
+export async function createApp(opts: AppOptions): Promise<{ handle: Handler; accounts: Accounts; version: string }> {
   const { kv, repo } = opts;
   const acc = new Accounts(kv, { secret: opts.secret, serverAi: opts.serverAi, now: opts.now, admins: opts.admins });
   const ai = opts.aiCaller ?? callAi;
   const models = opts.modelLister ?? listModels;
   const maxUploadMb = opts.maxUploadMb ?? 22;
   const bodyLimit = Math.ceil(maxUploadMb * 1.4 + 2) * 1024 * 1024; // base64 부풀림 + 여유
-  const shell = await renderViewer({ generatedAt: new Date().toISOString(), projects: [], mode: "server" }, { title: "Planning Studio" });
+  // 배포 버전: Vercel은 커밋, 그 밖에는 PLANNING_VERSION 또는 화면(HTML·JS·CSS) 내용 해시
+  const draft = await renderViewer({ generatedAt: "", projects: [], mode: "server", version: "__VERSION__" }, { title: "Planning Studio" });
+  const version = opts.version ?? (process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) || process.env.PLANNING_VERSION || createHash("sha256").update(draft).digest("hex").slice(0, 12));
+  const shell = draft.replace('"generatedAt":""', `"generatedAt":"${new Date().toISOString()}"`).replace("__VERSION__", version);
   let ready: Promise<void> | null = null;
   // 설치형 앱(PWA): manifest · 서비스 워커 · 아이콘
   const manifest = JSON.stringify({
@@ -439,7 +446,13 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? "/", "http://x");
     const c: Ctx = { req, res, url };
+    res.setHeader("x-app-version", version);
     try {
+      if (url.pathname === "/api/events") {
+        if (req.method === "GET" && !url.searchParams.has("once")) return events(req, res);
+        res.writeHead(204, { "cache-control": "no-store" });
+        return void res.end();
+      }
       if (!url.pathname.startsWith("/api/")) {
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "허용되지 않는 요청");
         if (url.pathname === "/healthz") return send(res, 200, "ok", "text/plain");
@@ -477,7 +490,31 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     }
   }
 
-  return { handle, accounts: acc };
+  /**
+   * 새 버전 알림 (Server-Sent Events). Vercel 함수는 WebSocket을 열 수 없어 SSE로 밀어 준다.
+   * 연결하면 지금 버전을 보내고 잠시 뒤 닫는다 → 브라우저(EventSource)가 다시 연결할 때
+   * 새 배포로 연결되면 새 버전을 받아 "저장 후 새로고침" 안내를 띄운다.
+   */
+  function events(req: IncomingMessage, res: ServerResponse) {
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-store, no-transform",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+      "x-app-version": version,
+    });
+    res.write(`retry: 5000\nevent: version\ndata: ${JSON.stringify({ version })}\n\n`);
+    const beat = setInterval(() => res.write(`: ping ${Date.now()}\n\n`), 15_000);
+    const done = () => {
+      clearInterval(beat);
+      clearTimeout(timer);
+      if (!res.writableEnded) res.end();
+    };
+    const timer = setTimeout(done, opts.eventsWindowMs ?? 50_000);
+    req.on("close", done);
+  }
+
+  return { handle, accounts: acc, version };
 }
 
 /** planning serve — 파일 저장소 + 파일 KV (<root>/.service/) */

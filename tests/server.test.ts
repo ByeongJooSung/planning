@@ -44,10 +44,10 @@ beforeAll(async () => {
     return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
   };
   let server;
-  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller, modelLister })).server;
+  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller, modelLister, version: "v-test", eventsWindowMs: 300 })).server;
   else {
     const kv = await FileKv.open(storeFile());
-    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller, modelLister });
+    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller, modelLister, version: "v-test", eventsWindowMs: 300 });
     server = createServer((req, res) => void app.handle(req, res));
   }
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -258,6 +258,17 @@ describe("시나리오", () => {
     const html = await r.text();
     expect(html).toContain('"mode":"server"');
     expect((await fetch(base + "/invite/abc")).status).toBe(200);
+    // 새 버전 알림: 화면에 버전이 실리고, 모든 응답 머리와 SSE 로 알려 준다
+    expect(html).toContain('"version":"v-test"');
+    expect((await fetch(base + "/api/config")).headers.get("x-app-version")).toBe("v-test");
+    const head = await fetch(base + "/api/events?once=1", { method: "HEAD" });
+    expect(head.status).toBe(204);
+    expect(head.headers.get("x-app-version")).toBe("v-test");
+    const ev = await fetch(base + "/api/events");
+    expect(ev.headers.get("content-type")).toMatch(/text\/event-stream/);
+    const text = await ev.text(); // 짧게 열었다 닫힌다 (eventsWindowMs)
+    expect(text).toContain("event: version");
+    expect(text).toContain('{"version":"v-test"}');
     // 설치형 앱(PWA)
     expect(html).toContain('rel="manifest"');
     const man = await (await fetch(base + "/manifest.webmanifest")).json();
