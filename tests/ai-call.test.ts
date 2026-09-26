@@ -77,6 +77,11 @@ describe("OpenAI 호환 호출", () => {
     const onVercel = await probeModels({ provider: "openai-compatible", baseUrl: "http://localhost:1234/v1" }, { VERCEL: "1" });
     expect(onVercel).toMatchObject({ ok: false, code: "PRIVATE_ADDRESS" });
     expect(onVercel.hint).toMatch(/cloudflared/);
+    const ts = await probeModels({ provider: "openai-compatible", baseUrl: "http://100.115.248.12:1234/v1" }, { VERCEL: "1" });
+    expect(ts).toMatchObject({ ok: false, code: "TAILSCALE_ADDRESS" });
+    expect(ts.hint).toMatch(/tailscale funnel 1234/);
+    // Funnel 공개 주소(*.ts.net)는 막지 않는다
+    expect((await probeModels({ provider: "openai-compatible", baseUrl: "https://pc.tail1234.ts.net/v1" }, { VERCEL: "1" })).code).not.toBe("TAILSCALE_ADDRESS");
     expect(await probeModels({ provider: "openai-compatible", baseUrl: "not a url" }, {})).toMatchObject({ ok: false, error: expect.stringMatching(/URL/) });
   });
   it("parseJson", () => {

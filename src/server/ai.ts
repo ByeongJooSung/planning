@@ -82,6 +82,9 @@ export interface ModelProbe {
 }
 
 const PRIVATE_HOST = /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|host\.docker\.internal)/i;
+/** Tailscale 등 CGNAT 대역 (100.64.0.0/10) — 같은 tailnet 안에서만 열린다 */
+const TAILSCALE_HOST = /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|\.ts\.net(:\d+)?$/i;
+const TAILSCALE_HINT = "Tailscale 주소(100.x, *.ts.net 내부 주소)는 같은 Tailscale 네트워크에 들어온 기기에서만 열립니다. 인터넷 서비스에서 쓰려면 LM Studio PC에서 `tailscale funnel 1234` 를 실행해 공개 주소(https://<PC이름>.<tailnet>.ts.net)를 만들고 그 주소 + /v1 을 넣으세요. Funnel 이 처음이면 Tailscale 관리 콘솔에서 Funnel 사용을 허용해야 합니다. 또는 `cloudflared tunnel --url http://localhost:1234` 로 나온 주소 + /v1 을 써도 됩니다.";
 const TUNNEL_HINT = "LM Studio·Ollama를 인터넷 서비스에서 쓰려면 외부에서 접속 가능한 주소가 필요합니다 — 예: PC에서 `cloudflared tunnel --url http://localhost:1234` 실행 후 나온 https 주소 + /v1, 또는 공유기 포트 포워딩. 같은 네트워크 서버에 이 서비스를 직접 띄우는 방법(planning serve)도 있습니다.";
 
 /** fetch 가 던진 네트워크 오류를 원인·해결 방법으로 */
@@ -99,6 +102,7 @@ export function describeNetError(e: unknown, host: string): { code?: string; err
     case "ETIMEDOUT":
     case "UND_ERR_CONNECT_TIMEOUT":
     case "UND_ERR_HEADERS_TIMEOUT":
+      if (TAILSCALE_HOST.test(host.split(":")[0]!)) return { code, error: `응답이 없습니다 (시간 초과): ${host} — Tailscale 내부 주소입니다`, hint: TAILSCALE_HINT };
       return { code, error: `응답이 없습니다 (시간 초과): ${host}`, hint: "방화벽·공유기에서 막혔거나 서버가 멈춰 있습니다. 외부에서 이 주소로 접속되는지 브라우저로 {주소}/models 를 열어 확인해 보세요." };
     case "ECONNRESET":
     case "UND_ERR_SOCKET":
@@ -142,6 +146,8 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     return done({ ok: false, models: [], url, error: "API 주소가 URL 형식이 아닙니다", hint: "http:// 또는 https:// 로 시작하는 주소를 넣으세요 (예: https://integrate.api.nvidia.com/v1)." });
   }
   // 인터넷 배포(Vercel)에서는 내 PC의 localhost·사설 IP에 닿을 수 없다
+  if (env.VERCEL && TAILSCALE_HOST.test(host.split(":")[0]!) && !/\.ts\.net$/i.test(host.split(":")[0]!))
+    return done({ ok: false, models: [], url, code: "TAILSCALE_ADDRESS", error: `${host} 는 Tailscale 내부 주소라 인터넷(Vercel)에서 접속할 수 없습니다`, hint: TAILSCALE_HINT });
   if (env.VERCEL && PRIVATE_HOST.test(host))
     return done({ ok: false, models: [], url, code: "PRIVATE_ADDRESS", error: `이 서비스는 인터넷(Vercel)에서 돌고 있어 ${host} 에 접속할 수 없습니다`, hint: TUNNEL_HINT });
   let res: Response;
