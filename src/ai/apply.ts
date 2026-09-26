@@ -128,7 +128,11 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
     title: prev?.title ?? node.name,
     template: out.template ?? prev?.template,
     taskIds: prev?.taskIds ?? [],
-    components: out.components,
+    // 캔버스에서 옮긴 설명 번호 위치는 같은 번호·항목이면 유지
+    components: out.components.map((c) => {
+      const was = prev?.components.find((x) => x.no === c.no && x.label === c.label);
+      return was?.marker && !c.marker ? { ...c, marker: was.marker } : c;
+    }),
     status: "DRAFT",
     designRevision: ds?.status === "SELECTED" ? ds.revision : undefined,
   };

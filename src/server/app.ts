@@ -296,6 +296,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     const cmd = c.body?.cmd as Command;
     if (!cmd || typeof cmd.op !== "string") throw new HttpError(400, "명령이 없습니다");
     if (cmd.op === "kb.add") throw new HttpError(400, "참조자료는 업로드 API로 올립니다");
+    if (cmd.op === "work.set") cmd.by = c.user!.name;
     const r = await run(p.code!, cmd);
     return { message: r.message, detail: r.detail, project: await projectView(p.code!, c.user!.id, true, r.state) };
   });

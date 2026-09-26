@@ -281,6 +281,8 @@ export const ComponentSpec = z.object({
     .object({ values: z.array(z.string()), default: z.string().optional(), note: z.string().optional() })
     .optional(),
   validation: Validation.optional(),
+  /** 화면설계서 캔버스에서 옮긴 설명 번호 위치 (화면 원본 1920 기준 px). 없으면 컴포넌트 왼쪽 위 */
+  marker: z.object({ x: z.number(), y: z.number() }).optional(),
   /** 와이어프레임 표현: 디자인 시스템 컴포넌트와 속성. link는 이동할 화면 ID (프로토타입 연결) */
   ui: z
     .object({
@@ -340,6 +342,13 @@ export const RtmRecords = z.object({
     )
     .default([]),
   notes: z.record(z.string(), z.string()).default({}),
+  /** 산출물 작업 상태 (ia:시스템 · sb:화면 · flow:요구사항 · ds:시스템) — 미진행·재검토 필요는 계산한다 (trace/work.ts) */
+  work: z
+    .record(
+      z.string(),
+      z.object({ status: z.enum(["IN_PROGRESS", "DONE", "NEEDS_REVIEW"]), at: z.string(), by: z.string().default(""), note: z.string().default("") }),
+    )
+    .default({}),
   history: z
     .array(
       z.object({

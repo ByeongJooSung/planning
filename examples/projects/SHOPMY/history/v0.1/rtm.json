@@ -22,7 +22,7 @@
       "type": "FUNCTIONAL",
       "priority": "MUST",
       "sources": [],
-      "status": "DESIGNED",
+      "status": "IN_DESIGN",
       "tasks": [
         {
           "taskId": "REQ-001-T01",
@@ -43,7 +43,7 @@
             "USR_MY_ORD_010"
           ],
           "prototype": [],
-          "status": "DESIGNED"
+          "status": "IN_DESIGN"
         }
       ],
       "crIds": []
@@ -89,7 +89,7 @@
           "USR_MY_ORD_010"
         ],
         "screenless": false,
-        "status": "DESIGNED"
+        "status": "IN_DESIGN"
       },
       "ADM": {
         "taskIds": [],
@@ -148,16 +148,16 @@
   "coverage": {
     "requirements": {
       "NOT_STARTED": 0,
-      "IN_DESIGN": 1,
-      "DESIGNED": 1,
+      "IN_DESIGN": 2,
+      "DESIGNED": 0,
       "REVIEWED": 0,
       "EXCLUDED": 0,
       "total": 2
     },
     "tasks": {
       "NOT_STARTED": 0,
-      "IN_DESIGN": 1,
-      "DESIGNED": 1,
+      "IN_DESIGN": 2,
+      "DESIGNED": 0,
       "REVIEWED": 0,
       "EXCLUDED": 0,
       "total": 2
@@ -165,8 +165,8 @@
     "bySystem": {
       "USR": {
         "total": 1,
-        "designed": 1,
-        "rate": 100
+        "designed": 0,
+        "rate": 0
       },
       "ADM": {
         "total": 1,
@@ -174,7 +174,7 @@
         "rate": 0
       }
     },
-    "designedRate": 50
+    "designedRate": 0
   },
   "gaps": [
     {

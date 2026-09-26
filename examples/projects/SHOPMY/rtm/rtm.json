@@ -4,7 +4,7 @@
     "name": "쇼핑몰 주문 내역 개선",
     "version": "0.2"
   },
-  "generatedAt": "2026-09-25T16:54:36.808Z",
+  "generatedAt": "2026-09-26T02:53:26.837Z",
   "systems": [
     {
       "code": "USR",
@@ -22,7 +22,7 @@
       "type": "FUNCTIONAL",
       "priority": "MUST",
       "sources": [],
-      "status": "DESIGNED",
+      "status": "IN_DESIGN",
       "tasks": [
         {
           "taskId": "REQ-001-T01",
@@ -43,7 +43,7 @@
             "USR_MY_ORD_010"
           ],
           "prototype": [],
-          "status": "DESIGNED"
+          "status": "IN_DESIGN"
         }
       ],
       "crIds": []
@@ -86,7 +86,7 @@
       "sources": [
         "SRC-001 본문 문단 1"
       ],
-      "status": "DESIGNED",
+      "status": "IN_DESIGN",
       "tasks": [
         {
           "taskId": "REQ-003-T01",
@@ -105,7 +105,7 @@
             "USR_MY_ORD_010"
           ],
           "prototype": [],
-          "status": "DESIGNED"
+          "status": "IN_DESIGN"
         }
       ],
       "crIds": [
@@ -123,7 +123,7 @@
           "USR_MY_ORD_010"
         ],
         "screenless": false,
-        "status": "DESIGNED"
+        "status": "IN_DESIGN"
       },
       "ADM": {
         "taskIds": [],
@@ -159,7 +159,7 @@
           "USR_MY_ORD_010"
         ],
         "screenless": false,
-        "status": "DESIGNED"
+        "status": "IN_DESIGN"
       },
       "ADM": {
         "taskIds": [],
@@ -202,16 +202,16 @@
   "coverage": {
     "requirements": {
       "NOT_STARTED": 0,
-      "IN_DESIGN": 1,
-      "DESIGNED": 2,
+      "IN_DESIGN": 3,
+      "DESIGNED": 0,
       "REVIEWED": 0,
       "EXCLUDED": 0,
       "total": 3
     },
     "tasks": {
       "NOT_STARTED": 0,
-      "IN_DESIGN": 1,
-      "DESIGNED": 2,
+      "IN_DESIGN": 3,
+      "DESIGNED": 0,
       "REVIEWED": 0,
       "EXCLUDED": 0,
       "total": 3
@@ -219,8 +219,8 @@
     "bySystem": {
       "USR": {
         "total": 2,
-        "designed": 2,
-        "rate": 100
+        "designed": 0,
+        "rate": 0
       },
       "ADM": {
         "total": 1,
@@ -228,7 +228,7 @@
         "rate": 0
       }
     },
-    "designedRate": 66.7
+    "designedRate": 0
   },
   "gaps": [
     {

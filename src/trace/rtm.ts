@@ -6,6 +6,7 @@
  * 요구사항 상태는 소속 Task 상태에서 계산한다.
  */
 import type { Model, Requirement, StageId, Task } from "../model/schema.js";
+import { workOf } from "./work.js";
 
 export const TRACE_STATUS = ["NOT_STARTED", "IN_DESIGN", "DESIGNED", "REVIEWED", "EXCLUDED"] as const;
 export type TraceStatus = (typeof TRACE_STATUS)[number];
@@ -122,7 +123,7 @@ export function buildRtm(m: Model, now = new Date()): Rtm {
       prototype: screens.filter((id) => protoScreens.has(id)),
       status: "NOT_STARTED",
     };
-    tr.status = taskStatus(req, tr, reviews.has(t.id));
+    tr.status = taskStatus(req, tr, reviews.has(t.id), (key) => workOf(m, key).status === "DONE");
     const rv = reviews.get(t.id);
     if (rv) tr.reviewer = `${rv.reviewer} (${rv.reviewedAt.slice(0, 10)})`;
     return tr;
@@ -208,9 +209,12 @@ export function buildRtm(m: Model, now = new Date()): Rtm {
   };
 }
 
-function taskStatus(req: Requirement, t: TaskTrace, reviewed: boolean): TraceStatus {
+/** 설계완료 = 산출물이 있고 작업자가 “완료”로 표시함 (AI가 만든 것만으로는 설계중) */
+function taskStatus(req: Requirement, t: TaskTrace, reviewed: boolean, done: (key: string) => boolean): TraceStatus {
   if (req.status === "EXCLUDED") return "EXCLUDED";
-  const designed = t.screenless ? t.flowNodes.length > 0 : t.screens.length > 0 && t.storyboard.length === t.screens.length;
+  const designed = t.screenless
+    ? t.flowNodes.length > 0 && done(`flow:${req.id}`)
+    : t.screens.length > 0 && t.storyboard.length === t.screens.length && t.storyboard.every((id) => done(`sb:${id}`));
   if (designed) return reviewed ? "REVIEWED" : "DESIGNED";
   const anyLink = t.planSections.length + t.features.length + t.screens.length + t.flowNodes.length + t.storyboard.length > 0;
   return anyLink ? "IN_DESIGN" : "NOT_STARTED";

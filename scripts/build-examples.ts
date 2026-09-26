@@ -15,6 +15,7 @@ import type { Model, StoryboardScreen } from "../src/model/schema.js";
 import { addRequirement, addSystem, addTask, autoCreateTasks, excludeRequirement, recordReview } from "../src/project/ops.js";
 import { createProject, loadModel, saveModel } from "../src/project/store.js";
 import { takeSnapshot } from "../src/version/snapshot.js";
+import { flowOfRequirement } from "../src/trace/work.js";
 
 export const FIXED_NOW = new Date("2026-09-25T09:00:00.000Z");
 const c = { now: FIXED_NOW };
@@ -30,6 +31,18 @@ const screen = (screenId: string, systemCode: string, title: string, template: S
   components,
   status: "DRAFT",
 });
+
+/** 샘플: 작업자가 검토를 마친 상태 (정보구조도·화면설계서·플로우·디자인 시스템 모두 완료) */
+function markAllDone(m: Model, by: string) {
+  const at = FIXED_NOW.toISOString();
+  const keys = [
+    ...m.systems.filter((s) => m.ia.nodes.some((n) => n.systemCode === s.code && n.kind !== "MENU")).map((s) => `ia:${s.code}`),
+    ...m.design.systems.filter((d) => d.status === "SELECTED").map((d) => `ds:${d.systemCode}`),
+    ...m.storyboard.screens.map((s) => `sb:${s.screenId}`),
+    ...m.requirements.filter((r) => flowOfRequirement(m, r.id)).map((r) => `flow:${r.id}`),
+  ];
+  for (const k of keys) m.rtmRecords.work[k] = { status: "DONE", at, by, note: "" };
+}
 
 export async function buildPubInfo(root: string): Promise<string> {
   const dir = await createProject(
@@ -360,6 +373,7 @@ export async function buildPubInfo(root: string): Promise<string> {
   );
 
   recordReview(m, "SFR-002-T01", "기획 리드", "착수 검토 회의 확인", c);
+  markAllDone(m, "기획 리드");
   await saveModel(dir, m, { now: FIXED_NOW });
   return dir;
 }

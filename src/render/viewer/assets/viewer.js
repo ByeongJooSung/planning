@@ -43,6 +43,7 @@
     req: ["요구사항·Task", "요구사항을 등록하면 시스템별 Task가 자동 또는 수동으로 만들어집니다. Task를 누르면 그 Task의 프로세스 플로우, 화면설계서, 프로토타입을 봅니다."],
     design: ["디자인 시스템", "시스템 영역마다 컨셉 3종을 제안받아 하나를 고르면 디자인 시스템이 만들어집니다. 화면설계서와 프로토타입은 이 디자인으로 그립니다."],
     ia: ["정보구조도", "Task별로 만든 화면이 통합된 시스템별 메뉴·화면 구조"],
+    proto: ["프로토타입 통합본", "시스템 구분별로 모든 화면을 메뉴 순서대로 이어 붙인 클릭 가능한 프로토타입과 설계 진행 순서"],
     rtm: ["요구사항 추적표", "요구사항 → 시스템별 Task → 산출물 연결과 충족 상태"],
     flow: ["시스템별 프로세스 플로우", "Task별 흐름을 통합한 프로세스를 시스템 영역별로 나눠 봅니다"],
     ver: ["버전 이력", "스냅샷과 최근 스냅샷 이후 변경 사항"],
@@ -133,6 +134,7 @@
       var cap = st.nextElementSibling;
       if (cap && cap.classList.contains("stage-cap")) cap.querySelector(".pct").textContent = "실제 크기의 " + Math.round(sc * 1000) / 10 + "%";
     });
+    layoutCanvases(root);
   }
   var previews = [];
   function previewBtn(title, html, h, label) {
@@ -185,7 +187,7 @@
       html += '<div class="proj-id"><span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><b>' + esc(pr.name) + "</b></div>";
       var groups = [
         ["프로젝트", [["dash", null], ["kb", p.model.sources.length], ["req", p.rtm.rows.length], ["design", sel + "/" + ds.length]]],
-        ["통합 산출물", [["ia", null], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null]]],
+        ["통합 산출물", [["ia", null], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
         ["이력", [["ver", p.snapshots.length]]]
       ];
       if (SRV) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
@@ -238,6 +240,7 @@
       case "ia": return renderIa();
       case "rtm": return renderRtm();
       case "flow": return renderFlows();
+      case "proto": return renderProtoPage();
       case "ver": return renderVer();
       case "members": return SRV ? renderMembers() : renderDash();
       case "aiset": return SRV ? renderAiSettings() : renderDash();
@@ -246,7 +249,7 @@
   }
   function afterRender() {
     var r = state.route;
-    if (r.view === "task" && r.tab === "proto") renderProto();
+    if ((r.view === "task" && r.tab === "proto") || (r.view === "project" && r.page === "proto")) renderProto();
     if (r.view === "project" && r.page === "kb") runSearch();
     fitStages();
   }
@@ -331,7 +334,12 @@
     var setup = SRV ? '<div class="dash-grid">' +
       '<section class="section"><h2>시스템 구분 <small>' + p.model.systems.length + "개</small>" + editBtn("sys-add", "+ 시스템") + '</h2><div class="box mini">' + (sysList || '<div class="empty">시스템이 없습니다.</div>') + "</div></section>" +
       '<section class="section"><h2>참조 URL <small>AI 요청 프롬프트에 담김</small>' + editBtn("link-add", "+ URL") + '</h2><div class="box mini">' + (links || '<div class="empty">등록된 URL이 없습니다.</div>') + "</div></section></div>" : "";
+    var wrows = (p.work ? p.work.systems : []).filter(function (x) { return x.hasScreens; }).map(function (x) {
+      return '<div class="wsys">' + sysChip(x.code) + "<b>" + esc(x.name) + '</b><span class="wcell"><span class="wl">정보구조도</span>' + workPill(p, "ia:" + x.code) + '</span><span class="wcell"><span class="wl">디자인</span>' + workPill(p, "ds:" + x.code) + "</span>" +
+        '<div class="wcell grow"><span class="wl">화면설계서 ' + x.screens.length + "</span>" + workStack(x.counts, x.screens.length) + "</div>" + protoLink(p, x.code) + "</div>";
+    }).join("");
     return '<section class="section"><h2>단계 진행' + (canEdit() ? " <small>단계를 누르면 상태를 바꿉니다</small>" : "") + '</h2><div class="box stages">' + stages + "</div></section>" +
+      (wrows ? '<section class="section"><h2>시스템별 설계 진행 <small>미진행 · 진행중 · 재검토 필요 · 완료 — AI가 만든 결과는 검토 후 완료로 표시합니다</small></h2><div class="box wsyss">' + wrows + "</div></section>" : "") +
       '<section class="kpis">' + kpis + "</section>" +
       '<div class="dash-3">' +
       '<section class="section"><h2>참조자료 <small>프로젝트 지식</small></h2><button class="box tile" data-page="kb"><b>' + p.model.sources.length + "<small>건</small></b><span>검색 색인 " + chunks + "조각</span></button></section>" +
@@ -435,7 +443,8 @@
     ];
     if (t.reviewer) info.push(["검토 확인", esc(t.reviewer)]);
     var sbCount = t.screens.filter(function (s) { return p.model.storyboard.screens.some(function (x) { return x.screenId === s; }); }).length;
-    var tabs = [["flow", "프로세스 플로우"], ["sb", "화면설계서 " + sbCount + "/" + t.screens.length], ["proto", "프로토타입"]];
+    var sbDone = t.screens.filter(function (s) { return workOf(p, "sb:" + s).status === "DONE"; }).length;
+    var tabs = [["flow", "프로세스 플로우 · " + WORK_LABEL[workOf(p, "flow:" + t.requirementId).status]], ["sb", "화면설계서 " + sbCount + "/" + t.screens.length + (sbCount ? " · 완료 " + sbDone : "")], ["proto", "프로토타입"]];
     var body = tab === "sb" ? taskSheets(p, t) : tab === "proto" ? '<div id="proto"></div>' : taskFlow(p, t);
     return overlayBanner() + '<header class="page-head"><nav class="crumbs"><button data-page="req">요구사항·Task</button><span>›</span><span>' + esc(row.requirementId) + " " + esc(row.title) + "</span></nav>" +
       '<h1><span class="mono">' + esc(shortTask(t.taskId, row.requirementId)) + "</span> " + esc(t.action) + "</h1>" +
@@ -447,7 +456,7 @@
   }
 
   function taskFlow(p, t) {
-    var fbar = '<div class="ai-bar">' + genBtn("flow:" + t.requirementId, "이 요구사항 플로우 AI 생성·조정") + "</div>";
+    var fbar = '<div class="ai-bar">' + genBtn("flow:" + t.requirementId, "이 요구사항 플로우 AI 생성·조정") + "</div>" + workCtl(p, "flow:" + t.requirementId, "프로세스 플로우");
     return fbar + taskFlowBody(p, t);
   }
   function taskFlowBody(p, t) {
@@ -505,20 +514,137 @@
       var ctx = wireCtx(p, node.systemCode || t.systemCode, sid);
       var headRow = '<table class="sheet-head"><tbody><tr><th>화면 ID</th><td class="mono">' + esc(sid) + "</td><th>화면명</th><td>" + esc(node.name || (sb && sb.title) || "") + "</td><th>시스템</th><td>" + esc(ctx.systemName) + "</td></tr>" +
         "<tr><th>Location</th><td colspan=\"3\">" + esc(ctx.crumbs.join(" > ")) + "</td><th>화면 유형</th><td>" + esc(KIND[node.kind] || "") + (sb && sb.template ? " · " + esc(sb.template) : "") + "</td></tr></tbody></table>";
-      if (!sb) return '<article class="box sheet">' + headRow + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.<div class="ai-bar center">' + genBtn("sb:" + sid, "AI로 화면설계서 생성") + "</div></div></article>";
+      if (!sb) return '<article class="box sheet">' + headRow + workCtl(p, "sb:" + sid, "화면설계서") + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.<div class="ai-bar center">' + genBtn("sb:" + sid, "AI로 화면설계서 생성") + "</div></div></article>";
       var wire = screenWire(p, sb, true);
       var ds = designOf(p, sb.systemCode);
-      var left = wire ? '<div class="wire-box">' + stage(wire, { page: true, label: VW + " × 가변 (첫 화면 " + VH + ")" }) + "</div>" :
+      var left = wire ? sbCanvas(p, sb) :
         '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
       var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
-        return '<tr><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
+        return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
       }).join("") + "</tbody></table>";
-      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + revBadge(p, sb);
+      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
       return '<article class="box sheet">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
     }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다. 공공기관 제출 양식으로 내보내면 장표 단위로 나뉘고, 한 장을 넘으면 같은 화면 ID로 “다음 페이지에 계속”이 붙습니다(S4 출력 기능).</p>';
   }
 
+  // ── 화면설계서 캔버스: 화면 원본(1920) 위에 설명 번호를 올리고, 번호는 끌어서 옮긴다 ──
+  var CV_PAD = 44, MK = 24;
+  state.sbZoom = state.sbZoom || {};
+  function sbCanvas(p, sb) {
+    var sid = sb.screenId, wire = screenWire(p, sb, "pos"), z = state.sbZoom[sid] || 1;
+    var movable = SRV && canEdit();
+    var moved = sb.components.filter(function (c) { return c.marker; }).length;
+    return '<div class="wire-box sb-canvas" data-sbc="' + esc(sid) + '">' +
+      '<div class="sbc-tools"><span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 오른쪽 설명이 표시됩니다.") + '</span><span class="sp"></span>' +
+      '<button class="btn-sm" data-sbzoom="-1" aria-label="축소">−</button><span class="sbc-z">' + Math.round(z * 100) + '%</span><button class="btn-sm" data-sbzoom="1" aria-label="확대">+</button><button class="btn-sm" data-sbzoom="0">화면 맞춤</button>' +
+      (movable && moved ? '<button class="btn-sm" data-sbreset="' + esc(sid) + '">번호 위치 초기화 (' + moved + ")</button>" : "") + "</div>" +
+      '<div class="sbc-view"><div class="sbc-board"><div class="sbc-frame"><div class="sbc-inner" style="width:' + VW + 'px">' + wire + "</div></div>" +
+      '<svg class="sbc-lines" aria-hidden="true"></svg>' +
+      sb.components.map(function (c) {
+        return '<button class="sbc-mk' + (c.marker ? " moved" : "") + (movable ? " drag" : "") + (state.sbHl === sid + "|" + c.no ? " hl" : "") + '" data-mk="' + c.no + '"' + (c.marker ? ' data-mx="' + c.marker.x + '" data-my="' + c.marker.y + '"' : "") + ' title="' + esc(c.no + ". " + c.label) + '" aria-label="' + esc(c.no + "번 " + c.label) + '">' + c.no + "</button>";
+      }).join("") + "</div></div>" +
+      '<div class="stage-cap"><span>' + VW + " × 가변 (첫 화면 " + VH + ')</span><span class="pct"></span></div></div>';
+  }
+  /** 캔버스 배치: 맞춤 배율 × 확대, 번호 기본 위치 = 컴포넌트 왼쪽 위 */
+  function layoutCanvases(root) {
+    (root || document).querySelectorAll(".sb-canvas").forEach(function (cv) {
+      var sid = cv.getAttribute("data-sbc"), view = cv.querySelector(".sbc-view"), board = cv.querySelector(".sbc-board"), frame = cv.querySelector(".sbc-frame"), inner = cv.querySelector(".sbc-inner");
+      if (!view.clientWidth) return;
+      var fit = Math.max(0.1, (view.clientWidth - CV_PAD * 2) / VW), z = fit * (state.sbZoom[sid] || 1);
+      inner.style.transform = "scale(" + z + ")";
+      var h = inner.offsetHeight;
+      frame.style.width = Math.round(VW * z) + "px";
+      frame.style.height = Math.round(h * z) + "px";
+      board.style.width = Math.round(VW * z + CV_PAD * 2) + "px";
+      board.style.height = Math.round(h * z + CV_PAD * 2) + "px";
+      cv.dataset.z = z;
+      var ir = inner.getBoundingClientRect(), lines = [];
+      cv.querySelectorAll(".sbc-mk").forEach(function (mk) {
+        var no = mk.getAttribute("data-mk"), el = inner.querySelector('[data-no="' + no + '"]'), dx = 0, dy = 0;
+        if (el) { var r = el.getBoundingClientRect(); if ((!r.width || !r.height) && el.firstElementChild) r = el.firstElementChild.getBoundingClientRect(); dx = (r.left - ir.left) / z; dy = (r.top - ir.top) / z; }
+        mk.dataset.dx = dx; mk.dataset.dy = dy;
+        var x = mk.hasAttribute("data-mx") ? Number(mk.getAttribute("data-mx")) : dx, y = mk.hasAttribute("data-my") ? Number(mk.getAttribute("data-my")) : dy;
+        placeMk(mk, x, y, z);
+        if (el && mk.hasAttribute("data-mx") && Math.hypot(x - dx, y - dy) * z > 24) lines.push([x, y, dx, dy]);
+      });
+      drawLines(cv, lines, z);
+      var z0 = cv.querySelector(".sbc-z"); if (z0) z0.textContent = Math.round((state.sbZoom[sid] || 1) * 100) + "%";
+      var cap = cv.querySelector(".stage-cap .pct"); if (cap) cap.textContent = "실제 크기의 " + Math.round(z * 1000) / 10 + "%";
+    });
+  }
+  function placeMk(mk, x, y, z) { mk.style.left = Math.round(CV_PAD + x * z - MK / 2) + "px"; mk.style.top = Math.round(CV_PAD + y * z - MK / 2) + "px"; }
+  function drawLines(cv, lines, z) {
+    var svg = cv.querySelector(".sbc-lines"), board = cv.querySelector(".sbc-board");
+    svg.setAttribute("width", board.offsetWidth); svg.setAttribute("height", board.offsetHeight);
+    svg.innerHTML = lines.map(function (l) { return '<line x1="' + (CV_PAD + l[0] * z) + '" y1="' + (CV_PAD + l[1] * z) + '" x2="' + (CV_PAD + l[2] * z) + '" y2="' + (CV_PAD + l[3] * z) + '"/><circle cx="' + (CV_PAD + l[2] * z) + '" cy="' + (CV_PAD + l[3] * z) + '" r="3"/>'; }).join("");
+  }
+  var mkDrag = null;
+  document.addEventListener("pointerdown", function (ev) {
+    var mk = ev.target.closest && ev.target.closest(".sbc-mk.drag");
+    if (!mk || ev.button > 0) return;
+    var cv = mk.closest(".sb-canvas"), z = Number(cv.dataset.z || 1);
+    mkDrag = { mk: mk, cv: cv, z: z, sx: ev.clientX, sy: ev.clientY, l: parseFloat(mk.style.left), t: parseFloat(mk.style.top), moved: false };
+    try { mk.setPointerCapture(ev.pointerId); } catch (e) { /* 무시 */ }
+    ev.preventDefault();
+  });
+  document.addEventListener("pointermove", function (ev) {
+    if (!mkDrag) return;
+    var dx = ev.clientX - mkDrag.sx, dy = ev.clientY - mkDrag.sy;
+    if (!mkDrag.moved && Math.hypot(dx, dy) < 4) return;
+    mkDrag.moved = true;
+    var b = mkDrag.cv.querySelector(".sbc-board");
+    mkDrag.mk.style.left = Math.max(0, Math.min(b.offsetWidth - MK, mkDrag.l + dx)) + "px";
+    mkDrag.mk.style.top = Math.max(0, Math.min(b.offsetHeight - MK, mkDrag.t + dy)) + "px";
+    mkDrag.mk.classList.add("dragging");
+  });
+  document.addEventListener("pointerup", function () {
+    if (!mkDrag) return;
+    var d = mkDrag;
+    mkDrag = null;
+    d.mk.classList.remove("dragging");
+    var sid = d.cv.getAttribute("data-sbc"), no = Number(d.mk.getAttribute("data-mk"));
+    if (!d.moved) { mkHighlight(sid, no); return; }
+    var x = (parseFloat(d.mk.style.left) + MK / 2 - CV_PAD) / d.z, y = (parseFloat(d.mk.style.top) + MK / 2 - CV_PAD) / d.z;
+    d.mk.setAttribute("data-mx", Math.round(x)); d.mk.setAttribute("data-my", Math.round(y)); d.mk.classList.add("moved");
+    layoutCanvases(d.cv.parentNode);
+    cmd({ op: "sb.marker", screenId: sid, no: no, pos: { x: x, y: y } }).catch(function (e) { toast(e.message, "err"); render(); });
+  });
+  function mkHighlight(sid, no) {
+    state.sbHl = state.sbHl === sid + "|" + no ? null : sid + "|" + no;
+    document.querySelectorAll(".sbc-mk.hl, tr[data-dno].hl").forEach(function (e) { e.classList.remove("hl"); });
+    if (!state.sbHl) return;
+    document.querySelectorAll('.sb-canvas[data-sbc="' + sid + '"] .sbc-mk[data-mk="' + no + '"]').forEach(function (e) { e.classList.add("hl"); });
+    var row = document.querySelector('tr[data-dno="' + sid + "|" + no + '"]');
+    if (row) { row.classList.add("hl"); row.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  }
+
   // ── 프로토타입 ──────────────────────────────────
+  /** 프로토타입 문맥: Task 탭(그 Task 화면 + 이동 화면) 또는 시스템 통합본(시스템 전체 화면, 메뉴 순서) */
+  function protoCtx() {
+    var p = P(), r = state.route;
+    if (r.view === "project" && r.page === "proto") {
+      var code = protoSys(p);
+      return { key: "sys:" + code, list: systemScreens(p, code).filter(function (n) { return p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; }); }).map(function (n) { return n.id; }), sys: code };
+    }
+    var t = findTrace(p, r.taskId);
+    return { key: t.taskId, list: protoScreens(p, t), t: t };
+  }
+  function protoSys(p) {
+    var list = p.model.systems.filter(function (s) { return s.hasScreens; }), code = state.dsSys[p.model.project.code];
+    return list.some(function (s) { return s.code === code; }) ? code : list.length ? list[0].code : "";
+  }
+  /** IA 트리 순서(메뉴 → 화면, 깊이 우선)로 이 시스템의 화면 노드 */
+  function systemScreens(p, code) {
+    var nodes = p.model.ia.nodes.filter(function (n) { return n.systemCode === code; }), ids = {}, out = [];
+    nodes.forEach(function (n) { ids[n.id] = true; });
+    (function walk(pid) { nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; }).forEach(function (n) { if (n.kind !== "MENU") out.push(n); walk(n.id); }); })(null);
+    return out;
+  }
+  function protoLink(p, code) {
+    var sw = p.work && p.work.systems.find(function (x) { return x.code === code; });
+    if (!sw || !sw.hasScreens) return "";
+    return '<button class="btn-sm proto-go' + (sw.designDone ? " ready" : "") + '" data-page="proto" data-dsys="' + esc(code) + '">▶ 프로토타입 통합본' + (sw.designDone ? " · 설계 완료" : "") + "</button>";
+  }
   function protoScreens(p, t) {
     var have = {};
     p.model.storyboard.screens.forEach(function (s) { have[s.screenId] = s; });
@@ -536,20 +662,92 @@
   function renderProto() {
     var box = document.getElementById("proto");
     if (!box) return;
-    var p = P(), t = findTrace(p, state.route.taskId);
-    var list = protoScreens(p, t);
-    if (!list.length) { box.innerHTML = '<div class="box empty">화면설계서가 있는 화면이 없어 프로토타입을 만들 수 없습니다.</div>'; return; }
-    var cur = state.proto[t.taskId];
-    if (list.indexOf(cur) < 0) cur = state.proto[t.taskId] = list[0];
+    var p = P(), pc = protoCtx(), t = pc.t;
+    var list = pc.list;
+    if (!list.length) { box.innerHTML = '<div class="box empty">화면설계서가 있는 화면이 없어 프로토타입을 만들 수 없습니다.' + (pc.sys ? " 정보구조도에서 화면을 만들고 화면설계서를 작성하면 여기로 이어집니다." : "") + "</div>"; return; }
+    var cur = state.proto[pc.key];
+    if (list.indexOf(cur) < 0) cur = state.proto[pc.key] = list[0];
     var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === cur; });
     var wire = screenWire(p, sb, false), ds = selectedDesign(p, sb.systemCode);
+    if (pc.sys) {
+      box.innerHTML = '<div class="proto-sys">' + protoNav(p, pc.sys, cur) + '<div class="proto-main"><div class="proto-cur"><b class="mono">' + esc(cur) + "</b> " + esc(sb.title) + workPill(p, "sb:" + cur, "설계서 ") + '<span class="sp"></span><span class="hint">' + (list.indexOf(cur) + 1) + " / " + list.length + '</span><button class="btn-sm" data-pstep="-1"' + (list.indexOf(cur) ? "" : " disabled") + '>← 이전 화면</button><button class="btn-sm" data-pstep="1"' + (list.indexOf(cur) < list.length - 1 ? "" : " disabled") + ">다음 화면 →</button></div>" +
+        (wire ? '<div class="proto-frame" id="proto-frame">' + stage('<div class="wf-vp" style="' + Wire.vars(ds) + '">' + wire + "</div>", { w: VW, h: VH, label: VW + " × " + VH + " 뷰포트 · 화면 안에서 스크롤" }) + "</div>" : '<div class="box empty">' + esc(sb.systemCode) + " 디자인 시스템 컨셉을 먼저 선택해야 프로토타입을 볼 수 있습니다.</div>") +
+        "</div></div>";
+      fitStages(box);
+      return;
+    }
     box.innerHTML = '<div class="proto-bar"><span class="hint">화면</span>' + list.map(function (s) {
       var own = t.screens.indexOf(s) >= 0;
       return '<button class="chip-s' + (s === cur ? " on" : "") + '" data-pscreen="' + esc(s) + '">' + esc(s) + (own ? "" : ' <em>연결</em>') + "</button>";
-    }).join("") + '<span class="sp"></span>' + aiBtn("proto:" + t.taskId, "AI 요청 · Figma / Claude") + "</div>" +
+    }).join("") + '<span class="sp"></span>' + (sb.systemCode ? protoLink(p, sb.systemCode) : "") + aiBtn("proto:" + t.taskId, "AI 요청 · Figma / Claude") + "</div>" +
       (wire ? '<div class="proto-frame" id="proto-frame">' + stage('<div class="wf-vp" style="' + Wire.vars(ds) + '">' + wire + "</div>", { w: VW, h: VH, label: VW + " × " + VH + " 뷰포트 · 화면 안에서 스크롤" }) + "</div>" : '<div class="box empty">' + esc(sb.systemCode) + " 디자인 시스템 컨셉을 먼저 선택해야 프로토타입을 볼 수 있습니다.</div>") +
       '<p class="hint">원본 ' + VW + "×" + VH + ' 화면을 비율만 줄여 보여 줍니다. 화면설계서로 자동 생성한 프로토타입입니다. 목록 행, 버튼을 눌러 이동해 보세요. 필수 항목을 비우고 신청하면 설계한 오류 문구가 나옵니다. <em>연결</em> 표시는 이 Task 화면에서 이동하는 다른 화면입니다.</p>';
     fitStages(box);
+  }
+  /** 통합본 왼쪽: 메뉴 구조 그대로 화면 목록 (설계서 상태 표시, 미작성 화면은 누를 수 없음) */
+  function protoNav(p, code, cur) {
+    var nodes = p.model.ia.nodes.filter(function (n) { return n.systemCode === code; }), ids = {};
+    nodes.forEach(function (n) { ids[n.id] = true; });
+    var has = {};
+    p.model.storyboard.screens.forEach(function (s) { has[s.screenId] = true; });
+    function li(n) {
+      var kids = nodes.filter(function (x) { return (x.parentId && ids[x.parentId] ? x.parentId : null) === n.id; });
+      var self = n.kind === "MENU" ? '<span class="pn-menu">' + esc(n.name) + "</span>" :
+        has[n.id] ? '<button class="pn-s' + (n.id === cur ? " on" : "") + '" data-pscreen="' + esc(n.id) + '"><span>' + esc(n.name) + '</span><i class="wdot ws-' + workOf(p, "sb:" + n.id).status + '" title="' + esc(WORK_LABEL[workOf(p, "sb:" + n.id).status]) + '"></i></button>' :
+        '<span class="pn-s off" title="화면설계서 미작성">' + esc(n.name) + " <em>미작성</em></span>";
+      return "<li>" + self + (kids.length ? "<ul>" + kids.map(li).join("") + "</ul>" : "") + "</li>";
+    }
+    var roots = nodes.filter(function (n) { return !(n.parentId && ids[n.parentId]); });
+    return '<nav class="proto-nav" aria-label="' + esc(code) + ' 화면 목록"><ul>' + roots.map(li).join("") + "</ul></nav>";
+  }
+  function renderProtoPage() {
+    var p = P(), systems = p.model.systems.filter(function (s) { return s.hasScreens; });
+    if (!systems.length) return '<div class="box empty">화면이 있는 시스템이 없습니다.</div>';
+    var code = protoSys(p), sw = p.work.systems.find(function (x) { return x.code === code; });
+    var chips = '<div class="filters">' + systems.map(function (s) {
+      var w = p.work.systems.find(function (x) { return x.code === s.code; });
+      return '<button class="fchip" data-dsys="' + esc(s.code) + '" aria-pressed="' + (s.code === code) + '"><i style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) +
+        '<em class="' + (w && w.designDone ? "ok" : "wait") + '">' + (w && w.designDone ? "설계 완료" : "완료 " + (w ? w.counts.DONE : 0) + "/" + (w ? w.screens.length : 0)) + "</em></button>";
+    }).join("") + "</div>";
+    var withSb = sw.screens.filter(function (x) { return x.status !== "NOT_STARTED"; }).length;
+    var banner = sw.designDone ? '<div class="note ok-n"><b>✓ ' + esc(sw.code + " " + sw.name) + " 설계 완료</b><p class=\"hint\">정보구조도와 화면설계서 " + sw.screens.length + "개가 모두 완료되어, 아래 통합본이 이 시스템의 확정 프로토타입입니다. 근거가 바뀌면 해당 화면이 ‘재검토 필요’로 바뀌고 이 표시가 풀립니다.</p></div>" :
+      '<div class="note warn"><b>설계 진행 중 — 통합본 미리보기</b><p class="hint">화면 ' + sw.screens.length + "개 중 화면설계서 완료 " + sw.counts.DONE + "개 · 진행중 " + sw.counts.IN_PROGRESS + "개 · 재검토 필요 " + sw.counts.NEEDS_REVIEW + "개 · 미진행 " + sw.counts.NOT_STARTED + "개" + (sw.ia.status !== "DONE" ? " · 정보구조도 " + WORK_LABEL[sw.ia.status] : "") + ". 작성된 화면 " + withSb + "개를 메뉴 순서대로 이어 보여 줍니다. 모두 완료되면 확정 통합본이 됩니다.</p></div>";
+    return '<section class="section"><div class="toolbar">' + chips + "</div>" + banner + '<div id="proto"></div></section>' + protoGuide(p, sw);
+  }
+  /** 통합본 아래: 이 시스템의 설계 진행 순서와 지금 할 일 */
+  function protoGuide(p, sw) {
+    var code = sw.code;
+    var tasks = allTasks(p).filter(function (t) { return t.systemCode === code; });
+    var reqs = p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.some(function (t) { return t.systemCode === code; }); });
+    var flows = reqs.map(function (r) { return workOf(p, "flow:" + r.requirementId); });
+    var fc = workCounts(flows), sc = sw.counts;
+    var st = function (ok, partial) { return ok ? "done" : partial ? "doing" : "todo"; };
+    var steps = [
+      ["요구사항·Task 등록", "요구사항을 등록하면 시스템별 Task가 만들어집니다. 이 시스템 Task가 화면·플로우 설계의 기준입니다.", st(tasks.length > 0), "Task " + tasks.length + "건 · 요구사항 " + reqs.length + "건", '<button class="btn-sm" data-page="req">요구사항·Task</button>'],
+      ["정보구조도", "메뉴와 화면 ID를 정하고 Task를 화면에 연결합니다. AI로 만들면 ‘진행중’이고, 검토 후 ‘완료’로 표시합니다.", st(sw.ia.status === "DONE", sw.ia.status !== "NOT_STARTED"), "", '<button class="btn-sm" data-page="ia">정보구조도</button>', "ia:" + code],
+      ["디자인 시스템", "컨셉 3종 중 하나를 골라 디자인 시스템을 확정합니다. 개정이 올라가면 완료된 화면설계서가 ‘재검토 필요’가 됩니다.", st(sw.ds.status === "DONE", sw.ds.status !== "NOT_STARTED"), "", '<button class="btn-sm" data-page="design" data-dsys="' + esc(code) + '">디자인 시스템</button>', "ds:" + code],
+      ["화면설계서", "화면마다 기능 명세를 확인해 AI로 만들고, 설명 번호 위치와 내용을 검토한 뒤 ‘완료’로 표시합니다.", st(sw.screens.length > 0 && sc.DONE === sw.screens.length, sc.DONE + sc.IN_PROGRESS + sc.NEEDS_REVIEW > 0), sw.screens.length ? workStack(sc, sw.screens.length) : "화면 없음", ""],
+      ["프로세스 플로우", "이 시스템이 들어간 요구사항의 처리 흐름을 만들고 검토합니다.", st(flows.length > 0 && fc.DONE === flows.length, fc.DONE + fc.IN_PROGRESS + fc.NEEDS_REVIEW > 0), flows.length ? workStack(fc, flows.length) : "해당 요구사항 없음", '<button class="btn-sm" data-page="flow">프로세스 플로우</button>'],
+      ["프로토타입 통합본 검토", "위 설계가 모두 완료되면 이 통합본이 확정본입니다. 메뉴 순서대로 화면을 넘기며 버튼·목록 이동과 입력 오류 문구를 확인합니다.", st(sw.designDone && fc.DONE === flows.length), sw.designDone ? "확정 가능" : "설계 완료 후 확정", ""]
+    ];
+    var next = steps.findIndex(function (x) { return x[2] !== "done"; });
+    var review = Object.keys(p.work.items).map(function (k) { return p.work.items[k]; }).filter(function (w) {
+      if (w.status !== "NEEDS_REVIEW") return false;
+      if (w.key === "ia:" + code || w.key === "ds:" + code) return true;
+      if (w.key.indexOf("sb:") === 0) return sw.screens.some(function (x) { return "sb:" + x.screenId === w.key; });
+      return w.key.indexOf("flow:") === 0 && reqs.some(function (r) { return "flow:" + r.requirementId === w.key; });
+    });
+    var list = steps.map(function (x, i) {
+      return '<li class="gstep ' + x[2] + (i === next ? " next" : "") + '"><span class="gnum">' + (x[2] === "done" ? "✓" : i + 1) + '</span><div class="gbody"><div class="gh"><b>' + x[0] + "</b>" + (x[5] ? workPill(p, x[5]) : '<span class="pill ' + (x[2] === "done" ? "DESIGNED" : x[2] === "doing" ? "IN_DESIGN" : "NOT_STARTED") + '">' + (x[2] === "done" ? "완료" : x[2] === "doing" ? "진행중" : "미진행") + "</span>") + (i === next ? '<span class="tag next-t">지금 할 일</span>' : "") + '<span class="sp"></span>' + x[4] + '</div><p class="hint">' + x[1] + "</p>" + (x[3] ? '<div class="gmeta">' + x[3] + "</div>" : "") + "</div></li>";
+    }).join("");
+    return '<section class="section"><h2>' + esc(code) + " 진행 순서 <small>요구사항 → 정보구조도 → 디자인 시스템 → 화면설계서 → 플로우 → 프로토타입 통합본</small></h2>" +
+      '<div class="box pad guide"><ol class="gsteps">' + list + "</ol>" +
+      (review.length ? '<div class="note warn"><b>재검토 필요 ' + review.length + '건</b><ul class="rv-list">' + review.map(function (w) { return "<li><span class=\"mono\">" + esc(w.key) + "</span> " + esc(w.reason || w.note || "") + (w.key.indexOf("sb:") === 0 ? ' <button class="lnk" data-pscreen="' + esc(w.key.slice(3)) + '">통합본에서 보기</button>' : "") + "</li>"; }).join("") + "</ul></div>" : "") +
+      '<div class="rules"><b>상태 규칙</b><ul>' +
+      "<li><b>미진행</b> — 아직 산출물이 없습니다.</li>" +
+      "<li><b>진행중</b> — 산출물이 있습니다. AI로 생성·적용한 결과도 여기에 머뭅니다.</li>" +
+      "<li><b>완료</b> — 작업자가 내용을 검토하고 ‘완료 처리’를 누른 상태입니다. 요구사항 추적표의 설계완료는 화면설계서가 완료일 때만 셉니다.</li>" +
+      "<li><b>재검토 필요</b> — 완료 뒤에 근거(요구사항 설명·Task·기능 명세, 디자인 시스템 개정, 정보구조도)가 바뀌면 자동으로 바뀝니다. 직접 표시할 수도 있습니다.</li></ul></div></div></section>";
   }
   function protoRoot() { var f = document.getElementById("proto-frame"); return f ? f.querySelector(".wf-vp") : null; }
   function protoToast(msg, tone) {
@@ -571,9 +769,9 @@
   }
   var pending = null;
   function protoGo(target, msg) {
-    var p = P(), t = findTrace(p, state.route.taskId);
+    var p = P(), pc = protoCtx();
     if (p.model.storyboard.screens.some(function (s) { return s.screenId === target; })) {
-      state.proto[t.taskId] = target;
+      state.proto[pc.key] = target;
       renderProto();
       if (msg) protoToast(msg);
     } else protoToast("화면설계서가 아직 없는 화면입니다: " + target, "danger");
@@ -705,7 +903,7 @@
     if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.' + (SRV ? '<div class="row-actions center">' + editBtn("ds-propose", "컨셉 3종 제안받기", code, "btn-primary") + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
     else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
-    return '<section class="section"><div class="toolbar">' + chips + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div></section>" + body;
+    return '<section class="section"><div class="toolbar">' + chips + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
   }
 
   function renderProposals(p, d, ctx) {
@@ -868,7 +1066,7 @@
         n.change === "KEPT" ? "" : '<span class="tk none">연결된 요구사항 없음</span>';
       return '<li><div class="node ' + n.kind + (mark && mark.added[n.id] ? " gen-added" : "") + '"><div class="top">' + (n.kind === "MENU" ? "" : '<span class="sid">' + esc(n.id) + "</span>") +
         '<span class="nm">' + esc(n.name) + "</span>" + (n.kind !== "MENU" && n.kind !== "PAGE" ? '<span class="kind">' + (KIND[n.kind] || n.kind) + "</span>" : "") +
-        (n.loginRequired ? '<span class="kind">로그인</span>' : "") + '<span class="chg ' + n.change + '">' + (CHG[n.change] || n.change) + "</span>" + (status && !mark ? pill(status) : "") + (mark && mark.added[n.id] ? '<span class="pill IN_DESIGN">AI 추가</span>' : "") + "</div>" + tk +
+        (n.loginRequired ? '<span class="kind">로그인</span>' : "") + '<span class="chg ' + n.change + '">' + (CHG[n.change] || n.change) + "</span>" + (n.kind !== "MENU" && !mark ? workPill(P(), "sb:" + n.id, "설계서 ") : "") + (mark && mark.added[n.id] ? '<span class="pill IN_DESIGN">AI 추가</span>' : "") + "</div>" + tk +
         (n.changeReason ? '<span class="tk">' + esc(n.changeReason) + "</span>" : "") + "</div>" +
         (kids.length ? "<ul>" + kids.map(li).join("") + "</ul>" : "") + "</li>";
     }
@@ -885,10 +1083,11 @@
       if (!s.hasScreens) return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + '</span></h3><div class="empty">화면 없는 시스템 (프로세스 플로우 레인으로만 표시)</div></div>';
       var d = selectedDesign(p, s.code), ov = appliedOverlay("ia:" + s.code);
       return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + " · 화면 " + nodes.filter(function (n) { return n.kind !== "MENU"; }).length + (d ? " · 디자인 " + esc(d.selectedId) : "") + "</span></h3>" +
-        '<div class="col-tools">' + genBtn("ia:" + s.code, ov ? "AI 적용본 v" + ov.applied + " · 조정" : "AI 생성·조정") + "</div>" + iaTree(nodes, st) + "</div>";
+        '<div class="col-tools">' + genBtn("ia:" + s.code, ov ? "AI 적용본 v" + ov.applied + " · 조정" : "AI 생성·조정") + protoLink(p, s.code) + "</div>" + workCtl(p, "ia:" + s.code, "정보구조도") + iaTree(nodes, st) + "</div>";
     }).join("");
     var aiBar = '<div class="ai-bar"><span class="hint">AI 요청(프롬프트 복사)</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
-    return '<section class="section">' + aiBar + '<div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 설계완료 " + done + "개. 화면 옆 상태는 연결된 Task의 진행 상태입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
+    done = screens.filter(function (n) { return workOf(p, "sb:" + n.id).status === "DONE"; }).length;
+    return '<section class="section">' + aiBar + '<div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 화면설계서 완료 " + done + "개. 화면 옆 상태는 그 화면 화면설계서의 작업 상태(미진행·진행중·완료·재검토 필요)입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
       (m.project.stages.S2 === "SKIPPED" ? '<p class="hint">기존 메뉴 수정(MODIFY) 프로젝트라 정보구조도 단계는 패스했습니다. 영향받는 기존 화면만 표시합니다.</p>' : "") +
       '<div class="ia-cols">' + cols + "</div></section>";
   }
@@ -908,7 +1107,8 @@
       return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="box flow-box">' + Flow.svg(g, { color: sysColor }) + "</div></section>";
     }).join("") || '<div class="box empty">이 시스템이 들어간 플로우가 없습니다.</div>';
     var genBar = '<div class="ai-bar"><span class="hint">AI 생성·조정</span>' + p.rtm.rows.filter(function (r) { return p.gens["flow:" + r.requirementId]; }).map(function (r) { return genBtn("flow:" + r.requirementId, r.requirementId + " " + r.title); }).join("") + "</div>";
-    return '<section class="section">' + genBar + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
+    var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + "</div>"; }).join("") + "</div>";
+    return '<section class="section">' + genBar + fwork + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
   }
 
   // ── 버전 ───────────────────────────────────────
@@ -1060,6 +1260,37 @@
       p.model = m;
       p.appliedCount = n;
     });
+  }
+  // ── 작업 상태: 미진행 · 진행중 · 완료 · 재검토 필요 ──
+  var WORK_LABEL = DATA.workLabel || { NOT_STARTED: "미진행", IN_PROGRESS: "진행중", DONE: "완료", NEEDS_REVIEW: "재검토 필요" };
+  var WORK_CLS = { NOT_STARTED: "NOT_STARTED", IN_PROGRESS: "IN_DESIGN", DONE: "DESIGNED", NEEDS_REVIEW: "NEEDS_REVIEW" };
+  var WORK_ORDER = ["NOT_STARTED", "IN_PROGRESS", "NEEDS_REVIEW", "DONE"];
+  function workOf(p, key) { return (p.work && p.work.items && p.work.items[key]) || { key: key, status: "NOT_STARTED" }; }
+  function workPill(p, key, prefix) {
+    var w = workOf(p, key);
+    return '<span class="pill ' + WORK_CLS[w.status] + '" title="' + esc((w.reason || "") + (w.by ? " · " + w.by : "") + (w.at ? " " + fmtDate(w.at) : "")) + '">' + esc((prefix || "") + WORK_LABEL[w.status]) + "</span>";
+  }
+  /** 상태 표시 + 바꾸기 버튼. AI가 만든 결과는 진행중 — 검토 후 완료로 표시한다 */
+  function workCtl(p, key, what) {
+    var w = workOf(p, key), btns = "";
+    if (SRV && canEdit() && w.status !== "NOT_STARTED") {
+      var b = function (st, label, cls) { return '<button class="' + (cls || "btn-sm") + '" data-work="' + esc(key) + '" data-wst="' + st + '">' + label + "</button>"; };
+      if (w.status === "IN_PROGRESS") btns = b("DONE", "검토 끝 · 완료 처리", "btn-sm ok");
+      else if (w.status === "NEEDS_REVIEW") btns = b("DONE", "다시 검토함 · 완료", "btn-sm ok") + b("IN_PROGRESS", "진행중으로");
+      else btns = b("NEEDS_REVIEW", "재검토 필요로") + b("IN_PROGRESS", "진행중으로");
+    }
+    var sub = w.status === "NOT_STARTED" ? (what ? esc(what) + " 없음 — 만들면 진행중이 됩니다" : "") : w.reason ? esc(w.reason) : w.note ? esc(w.note) : w.by ? esc(w.by) + (w.at ? " · " + esc(fmtDate(w.at)) : "") : "";
+    return '<div class="wctl ' + w.status + '"><span class="wl">' + esc(what || "작업 상태") + "</span>" + workPill(p, key) + (sub ? '<span class="hint">' + sub + "</span>" : "") + (btns ? '<span class="wbtns">' + btns + "</span>" : "") + "</div>";
+  }
+  function workCounts(list) {
+    var c = { NOT_STARTED: 0, IN_PROGRESS: 0, DONE: 0, NEEDS_REVIEW: 0 };
+    list.forEach(function (w) { c[w.status]++; });
+    return c;
+  }
+  function workStack(c, total) {
+    total = total || 1;
+    return '<div class="wstack" role="img" aria-label="' + WORK_ORDER.map(function (k) { return WORK_LABEL[k] + " " + c[k]; }).join(", ") + '">' + WORK_ORDER.map(function (k) { return c[k] ? '<span class="ws-' + k + '" style="width:' + (c[k] / total * 100) + '%"></span>' : ""; }).join("") + "</div>" +
+      '<div class="wlegend">' + WORK_ORDER.map(function (k) { return '<span><i class="ws-' + k + '"></i>' + WORK_LABEL[k] + " " + c[k] + "</span>"; }).join("") + "</div>";
   }
   function revBadge(p, sb) {
     var d = selectedDesign(p, sb.systemCode);
@@ -1850,7 +2081,7 @@
       if (r.view === "task") want = "/p/" + enc(code) + "/task/" + enc(r.taskId) + "/" + (r.tab || "flow");
       else {
         want = "/p/" + enc(code) + "/" + (r.page || "dash");
-        if (r.page === "design" && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
+        if ((r.page === "design" || r.page === "proto") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
       }
     } else if (r.view === "account") want = "/account";
     else if (r.view === "admin") want = "/admin";
@@ -2656,6 +2887,31 @@
     if (amb) { authState.err = ""; showAuth(amb.dataset.authmode); return; }
     var alc = target.closest && target.closest("[data-ailogcopy]");
     if (alc && aiLogs && aiLogs.logs) { copyText(aiLogs.logs[Number(alc.dataset.ailogcopy)].raw || "", alc, "복사함"); return; }
+    var mkb = target.closest && target.closest(".sbc-mk");
+    if (mkb) { if (!mkb.classList.contains("drag") || ev.detail === 0) mkHighlight(mkb.closest(".sb-canvas").getAttribute("data-sbc"), Number(mkb.getAttribute("data-mk"))); return; }
+    var zb = target.closest && target.closest("[data-sbzoom]");
+    if (zb) {
+      var zc = zb.closest(".sb-canvas").getAttribute("data-sbc"), zs = Number(zb.getAttribute("data-sbzoom")), zv = state.sbZoom[zc] || 1;
+      state.sbZoom[zc] = zs === 0 ? 1 : Math.max(1, Math.min(4, Math.round((zv + zs * 0.5) * 10) / 10));
+      layoutCanvases(zb.closest(".sb-canvas").parentNode);
+      return;
+    }
+    var rsb = target.closest && target.closest("[data-sbreset]");
+    if (rsb) {
+      var rsid = rsb.getAttribute("data-sbreset"), rsbx = P().model.storyboard.screens.find(function (x) { return x.screenId === rsid; });
+      var todo = rsbx.components.filter(function (c) { return c.marker; });
+      rsb.disabled = true;
+      todo.reduce(function (pr, c) { return pr.then(function () { return api("POST", "/api/projects/" + enc(P().model.project.code) + "/commands", { cmd: { op: "sb.marker", screenId: rsid, no: c.no, pos: null } }); }); }, Promise.resolve())
+        .then(function () { return api("GET", "/api/projects/" + enc(P().model.project.code)); })
+        .then(function (r) { setProject(r.project); rebuild(); render(); toast("번호 위치를 기본으로 되돌렸습니다"); }, function (e) { toast(e.message, "err"); render(); });
+      return;
+    }
+    var wkb = target.closest && target.closest("[data-work]");
+    if (wkb) {
+      wkb.disabled = true;
+      cmd({ op: "work.set", key: wkb.getAttribute("data-work"), status: wkb.getAttribute("data-wst") }).catch(function (e) { toast(e.message, "err"); render(); });
+      return;
+    }
     var acb = target.closest && target.closest("[data-act]");
     if (acb && ACTIONS[acb.dataset.act]) { ACTIONS[acb.dataset.act](acb.dataset.arg, acb); return; }
     var pvb = target.closest && target.closest("[data-preview]");
@@ -2709,7 +2965,8 @@
     else if (d.sys) { var key = P().model.project.code + ":" + d.sys; state.off[key] = !state.off[key]; render(); }
     else if (d.fsys) { state.flowSys = d.fsys; render(); }
     else if (d.dsys) { state.dsSys[P().model.project.code] = d.dsys; render(); }
-    else if (d.pscreen) { state.proto[r.taskId] = d.pscreen; renderProto(); }
+    else if (d.pscreen) { state.proto[protoCtx().key] = d.pscreen; renderProto(); }
+    else if (d.pstep) { var pcx = protoCtx(), ix = pcx.list.indexOf(state.proto[pcx.key]) + Number(d.pstep); if (pcx.list[ix]) { state.proto[pcx.key] = pcx.list[ix]; renderProto(); } }
   });
   function selectText(el) {
     if (!el) return;

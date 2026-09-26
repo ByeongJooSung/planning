@@ -281,8 +281,10 @@
 
   function blocks(ds, comps, ctx) {
     return comps.map(function (c) {
-      if (!c.ui) return '<div class="wf-blk text"><span class="wf-mk">' + c.no + '</span><div class="wf-generic"><div class="wf-gh"><b>' + esc(c.label) + "</b><code>와이어프레임 미작성</code></div><p class=\"wf-meta\">" + esc(c.customer || c.planner || "") + "</p></div></div>";
-      return '<div class="wf-blk"' + (ctx.markers ? "" : "") + ">" + (ctx.markers ? '<span class="wf-mk">' + c.no + "</span>" : "") + component(ds, c.ui.component, c.ui.props, ctx, c.ui.link, c) + "</div>";
+      // markers: true → 번호 배지, "pos" → 배지 없이 위치만 표시(data-no, 화면설계서 캔버스가 배지를 따로 올림)
+      var no = ctx.markers ? ' data-no="' + c.no + '"' : "";
+      if (!c.ui) return '<div class="wf-blk text"' + no + ">" + (ctx.markers === "pos" ? "" : '<span class="wf-mk">' + c.no + "</span>") + '<div class="wf-generic"><div class="wf-gh"><b>' + esc(c.label) + "</b><code>와이어프레임 미작성</code></div><p class=\"wf-meta\">" + esc(c.customer || c.planner || "") + "</p></div></div>";
+      return '<div class="wf-blk"' + no + ">" + (ctx.markers === true ? '<span class="wf-mk">' + c.no + "</span>" : "") + component(ds, c.ui.component, c.ui.props, ctx, c.ui.link, c) + "</div>";
     }).join("");
   }
 

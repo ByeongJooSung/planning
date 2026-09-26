@@ -7,6 +7,9 @@
  *  deriveProject(state)    → 화면에 필요한 RTM·Diff·프롬프트 (ViewerProject)
  */
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
+import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
+
+const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
 import { addDesignComponent, proposeDesign, selectDesign } from "../design/ops.js";
@@ -56,6 +59,7 @@ export interface ViewerProject {
   chunks: Chunk[];
   prompts: Record<string, PromptSet>;
   gens: Record<string, GenPrompt>;
+  work: WorkBoard;
 }
 
 export type Command =
@@ -64,6 +68,10 @@ export type Command =
   | { op: "system.add"; system: unknown }
   | { op: "req.add"; input: AddRequirementInput; autoTasks?: boolean }
   | { op: "req.exclude"; id: string; reason: string }
+  /** 작업 상태 표시 — 진행중·완료·재검토 필요 (key: ia:시스템 · sb:화면 · flow:요구사항 · ds:시스템) */
+  | { op: "work.set"; key: string; status: string; note?: string; by?: string }
+  /** 화면설계서 설명 번호 위치 (null이면 기본 위치로) */
+  | { op: "sb.marker"; screenId: string; no: number; pos: { x: number; y: number } | null }
   /** 기능 명세 저장 (빈 문자열이면 지워 참조자료 초안으로 돌아간다) */
   | { op: "req.spec"; id: string; spec: string }
   | { op: "task.add"; requirementId: string; input: AddTaskInput }
@@ -150,9 +158,42 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       if (!r || r.status === "DELETED") throw new Error(`요구사항을 찾을 수 없습니다: ${cmd.id}`);
       const spec = String(cmd.spec ?? "").replace(/\r\n/g, "\n").trim();
       if (spec.length > 20000) throw new Error("기능 명세는 20,000자 이하로 적어 주세요");
+      if ((r.spec ?? "") !== spec) m.rtmRecords.history.push({ requirementId: r.id, at: now.toISOString(), kind: "CHANGED", detail: "기능 명세 변경" });
       if (spec) r.spec = spec;
       else delete r.spec;
       message = spec ? `${r.id} 기능 명세를 저장했습니다` : `${r.id} 기능 명세를 지웠습니다 (참조자료 초안 사용)`;
+      break;
+    }
+    case "work.set": {
+      const st = (SETTABLE as readonly string[]).includes(cmd.status) ? (cmd.status as (typeof SETTABLE)[number]) : null;
+      if (!st) throw new Error(`상태는 ${SETTABLE.map((x) => WORK_LABEL[x]).join(" · ")} 중 하나입니다`);
+      if (!/^(ia|sb|flow|ds):./.test(cmd.key)) throw new Error(`작업 대상이 올바르지 않습니다: ${cmd.key}`);
+      if (!hasArtifact(m, cmd.key)) throw new Error("아직 만든 산출물이 없어 상태를 바꿀 수 없습니다 (미진행)");
+      m.rtmRecords.work[cmd.key] = { status: st, at: now.toISOString(), by: (cmd.by ?? "").slice(0, 60), note: (cmd.note ?? "").slice(0, 500) };
+      // 화면설계서 완료 = 지금 디자인 시스템 개정으로 검토함
+      if (st === "DONE" && cmd.key.startsWith("sb:")) {
+        const sb = m.storyboard.screens.find((x) => `sb:${x.screenId}` === cmd.key)!;
+        const d = m.design.systems.find((x) => x.systemCode === sb.systemCode && x.status === "SELECTED");
+        if (d) sb.designRevision = d.revision;
+        sb.status = "REVIEWED";
+      } else if (cmd.key.startsWith("sb:")) {
+        const sb = m.storyboard.screens.find((x) => `sb:${x.screenId}` === cmd.key)!;
+        sb.status = "DRAFT";
+      }
+      message = `${cmd.key.replace(/^(\w+):/, (_, k: string) => `${WORK_KIND[k] ?? k} `)} → ${WORK_LABEL[st]}`;
+      detail = workOf(m, cmd.key);
+      break;
+    }
+    case "sb.marker": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      const c = sb?.components.find((x) => x.no === cmd.no);
+      if (!c) throw new Error(`화면설계서 ${cmd.screenId}에 ${cmd.no}번 항목이 없습니다`);
+      if (cmd.pos) {
+        const x = Number(cmd.pos.x), y = Number(cmd.pos.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("위치 값이 올바르지 않습니다");
+        c.marker = { x: Math.round(Math.max(-200, Math.min(2120, x))), y: Math.round(Math.max(-200, Math.min(20000, y))) };
+      } else delete c.marker;
+      message = cmd.pos ? `${cmd.screenId} ${cmd.no}번 설명 위치를 옮겼습니다` : `${cmd.screenId} ${cmd.no}번 설명 위치를 기본으로 되돌렸습니다`;
       break;
     }
     case "task.add": {
@@ -219,6 +260,9 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
     case "gen.apply": {
       if (!(GEN_KINDS as readonly string[]).includes(cmd.kind)) throw new Error(`생성 종류는 ${GEN_KINDS.join(" | ")} 중 하나입니다`);
       const r = applyGenerated(m, cmd.kind as GenKind, cmd.target, cmd.output, { now, instruction: cmd.instruction, scope: cmd.scope });
+      // AI가 만들었다고 완료가 아니다 — 진행중으로 두고 작업자가 검토 후 완료 표시
+      const wk = cmd.kind === "flow" ? `flow:${cmd.target}` : `${cmd.kind}:${cmd.target}`;
+      m.rtmRecords.work[wk] = { status: "IN_PROGRESS", at: now.toISOString(), by: "AI 적용", note: "" };
       message = r.summary;
       detail = r;
       break;
@@ -299,6 +343,7 @@ export function deriveProject(state: ProjectState, now = new Date(), opts: { vie
     chunks,
     prompts: buildPrompts(model, chunks, opts),
     gens: buildGenPrompts(model, chunks, opts),
+    work: workBoard(model),
   };
 }
 

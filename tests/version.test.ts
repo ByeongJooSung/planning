@@ -30,7 +30,8 @@ describe("스냅샷·Diff — 기존 서비스 수정 샘플", () => {
     expect(m.project.stages.S2).toBe("SKIPPED");
     expect(rtm.orphans).toEqual([]);
     expect(rtm.rows.find((r) => r.requirementId === "REQ-003")!.crIds).toEqual(["CR-001"]);
-    expect(rtm.rows.find((r) => r.requirementId === "REQ-001")!.tasks[0]!.status).toBe("DESIGNED");
+    // 화면설계서는 있지만 작업자가 완료 표시를 하지 않은 초안 → 설계중
+    expect(rtm.rows.find((r) => r.requirementId === "REQ-001")!.tasks[0]!.status).toBe("IN_DESIGN");
     // CR로 추가된 REQ-003은 아직 기획안에 없음(S1). 관리자 화면은 스토리보드 미작성(S4). S3는 미시작이라 검사 안 함.
     // USR 디자인 컨셉이 아직 선택되지 않아 와이어프레임 제작 전 단계(S4)로 잡힌다.
     expect(rtm.gaps.map((g) => `${g.stage}:${g.ref}`)).toEqual(["S1:REQ-003-T01", "S4:REQ-002-T01", "S4:USR"]);

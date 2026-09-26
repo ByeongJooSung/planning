@@ -8,6 +8,86 @@
     }
   ],
   "notes": {},
+  "work": {
+    "ia:PUB": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "ia:CVL": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "ia:ADM": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "ds:PUB": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "ds:CVL": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "ds:ADM": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:PUB_INF_LST_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:PUB_INF_DTL_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:CVL_INF_REG_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:CVL_INF_STS_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:ADM_INF_REV_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "sb:ADM_INF_HIS_010": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    },
+    "flow:SFR-002": {
+      "status": "DONE",
+      "at": "2026-09-25T09:00:00.000Z",
+      "by": "기획 리드",
+      "note": ""
+    }
+  },
   "history": [
     {
       "requirementId": "SFR-001",
