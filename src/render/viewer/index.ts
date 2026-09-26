@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Model } from "../../model/schema.js";
 import { buildGenPrompts, DS_SLOTS, REFINE_INSTRUCTION, type GenPrompt } from "../../ai/generate.js";
+import { SPEC_SLOT } from "../../ai/spec.js";
 import { ADDED_COMPONENT_VARS, COMPONENT_STYLE_VARS, DESIGN_SCOPES } from "../../design/catalog.js";
 import { buildPrompts, VIEWPORT, type PromptSet } from "../../ai/prompts.js";
 import { loadChunks } from "../../knowledge/store.js";
@@ -82,6 +83,7 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
   const json = JSON.stringify({
     viewport: VIEWPORT,
     refine: REFINE_INSTRUCTION,
+    specSlot: SPEC_SLOT,
     design: { scopes: DESIGN_SCOPES, styleVars: COMPONENT_STYLE_VARS, addedVars: ADDED_COMPONENT_VARS, slots: DS_SLOTS },
     ...data,
   }).replace(/</g, "\\u003c");

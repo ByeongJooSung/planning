@@ -1248,6 +1248,66 @@
       if (el) el.textContent = Math.round((Date.now() - layer.t0) / 1000);
     }, 1000);
   }
+  // ── 기능 명세: 요구사항추적표의 요구사항별 명세를 생성 프롬프트에 함께 싣는다 ──
+  var SPEC_SLOT = DATA.specSlot || "{{SPECS}}";
+  function specBase(s) { return s.saved != null ? s.saved : s.draft || ""; }
+  function specVal(s) { var e = layer && layer.specs; return e && e[s.id] != null ? e[s.id] : specBase(s); }
+  function specEdited(s) { var e = layer && layer.specs; return !!(e && e[s.id] != null && e[s.id].trim() !== specBase(s).trim()); }
+  function captureSpecs() {
+    document.querySelectorAll("[data-spec]").forEach(function (el) { layer.specs = layer.specs || {}; layer.specs[el.getAttribute("data-spec")] = el.value; });
+  }
+  /** 뷰어·CLI 공통 규칙 (src/ai/spec.ts specText) */
+  function fillSpecs(tpl, g) {
+    if (tpl.indexOf(SPEC_SLOT) < 0) return tpl;
+    var items = (g.specs || []).map(function (s) { return { s: s, t: specVal(s) }; }).filter(function (x) { return x.t.trim(); });
+    var text = items.length ? items.map(function (x) { return "### " + x.s.id + (x.s.originalId && x.s.originalId !== x.s.id ? " (" + x.s.originalId + ")" : "") + " " + x.s.title + "\n" + x.t.trim(); }).join("\n\n") : "- (없음 — 요구사항 원문과 참조자료 근거로 작성)";
+    return tpl.replace(SPEC_SLOT, function () { return text; });
+  }
+  /** 생성 전에 고친 명세를 요구사항에 저장한다 (손대지 않은 참조자료 초안은 저장하지 않음 — 참조자료가 바뀌면 새로 불러오도록) */
+  function saveSpecs(g, only) {
+    if (!SRV || !canEdit()) return Promise.resolve();
+    var todo = (g.specs || []).filter(function (s) {
+      if (only && s.id !== only) return false;
+      var v = specVal(s).trim();
+      if (only) return v !== (s.saved || "").trim();
+      return specEdited(s) && v !== (s.saved || "").trim();
+    });
+    return todo.reduce(function (pr, s) {
+      return pr.then(function () {
+        var v = specVal(s);
+        return cmd({ op: "req.spec", id: s.id, spec: v }).then(function () { if (layer && layer.specs) delete layer.specs[s.id]; });
+      });
+    }, Promise.resolve());
+  }
+  function specPill(s) {
+    if (specEdited(s)) return '<span class="pill IN_DESIGN">편집함' + (SRV && canEdit() ? " · 생성할 때 저장" : "") + "</span>";
+    if (s.saved != null) return '<span class="pill DESIGNED">저장된 명세</span>';
+    if (s.draft) return '<span class="pill NOT_STARTED">참조자료 초안</span>';
+    return '<span class="pill NOT_STARTED">비어 있음</span>';
+  }
+  function specEditor(g) {
+    var specs = g.specs || [];
+    var head = '<div class="spec-ed"><div class="spec-top"><div><b>기능 명세</b> <span class="hint">요구사항추적표에서 이 ' + (g.kind === "flow" ? "플로우" : "화면") + "에 연결된 요구사항의 명세입니다. 여기 적힌 내용이 생성 프롬프트에 그대로 실립니다" +
+      (SRV && canEdit() ? ". 고친 명세는 생성할 때 요구사항에 저장되어 다른 화면·플로우 생성에도 쓰입니다." : SRV ? "." : ". 이 화면에서만 쓰이며, 저장하려면 planning req spec 명령을 쓰세요.") + "</span></div>" +
+      (layer.specEdit ? '<button class="btn-sm" data-specclose>미리보기로 돌아가기</button>' : "") + "</div>";
+    if (!specs.length) return head + '<p class="hint">이 ' + (g.kind === "flow" ? "요구사항" : "화면") + "에 연결된 요구사항이 없습니다. 정보구조도에서 화면에 Task를 연결하면 해당 요구사항의 명세를 불러옵니다.</p></div>";
+    return head + specs.map(function (s, i) {
+      var from = s.from && s.from.length ? "불러온 곳: " + s.from.join(" · ") : s.draft ? "요구사항 설명에서 불러옴" : "참조자료에서 찾지 못했습니다. 기능명세서·요구사항정의서를 참조자료에 올리면 요구사항 ID(" + (s.originalId || s.id) + ")로 해당 항목을 자동으로 불러옵니다.";
+      return '<div class="spec-item"><div class="spec-h"><span class="tag mono">' + esc(s.id) + "</span>" + (s.originalId && s.originalId !== s.id ? '<span class="tag mono">' + esc(s.originalId) + "</span>" : "") + "<b>" + esc(s.title) + "</b>" + specPill(s) + "</div>" +
+        '<label class="sr" for="spec-' + i + '">' + esc(s.id) + " 기능 명세</label>" +
+        '<textarea id="spec-' + i + '" data-spec="' + esc(s.id) + '" rows="9" placeholder="예: 입력 항목과 필수 여부, 검증 규칙, 처리 조건·상태 변화, 예외, 안내 메시지">' + esc(specVal(s)) + "</textarea>" +
+        '<div class="spec-a"><span class="hint">' + esc(from) + '</span><span class="sp"></span>' +
+        (s.draft && specVal(s).trim() !== s.draft.trim() ? '<button class="btn-sm" data-specload="' + esc(s.id) + '">참조자료에서 다시 불러오기</button>' : "") +
+        (SRV && canEdit() && specVal(s).trim() !== (s.saved || "").trim() ? '<button class="btn-sm" data-specsave="' + esc(s.id) + '">지금 저장</button>' : "") + "</div></div>";
+    }).join("") + "</div>";
+  }
+  function specSummary(g) {
+    var specs = g.specs || [];
+    var filled = specs.filter(function (s) { return specVal(s).trim(); }).length, edited = specs.filter(specEdited).length;
+    var onRight = !layer.busy && (layer.specEdit || layer.sel == null || layer.fresh);
+    return '<div class="spec-sum"><div><b>기능 명세</b> <span class="hint">' + (specs.length ? "요구사항 " + specs.length + "건 중 " + filled + "건 프롬프트에 포함" + (edited ? " · 편집 " + edited + "건" : "") : "연결된 요구사항 없음") + (onRight ? " · 오른쪽에서 편집" : "") + "</span></div>" +
+      (!onRight && !layer.busy ? '<button class="btn-sm" data-specedit>명세 보기·편집</button>' : "") + "</div>";
+  }
   function genRun(instruction) {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
     var base = layer.sel != null && !layer.fresh ? doc.versions[layer.sel] : null;
@@ -1255,15 +1315,20 @@
     var cids = base ? base.commentIds || [] : layer.commentIds || [];
     if (g.requiresInstruction && !base && !instruction && !cids.length) { layer.err = "조정 요청을 적어 주세요."; renderLayer(); return; }
     if (base && !instruction) { layer.err = "미세조정 프롬프트를 적어 주세요."; renderLayer(); return; }
-    var tpl = g.kind === "ds" ? fillDs(g.prompt, p, g.target, scope, cids) : g.prompt;
+    captureSpecs();
+    var tpl = g.kind === "ds" ? fillDs(g.prompt, p, g.target, scope, cids) : fillSpecs(g.prompt, g);
     var rootText = base ? base.root || "" : instruction || (cids.length ? "위 댓글을 모두 반영해 주세요." : "");
     var first = tpl + (g.requiresInstruction ? rootText : (!base && instruction ? "\n## 추가 지시\n" + instruction + "\n" : ""));
     var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: DATA.refine + instruction }] : first;
     layer.ctl = new AbortController();
-    layer.busy = true; layer.err = ""; layer.stream = 0;
+    layer.busy = true; layer.err = ""; layer.stream = 0; layer.specEdit = false;
     startElapsed();
     renderLayer();
-    AI.sample.json(input, { signal: layer.ctl.signal, cache: false, onText: function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; } })
+    var ctl = layer.ctl;
+    saveSpecs(g).then(function () {
+      if (ctl.signal.aborted) { var ab = new Error("cancelled"); ab.code = "cancelled"; throw ab; }
+      return AI.sample.json(input, { signal: ctl.signal, cache: false, onText: function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; } })
+    }, function (e) { if (!e.code) e.code = "server"; throw e; })
       .then(function (out) {
         if (g.kind === "ds") out = normDsPatch(out, selectedDesign(p, g.target));
         var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
@@ -1458,13 +1523,15 @@
     var left = '<div class="gen-left">' + scopeNote + '<div class="gen-status">' + (g.kind === "ds" ? (doc.appliedRev ? '<span class="pill DESIGNED">누적 적용 r' + doc.appliedRev + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') : doc.applied ? '<span class="pill DESIGNED">적용: v' + doc.applied + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') +
       (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유되고, 적용하면 저장소 모델이 바로 바뀝니다</span><span class="gen-ai"><label for="gen-ai-switch">AI</label>' + (aiCache.code === P().model.project.code ? aiSwitch("gen-ai-switch") : '<span class="hint">' + esc(effLabel(P().ai)) + "</span>") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
+      (g.specs ? specSummary(g) : "") +
       (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
         '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
         : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
       (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 미세조정 프롬프트를 적으세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + (SRV && canEdit() ? ' <button class="lnk" data-gotologs>호출 기록 보기</button>' : "") + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
-    var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
+    var showSpec = !!g.specs && !layer.busy && (layer.specEdit || !sel);
+    var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : showSpec ? specEditor(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (isApplied ? " 적용됨" : " 미리보기") : "") + '</span><span class="sp"></span>' +
       (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied && !SRV ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
@@ -1648,6 +1715,7 @@
     var body;
     var draftEl = document.getElementById("gen-in");
     if (draftEl && layer.kind === "gen") layer.draft = draftEl.value;
+    if (layer.kind === "gen") captureSpecs();
     var rvDraftEl = document.getElementById("rv-in");
     if (rvDraftEl && layer.kind === "review") layer.rvDraft = rvDraftEl.value;
     if (layer.kind === "aiconn") {
@@ -2398,7 +2466,7 @@
   function hasUnsaved() {
     if (!layer) return false;
     if (layer.kind === "form" || layer.kind === "aiconn") return true;
-    if (layer.kind === "gen") { var g = document.getElementById("gen-in"); return !!(layer.busy || (g && g.value.trim())); }
+    if (layer.kind === "gen") { var g = document.getElementById("gen-in"), gg = P().gens[layer.key]; captureSpecs(); return !!(layer.busy || (g && g.value.trim()) || (gg && (gg.specs || []).some(specEdited))); }
     if (layer.kind === "review") { var r = document.getElementById("rv-in"); return !!(layer.pending || (r && r.value.trim())); }
     return false;
   }
@@ -2562,14 +2630,23 @@
       if (lb && lb.dataset.cmtgen != null) { commentGen(lb.dataset.cmtgen); return; }
       if (lb && layer.kind === "gen") {
         var gin = document.getElementById("gen-in");
-        if (lb.dataset.gsel != null) { layer.sel = Number(lb.dataset.gsel); layer.fresh = false; layer.err = ""; renderLayer(); return; }
+        if (lb.dataset.gsel != null) { layer.sel = Number(lb.dataset.gsel); layer.fresh = false; layer.specEdit = false; layer.err = ""; renderLayer(); return; }
         if (lb.hasAttribute("data-grun")) { genRun(gin ? gin.value.trim() : ""); return; }
         if (lb.hasAttribute("data-gnew")) { var cur0 = (overlayOf(layer.key) || { versions: [] }).versions[layer.sel]; if (cur0 && cur0.scope) { layer.scope = cur0.scope; layer.commentIds = cur0.commentIds; } layer.sel = null; layer.fresh = true; layer.err = ""; renderLayer(); return; }
         if (lb.hasAttribute("data-gstop")) { if (layer.ctl) layer.ctl.abort(); return; }
         if (lb.hasAttribute("data-gapply")) { genApply(true); return; }
         if (lb.hasAttribute("data-gunapply")) { genApply(false); return; }
         if (lb.hasAttribute("data-gjson")) { var dj = overlayOf(layer.key); copyText(JSON.stringify(dj.versions[layer.sel].output, null, 2), lb); return; }
-        if (lb.hasAttribute("data-gcopy")) { copyText(P().gens[layer.key].prompt, lb); return; }
+        if (lb.hasAttribute("data-gcopy")) { captureSpecs(); copyText(fillSpecs(P().gens[layer.key].prompt, P().gens[layer.key]), lb); return; }
+        if (lb.hasAttribute("data-specedit")) { layer.specEdit = true; renderLayer(); return; }
+        if (lb.hasAttribute("data-specclose")) { layer.specEdit = false; renderLayer(); return; }
+        if (lb.dataset.specload) { captureSpecs(); var gs = P().gens[layer.key], sl = (gs.specs || []).find(function (x) { return x.id === lb.dataset.specload; }); if (sl) { layer.specs[sl.id] = sl.draft; renderLayer(); } return; }
+        if (lb.dataset.specsave) {
+          captureSpecs();
+          lb.disabled = true;
+          saveSpecs(P().gens[layer.key], lb.dataset.specsave).then(function () { if (layer) renderLayer(); }, function (e) { if (layer) { layer.err = "명세를 저장하지 못했습니다: " + (e && e.message || e); renderLayer(); } });
+          return;
+        }
       }
       if (target.closest(".layer")) return;
     }

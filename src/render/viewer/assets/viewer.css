@@ -806,3 +806,17 @@ html.layer-open .shell { user-select: none; -webkit-user-select: none; }
 .al-err { color: var(--crit); font-size: 12.5px; }
 .al-raw-h { display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
 .al-raw { max-height: 360px; overflow: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+
+/* 기능 명세 (생성 레이어) */
+.spec-sum { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.spec-sum .hint { display: inline; }
+.spec-ed { display: flex; flex-direction: column; gap: 12px; }
+.spec-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.spec-top .hint { display: block; margin-top: 2px; }
+.spec-item { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.spec-h { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.spec-h b { margin-right: auto; }
+.spec-item textarea { width: 100%; min-height: 150px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.55; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; }
+.spec-a { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.spec-a .hint { flex: 1 1 240px; overflow-wrap: anywhere; }
+.spec-a .sp { display: none; }

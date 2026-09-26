@@ -162,6 +162,8 @@ export const Requirement = z.object({
   /** EXCLUDED일 때 필수 */
   excludeReason: z.string().optional(),
   ambiguous: z.boolean().default(false),
+  /** 기능 명세 — 작업자가 확인·편집한 본문. AI 생성(화면설계서·플로우) 프롬프트에 함께 실린다 */
+  spec: z.string().max(20000).optional(),
   tasks: z.array(Task).default([]),
 });
 

@@ -10,6 +10,7 @@ import { scopeOf, styleVarsOf, type DesignScope } from "../design/catalog.js";
 import type { Model, SystemDesign } from "../model/schema.js";
 import { buildRtm, STATUS_LABEL } from "../trace/rtm.js";
 import type { GenKind } from "./apply.js";
+import { SPEC_SLOT, specItems, type SpecItem } from "./spec.js";
 import {
 
   componentCatalog,
@@ -32,6 +33,8 @@ export interface GenPrompt {
   prompt: string;
   /** true면 작업자의 지시가 있어야 생성할 수 있다 (디자인 미세조정) */
   requiresInstruction: boolean;
+  /** 관련 요구사항의 기능 명세 — prompt의 SPEC_SLOT을 이것(작업자 편집본)으로 채운다 */
+  specs?: SpecItem[];
 }
 
 /** 미세조정 요청 문구. 대화의 마지막 user 턴 */
@@ -125,6 +128,7 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
       ].join("\n"),
     ),
     section("요구사항 원문", reqs.map((r) => `- ${r.id} ${r.title}: ${r.description || "(설명 없음)"}`).join("\n")),
+    section("기능 명세 (작업자 확인)", SPEC_SLOT),
     section("공통 상태값", states),
     section("같은 시스템의 다른 화면 (이동 대상)", siblings),
     section("참조 URL", urlBlock(c.urls(node.systemCode))),
@@ -139,6 +143,7 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
         "- 선택 요소(셀렉트·라디오·체크·탭·필터)는 options.values 전체와 default를 쓴다",
         "- 입력 요소는 validation: required, minLength/maxLength, format, timing(ON_INPUT|ON_BLUR|ON_SUBMIT), messages(condition, text)",
         "- 참조자료(회의록 결정 등)와 어긋나지 않게. 근거 없는 수치·문구는 지어내지 말고 planner에 ‘확인 필요’로 적는다",
+        "- 기능 명세의 항목·규칙·조건·메시지를 이 화면에 해당하는 만큼 빠짐없이 반영한다. 명세와 요구사항 원문이 다르면 명세를 따른다",
         "- no는 1부터 위→아래 순서",
       ].join("\n"),
     ),
@@ -148,7 +153,7 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
       '{"template":"list|detail|form|dashboard|main|login|popup","components":[{"no":1,"label":"검색 조건","kind":"search-panel","planner":"…","customer":"…","options":{"values":["전체","심사중"],"default":"전체"},"validation":{"required":true,"maxLength":100,"timing":["ON_SUBMIT"],"messages":[{"condition":"미입력","text":"…"}]},"ui":{"component":"search-panel","props":{},"link":"이동 화면 ID(없으면 생략)"}}]}\noptions·validation·link는 해당할 때만 넣는다.',
     ),
   ]);
-  return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 화면설계서`, prompt, requiresInstruction: false };
+  return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 화면설계서`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, reqs.map((r) => r.id)) };
 }
 
 function flowGen(c: Ctx, requirementId: string): GenPrompt {
@@ -167,6 +172,7 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
   const prompt = finish([
     head(`${requirementId} ${req.title} 프로세스 플로우`, "이 요구사항의 업무 처리 흐름을 시스템별 레인으로 나눈 프로세스 플로우로 만들어 주세요."),
     section("대상", `${projectLine(c)}\n- 요구사항: ${requirementId} ${req.title}: ${req.description || "(설명 없음)"}`),
+    section("기능 명세 (작업자 확인)", SPEC_SLOT),
     section("Task (처리 순서의 근거)", tasks),
     section("레인 (시스템 구분)", systems.map((s) => `- L-${s!.code}: ${s!.name} · ${s!.users[0] ?? ""} (systemCode ${s!.code})`).join("\n")),
     section("현재 플로우 (있으면 보완)", existing ? JSON.stringify(existing) : "- (없음, 새로 작성)"),
@@ -177,6 +183,7 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
         "- shape: TERMINATOR(시작·종료) PROCESS(처리) DECISION(판단, 분기 edge에 label) DOCUMENT(문서) IO(입출력·연계)",
         "- 각 처리 노드는 해당 Task ID를 taskIds에, 화면이 있으면 screenId에 넣는다",
         "- 반려·보완처럼 되돌아가는 흐름도 edge로 넣는다",
+        "- 기능 명세의 처리 조건·분기·예외를 빠짐없이 흐름에 반영한다",
         `- flow id는 "${flowId}", kind "PROCESS", 노드 id는 n1, n2 …`,
       ].join("\n"),
     ),
@@ -185,7 +192,7 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
       `{"id":"${flowId}","kind":"PROCESS","title":"${req.title} 처리 프로세스","lanes":[{"id":"L-CVL","label":"민원포털 · 민원인","systemCode":"CVL"}],"nodes":[{"id":"n1","shape":"TERMINATOR","label":"시작","lane":"L-CVL","taskIds":[],"change":"NEW"}],"edges":[{"from":"n1","to":"n2","label":""}]}`,
     ),
   ]);
-  return { kind: "flow", target: requirementId, title: `${requirementId} ${req.title} 프로세스 플로우`, prompt, requiresInstruction: false };
+  return { kind: "flow", target: requirementId, title: `${requirementId} ${req.title} 프로세스 플로우`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, [requirementId]) };
 }
 
 /** 디자인 미세조정 프롬프트의 자리표시자 — 조정 범위·현재 디자인(적용본 포함)·댓글은 요청할 때 채운다 */

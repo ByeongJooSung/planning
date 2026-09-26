@@ -96,6 +96,8 @@ planning design component-add ADM review-timeline --name "심사 이력 타임�
 planning link add https://www.krds.go.kr --label "KRDS"   # 참조 URL (--kind SERVICE|FIGMA|REFERENCE)
 planning prompt sb CVL_INF_REG_010 --for figma           # AI 요청 프롬프트 (sb|proto|ia|ds)
 planning gen prompt ia ADM                                # AI 생성 프롬프트 (ia|sb|flow|ds) → Claude에서 JSON 받기
+planning req spec SFR-002                                # 기능 명세 보기 (저장본, 없으면 참조자료에서 요구사항 ID로 불러온 초안)
+planning req spec SFR-002 --file spec.md                 # 기능 명세 저장 → 화면설계서·플로우 생성 프롬프트에 함께 실림
 planning gen prompt sb ADM_INF_REV_010 --refine v1.json --instruction "검색 조건에 신청인 추가"   # 미세조정
 planning gen apply ds ADM patch.json --instruction "주 색을 더 진하게"   # 반영 (디자인 개정 r+1)
 planning gen review                                       # 디자인 변경 뒤 다시 검토할 화면

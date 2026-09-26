@@ -15,6 +15,17 @@ describe("서비스 코어", () => {
     expect(() => execute(r.state, { op: "task.add", requirementId: "REQ-001", input: { systemCode: "NOPE", action: "x" } }, now)).toThrow(/등록되지 않은 시스템/);
   });
 
+  it("기능 명세 저장·지우기 — 생성 프롬프트의 명세로 쓰인다", () => {
+    let s = execute(base(), { op: "req.add", input: { title: "정보공개", description: "민원인이 신청하면 심사자가 승인하고 공개한다" }, autoTasks: true }, now).state;
+    s = execute(s, { op: "req.spec", id: "REQ-001", spec: "  입력: 제목(필수, 100자)\r\n승인 시 공개  " }, now).state;
+    expect(s.model.requirements[0]!.spec).toBe("입력: 제목(필수, 100자)\n승인 시 공개");
+    const flow = deriveProject(s, now).gens["flow:REQ-001"]!;
+    expect(flow.specs![0]!.saved).toBe("입력: 제목(필수, 100자)\n승인 시 공개");
+    s = execute(s, { op: "req.spec", id: "REQ-001", spec: "" }, now).state;
+    expect(s.model.requirements[0]!.spec).toBeUndefined();
+    expect(() => execute(s, { op: "req.spec", id: "REQ-999", spec: "x" }, now)).toThrow(/찾을 수 없습니다/);
+  });
+
   it("스냅샷은 버전을 올리고 Diff 기준이 된다", () => {
     let s = execute(base(), { op: "snapshot", note: "기준선" }, now).state;
     expect(s.model.project.version).toBe("0.2");

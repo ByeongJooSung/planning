@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { buildPubInfo } from "../scripts/build-examples.js";
 import { applyDesignPatch, applyGenerated, applyIa, screensNeedingReview } from "../src/ai/apply.js";
 import { buildGenPrompts, type GenPrompt } from "../src/ai/generate.js";
+import { fillSpecPrompt, SPEC_SLOT } from "../src/ai/spec.js";
 import { loadChunks } from "../src/knowledge/store.js";
 import type { Model } from "../src/model/schema.js";
 import { loadModel } from "../src/project/store.js";
@@ -30,6 +31,34 @@ describe("AI 생성 프롬프트", () => {
     expect(p).toContain("부모 화면 ADM_INF_REV_010");
     expect(p).toContain("반드시 JSON 하나만");
     expect(p).toMatch(/\[SRC-00\d /);
+  });
+  it("화면설계서·플로우 생성에 요구사항별 기능 명세를 싣는다 — 참조자료에서 요구사항 ID로 불러오고, 편집·저장본이 우선", async () => {
+    const f = gens["flow:SFR-002"]!;
+    expect(f.prompt).toContain(SPEC_SLOT);
+    expect(f.specs).toHaveLength(1);
+    expect(f.specs![0]).toMatchObject({ id: "SFR-002", title: "대국민 정보공개" });
+    expect(f.specs![0]!.draft).toContain("부분공개일 때는 비공개 사유를 입력한다");
+    expect(f.specs![0]!.from[0]).toMatch(/^SRC-001 .*SFR-002/);
+    expect(f.specs![0]!.draft).not.toContain("SFR-003"); // 다음 요구사항 항목은 끌어오지 않는다
+    const filled = fillSpecPrompt(f.prompt, f.specs!);
+    expect(filled).not.toContain(SPEC_SLOT);
+    expect(filled).toContain("### SFR-002 대국민 정보공개\n");
+    expect(filled).toContain("기능 명세의 처리 조건·분기·예외");
+    expect(fillSpecPrompt(f.prompt, f.specs!, { "SFR-002": "공개 구분: 전체·부분·비공개 3종" })).toContain("공개 구분: 전체·부분·비공개 3종");
+    // 화면설계서: 화면에 연결된 Task의 요구사항마다
+    const sb = Object.values(gens).find((g) => g.kind === "sb" && g.specs?.some((s) => s.id === "SFR-002"))!;
+    expect(sb.prompt).toContain("## 기능 명세 (작업자 확인)");
+    expect(sb.prompt).toContain("명세와 요구사항 원문이 다르면 명세를 따른다");
+    // 저장된 명세가 있으면 그것을 쓴다
+    const m = await fresh();
+    m.requirements.find((r) => r.id === "SFR-002")!.spec = "저장한 명세";
+    const g2 = buildGenPrompts(m, await loadChunks(dir))["flow:SFR-002"]!;
+    expect(g2.specs![0]!.saved).toBe("저장한 명세");
+    expect(fillSpecPrompt(g2.prompt, g2.specs!)).toContain("저장한 명세");
+    // 참조자료가 없으면 요구사항 설명으로
+    const g3 = buildGenPrompts(m, [])["flow:SFR-006"]!;
+    expect(g3.specs![0]!.from).toEqual([]);
+    expect(g3.specs![0]!.draft).toBe(m.requirements.find((r) => r.id === "SFR-006")!.description);
   });
   it("정보구조도 생성 프롬프트에 화면 ID 규칙과 이 시스템 Task를 담는다", () => {
     const p = gens["ia:ADM"]!.prompt;

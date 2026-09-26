@@ -6,6 +6,7 @@ import { Command, Option } from "commander";
 import { validateModel } from "./model/validate.js";
 import { applyGenerated, GEN_KINDS, screensNeedingReview, type GenKind } from "./ai/apply.js";
 import { buildGenPrompts, fillDsPrompt, REFINE_INSTRUCTION } from "./ai/generate.js";
+import { fillSpecPrompt, specDraft } from "./ai/spec.js";
 import { scopeOf } from "./design/catalog.js";
 import { buildPrompts } from "./ai/prompts.js";
 import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
@@ -196,6 +197,31 @@ req
   .action(async (id: string, o) => {
     await mutate((m) => excludeRequirement(m, id, o.reason));
     console.log(`${id}를 제외 처리했습니다`);
+  });
+
+req
+  .command("spec <id>")
+  .description("기능 명세 보기·저장 — AI 생성(화면설계서·플로우) 프롬프트에 함께 실린다")
+  .option("--file <file>", "이 파일 내용으로 저장")
+  .option("--draft", "참조자료에서 불러온 초안을 그대로 저장")
+  .option("--clear", "저장한 명세를 지워 참조자료 초안으로 돌아가기")
+  .action(async (id: string, o) => {
+    const dir = await resolveDir();
+    const m = await loadModel(dir);
+    const r = m.requirements.find((x) => x.id === id || x.originalId === id);
+    if (!r) throw new Error(`요구사항이 없습니다: ${id}`);
+    const draft = specDraft(m, await loadChunks(dir), r);
+    if (!o.file && !o.draft && !o.clear) {
+      console.log(r.spec ? `[저장된 명세]\n${r.spec}` : `[참조자료 초안 — 저장 안 됨]${draft.from.length ? `\n근거: ${draft.from.join(" / ")}` : ""}\n${draft.text || "(없음)"}`);
+      return;
+    }
+    const text = o.clear ? "" : o.file ? await readFile(o.file, "utf8") : draft.text;
+    await mutate((mm) => {
+      const x = mm.requirements.find((q) => q.id === r.id)!;
+      if (text.trim()) x.spec = text.replace(/\r\n/g, "\n").trim();
+      else delete x.spec;
+    });
+    console.log(text.trim() ? `${r.id} 기능 명세를 저장했습니다 (${text.trim().length.toLocaleString()}자)` : `${r.id} 기능 명세를 지웠습니다`);
   });
 
 const task = program.command("task").description("시스템별 Task 관리");
@@ -422,6 +448,7 @@ gen
       const d = m.design.systems.find((x) => x.systemCode === target)!;
       g.prompt = fillDsPrompt(g.prompt, { scope: scopeOf(o.scope), design: { tokens: d.tokens, layout: d.layout, componentStyles: d.componentStyles, components: d.components }, comments: o.comments });
     }
+    if (g.specs) g.prompt = fillSpecPrompt(g.prompt, g.specs);
     if (g.requiresInstruction && !o.instruction && !o.refine) throw new Error("디자인 미세조정은 --instruction 이 필요합니다");
     if (o.refine) {
       const prev = await readFile(o.refine, "utf8");

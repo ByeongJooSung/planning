@@ -64,6 +64,8 @@ export type Command =
   | { op: "system.add"; system: unknown }
   | { op: "req.add"; input: AddRequirementInput; autoTasks?: boolean }
   | { op: "req.exclude"; id: string; reason: string }
+  /** 기능 명세 저장 (빈 문자열이면 지워 참조자료 초안으로 돌아간다) */
+  | { op: "req.spec"; id: string; spec: string }
   | { op: "task.add"; requirementId: string; input: AddTaskInput }
   | { op: "task.auto"; requirementId: string }
   | { op: "task.rm"; taskId: string }
@@ -143,6 +145,16 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       excludeRequirement(m, cmd.id, cmd.reason, c);
       message = `${cmd.id}을(를) 제외했습니다`;
       break;
+    case "req.spec": {
+      const r = m.requirements.find((x) => x.id === cmd.id);
+      if (!r || r.status === "DELETED") throw new Error(`요구사항을 찾을 수 없습니다: ${cmd.id}`);
+      const spec = String(cmd.spec ?? "").replace(/\r\n/g, "\n").trim();
+      if (spec.length > 20000) throw new Error("기능 명세는 20,000자 이하로 적어 주세요");
+      if (spec) r.spec = spec;
+      else delete r.spec;
+      message = spec ? `${r.id} 기능 명세를 저장했습니다` : `${r.id} 기능 명세를 지웠습니다 (참조자료 초안 사용)`;
+      break;
+    }
     case "task.add": {
       const t = addTask(m, cmd.requirementId, { ...cmd.input, origin: "MANUAL" }, c);
       message = `${t.id} Task를 추가했습니다`;
