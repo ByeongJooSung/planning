@@ -61,6 +61,28 @@ function commit(m: Model, work: Model) {
 }
 
 export function applyGenerated(m: Model, kind: GenKind, target: string, output: unknown, c: Ctx = {}): ApplyResult {
+  try {
+    return applyKind(m, kind, target, output, c);
+  } catch (e) {
+    if (e instanceof z.ZodError) throw new Error(`AI 결과 형식이 맞지 않아 반영하지 못했습니다: ${zodText(e)}`);
+    throw e;
+  }
+}
+
+/** zod 오류 → 사람이 읽는 문장 (예: "3번째 항목 options.values: 목록이어야 함") */
+export function zodText(e: z.ZodError): string {
+  return e.issues
+    .slice(0, 5)
+    .map((i) => {
+      const path = i.path.map((x) => (typeof x === "number" ? `${x + 1}번째` : String(x))).join(".");
+      const what = i.code === "invalid_type" ? `${TYPE_KO[String((i as { expected?: string }).expected)] ?? String((i as { expected?: string }).expected)}이어야 합니다` : i.message;
+      return `${path || "(전체)"}: ${what}`;
+    })
+    .join(" / ");
+}
+const TYPE_KO: Record<string, string> = { array: "목록", string: "글자", number: "숫자", object: "객체", boolean: "참/거짓" };
+
+function applyKind(m: Model, kind: GenKind, target: string, output: unknown, c: Ctx): ApplyResult {
   switch (kind) {
     case "ia":
       return applyIa(m, target, output);
@@ -94,7 +116,7 @@ export function applyIa(m: Model, systemCode: string, output: unknown): ApplyRes
 }
 
 export function applyStoryboard(m: Model, screenId: string, output: unknown): ApplyResult {
-  const out = SbOutput.parse(output);
+  const out = SbOutput.parse(normalizeStoryboardOutput(output));
   const node = m.ia.nodes.find((n) => n.id === screenId);
   if (!node || node.kind === "MENU") throw new Error(`정보구조도에 없는 화면입니다: ${screenId}`);
   const work = structuredClone(m);
@@ -115,8 +137,115 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
   return { summary: `${screenId} 화면설계서 ${prev ? "교체" : "작성"}: 구성 ${out.components.length}개`, changes: [], affectedScreens: [screenId] };
 }
 
+// ── 형식 보정: 모델마다 조금씩 다른 모양으로 답하므로 뜻이 분명한 차이는 받아들인다 ──
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
+function str(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return v.map((x) => str(x) ?? "").filter(Boolean).join("\n");
+  if (isObj(v)) return str(v.label ?? v.name ?? v.text ?? v.value ?? v.title) ?? JSON.stringify(v);
+  return undefined;
+}
+function int(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace(/[^0-9.-]/g, "")) : NaN;
+  return Number.isFinite(n) && String(v).trim() !== "" ? Math.round(n) : undefined;
+}
+function bool(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") return /^(true|y|yes|1|필수|예)$/i.test(v.trim()) ? true : /^(false|n|no|0|선택|아니오)$/i.test(v.trim()) ? false : undefined;
+  return undefined;
+}
+const TIMING = ["ON_INPUT", "ON_BLUR", "ON_SUBMIT"];
+const TEMPLATES = ["login", "dashboard", "main", "list", "detail", "form", "popup"];
+
+function normOptions(v: unknown): Obj | undefined {
+  let values: unknown = undefined;
+  let def: unknown;
+  let note: unknown;
+  if (Array.isArray(v)) values = v;
+  else if (typeof v === "string") values = v.split(/[,/|·]\s*/);
+  else if (isObj(v)) {
+    values = v.values ?? v.items ?? v.options ?? v.choices ?? v.list;
+    if (typeof values === "string") values = values.split(/[,/|·]\s*/);
+    def = v.default ?? v.defaultValue ?? v.value;
+    note = v.note ?? v.description;
+  } else return undefined;
+  const list = Array.isArray(values) ? values.map(str).filter((x): x is string => !!x && !!x.trim()) : [];
+  const d = str(def);
+  if (!list.length && d) list.push(d);
+  if (!list.length) return undefined;
+  return { values: list, ...(d ? { default: d } : {}), ...(str(note) ? { note: str(note) } : {}) };
+}
+
+function normValidation(v: unknown): Obj | undefined {
+  if (v == null) return undefined;
+  if (typeof v === "boolean" || typeof v === "string") return { required: bool(v) ?? false };
+  if (!isObj(v)) return undefined;
+  const out: Obj = { required: bool(v.required) ?? false };
+  for (const k of ["minLength", "maxLength"]) {
+    const n = int(v[k]);
+    if (n !== undefined) out[k] = n;
+  }
+  for (const k of ["format", "allowedChars"]) if (str(v[k])) out[k] = str(v[k]);
+  const timing = (Array.isArray(v.timing) ? v.timing : v.timing ? [v.timing] : []).map((x) => String(x).toUpperCase().replace(/^(INPUT|BLUR|SUBMIT)$/, "ON_$1")).filter((x) => TIMING.includes(x));
+  out.timing = [...new Set(timing)];
+  const msgs = Array.isArray(v.messages) ? v.messages : isObj(v.messages) ? Object.entries(v.messages).map(([condition, text]) => ({ condition, text })) : typeof v.messages === "string" ? [v.messages] : [];
+  out.messages = msgs
+    .map((x) => (isObj(x) ? { condition: str(x.condition ?? x.when ?? x.case) ?? "", text: str(x.text ?? x.message ?? x.msg) ?? "" } : { condition: "", text: str(x) ?? "" }))
+    .filter((x) => x.text);
+  return out;
+}
+
+function normUi(v: unknown, kind: string | undefined): Obj | undefined {
+  if (typeof v === "string") return v.trim() ? { component: v.trim(), props: {} } : undefined;
+  if (!isObj(v)) return undefined;
+  const component = str(v.component ?? v.id ?? v.type) ?? kind;
+  if (!component) return undefined;
+  const link = str(v.link);
+  return { component, props: isObj(v.props) ? v.props : {}, ...(link && link.trim() ? { link: link.trim() } : {}) };
+}
+
+/** 화면설계서 결과 보정 — options 가 배열·값 없이 오거나, 번호가 글자로 오는 경우 등 */
+export function normalizeStoryboardOutput(output: unknown): unknown {
+  if (!isObj(output)) return output;
+  const comps = Array.isArray(output.components) ? output.components : Array.isArray(output.items) ? output.items : undefined;
+  if (!comps) return output;
+  const components = comps.filter(isObj).map((c, i) => {
+    const kind = str(c.kind ?? c.type) ?? (isObj(c.ui) ? str(c.ui.component) : undefined) ?? "text";
+    const out: Obj = {
+      no: int(c.no) && int(c.no)! > 0 ? int(c.no) : i + 1,
+      label: str(c.label ?? c.name ?? c.title) ?? `${i + 1}번 항목`,
+      kind,
+      planner: str(c.planner) ?? "",
+      customer: str(c.customer) ?? "",
+    };
+    const options = normOptions(c.options);
+    if (options) out.options = options;
+    const validation = normValidation(c.validation);
+    if (validation) out.validation = validation;
+    const ui = normUi(c.ui, str(c.kind));
+    if (ui) out.ui = ui;
+    return out;
+  });
+  const template = str(output.template)?.toLowerCase();
+  return { ...(template && TEMPLATES.includes(template) ? { template } : {}), components };
+}
+
+/** 플로우 결과 보정 — 빠진 배열·라벨, 글자가 아닌 값 */
+export function normalizeFlowOutput(output: unknown): unknown {
+  if (!isObj(output)) return output;
+  const nodes = Array.isArray(output.nodes) ? output.nodes.filter(isObj).map((n) => ({ ...n, id: str(n.id), label: str(n.label) ?? "", taskIds: Array.isArray(n.taskIds) ? n.taskIds.map(String) : n.taskIds ? [String(n.taskIds)] : [] })) : output.nodes;
+  const edges = Array.isArray(output.edges) ? output.edges.filter(isObj).map((e) => ({ ...e, from: str(e.from), to: str(e.to), label: str(e.label) ?? "" })) : output.edges;
+  const lanes = Array.isArray(output.lanes) ? output.lanes.filter(isObj).map((l) => ({ ...l, id: str(l.id), label: str(l.label ?? l.name) ?? "" })) : output.lanes;
+  return { ...output, ...(nodes ? { nodes } : {}), ...(edges ? { edges } : {}), ...(lanes ? { lanes } : {}) };
+}
+
 export function applyFlow(m: Model, requirementId: string, output: unknown): ApplyResult {
-  const flow = FlowOutput.parse(output);
+  const flow = FlowOutput.parse(normalizeFlowOutput(output));
   const work = structuredClone(m);
   const prev = work.flows.find((f) => f.id === flow.id);
   work.flows = prev ? work.flows.map((f) => (f.id === flow.id ? flow : f)) : [...work.flows, flow];

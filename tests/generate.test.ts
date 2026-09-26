@@ -93,6 +93,25 @@ describe("생성 결과 반영", () => {
     expect(() => applyGenerated(m, "sb", "ADM_INF_REV_010_P01", bad)).toThrow("디자인 시스템에 없습니다");
   });
 
+  it("화면설계서 결과의 흔한 형식 차이(값 없는 options, 배열 options, 글자 번호·필수값)를 보정하고, 못 고치면 읽기 쉬운 오류", async () => {
+    const m = await fresh();
+    const sid = "ADM_INF_REV_010_P01";
+    const r = applyGenerated(m, "sb", sid, {
+      template: "POPUP",
+      components: [
+        { no: "1", label: "공개 구분", kind: "radio-group", options: { default: "전체공개" }, validation: { required: "true", maxLength: "200", timing: "submit", messages: { 미입력: "선택하세요" } }, ui: "radio-group" },
+        { label: "상태", kind: "select", options: ["전체", "심사중"], planner: ["a", "b"] },
+        { no: 3, label: "메모", kind: "textarea", options: {} },
+      ],
+    });
+    expect(r.summary).toContain("구성 3개");
+    const c = m.storyboard.screens.find((x) => x.screenId === sid)!.components;
+    expect(c[0]).toMatchObject({ no: 1, options: { values: ["전체공개"], default: "전체공개" }, validation: { required: true, maxLength: 200, timing: ["ON_SUBMIT"], messages: [{ condition: "미입력", text: "선택하세요" }] }, ui: { component: "radio-group" } });
+    expect(c[1]).toMatchObject({ no: 2, options: { values: ["전체", "심사중"] }, planner: "a\nb" });
+    expect(c[2]!.options).toBeUndefined();
+    expect(m.storyboard.screens.find((x) => x.screenId === sid)!.template).toBe("popup");
+    expect(() => applyGenerated(m, "flow", "SFR-002", { id: "PF-X", kind: "PROCESS", title: "t", nodes: [{ id: "n1", shape: "BOX" }] })).toThrow(/AI 결과 형식이 맞지 않아.*nodes\.1번째\.shape/);
+  });
   it("정보구조도 생성 결과는 시스템 단위로 교체하고, 빠진 화면 ID는 폐기 목록에 넣는다", async () => {
     const m: Model = await fresh();
     const nodes = m.ia.nodes.filter((n) => n.systemCode === "PUB" && n.id !== "PUB_MAIN_HOME_010").map(({ systemCode: _, ...n }) => n);

@@ -1145,8 +1145,10 @@
         var node = p.model.ia.nodes.find(function (n) { return n.id === target; }) || {};
         var ds = selectedDesign(p, node.systemCode);
         out.components.forEach(function (c, i) {
-          if (!c.label) errs.push((i + 1) + "번 항목에 label이 없습니다");
-          if (c.ui && ds && !ds.components.some(function (x) { return x.id === c.ui.component; })) errs.push(c.no + ". " + c.ui.component + " 는 디자인 시스템에 없는 컴포넌트입니다");
+          if (!c.label && !c.name && !c.title) warns.push((i + 1) + "번 항목에 label이 없어 번호로 표시합니다");
+          var uic = typeof c.ui === "string" ? c.ui : c.ui && c.ui.component;
+          if (uic && ds && !ds.components.some(function (x) { return x.id === uic; })) errs.push((c.no || i + 1) + ". " + uic + " 는 디자인 시스템에 없는 컴포넌트입니다");
+          if (c.options && typeof c.options === "object" && !Array.isArray(c.options) && !Array.isArray(c.options.values)) warns.push((c.no || i + 1) + ". 선택지 목록(options.values)이 없어 " + (c.options.default ? "기본값만 선택지로 넣습니다" : "선택지 없이 반영합니다"));
           if (c.ui && c.ui.link && !p.model.ia.nodes.some(function (n) { return n.id === c.ui.link; })) warns.push(c.no + ". 이동 화면 " + c.ui.link + " 가 정보구조도에 없습니다");
           if (/API|DB|쿼리|서버|백엔드/.test((c.planner || "") + (c.customer || ""))) warns.push(c.no + ". 개발자 관점 표현이 들어 있습니다");
         });

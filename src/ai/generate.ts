@@ -140,7 +140,7 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
       "작성 규칙",
       [
         "- 설명은 기획자 관점(planner: 정책·노출 조건·규칙·예외)과 고객 관점(customer: 보이는 것·할 수 있는 것·안내 문구)으로만 쓴다. 개발자 관점(API, DB, 구현)은 쓰지 않는다",
-        "- 선택 요소(셀렉트·라디오·체크·탭·필터)는 options.values 전체와 default를 쓴다",
+        "- 선택 요소(셀렉트·라디오·체크·탭·필터)는 options.values 전체와 default를 쓴다. options는 반드시 {\"values\":[\"…\"],\"default\":\"…\"} 모양이고, 선택지가 없는 요소에는 options를 넣지 않는다",
         "- 입력 요소는 validation: required, minLength/maxLength, format, timing(ON_INPUT|ON_BLUR|ON_SUBMIT), messages(condition, text)",
         "- 참조자료(회의록 결정 등)와 어긋나지 않게. 근거 없는 수치·문구는 지어내지 말고 planner에 ‘확인 필요’로 적는다",
         "- 기능 명세의 항목·규칙·조건·메시지를 이 화면에 해당하는 만큼 빠짐없이 반영한다. 명세와 요구사항 원문이 다르면 명세를 따른다",
