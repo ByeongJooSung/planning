@@ -37,13 +37,45 @@ const AiStored = z.object({
 });
 export type AiStored = z.infer<typeof AiStored>;
 
+/** AI 연결 — 주소·키 하나에 저장해 둔 모델 여러 개 (NVIDIA, LM Studio, Ollama, Anthropic …) */
+const AiConn = z.object({
+  id: z.string(),
+  label: z.string(),
+  provider: z.enum(AI_PROVIDERS),
+  /** 화면에서 고른 종류 (nvidia · lmstudio · ollama · anthropic · custom) */
+  preset: z.string().optional(),
+  baseUrl: z.string().optional(),
+  keyEnc: z.string().optional(),
+  models: z.array(z.string()).default([]),
+  /** 최대 출력 토큰 (비우면 8192, 서버가 거부하면 빼고 다시 보냄) */
+  maxTokens: z.number().int().positive().optional(),
+  updatedAt: z.string(),
+  updatedBy: z.string(),
+});
+export type AiConn = z.infer<typeof AiConn>;
+const AiPick = z.object({ conn: z.string(), model: z.string() });
+export type AiPick = z.infer<typeof AiPick>;
+const AiSet = z.object({ conns: z.array(AiConn).default([]), active: AiPick.optional() });
+export type AiSet = z.infer<typeof AiSet>;
+/** 예전 단일 설정({provider, model, …})도 연결 하나로 읽는다 */
+export function parseAiSet(raw: unknown): AiSet {
+  if (!raw || typeof raw !== "object") return { conns: [] };
+  if (!("conns" in raw) && "provider" in raw) {
+    const v = AiStored.parse(raw);
+    const conn: AiConn = { id: "c_legacy", label: v.provider === "anthropic" ? "Anthropic" : "OpenAI 호환", provider: v.provider, baseUrl: v.baseUrl, keyEnc: v.keyEnc, models: [v.model], updatedAt: v.updatedAt, updatedBy: v.updatedBy };
+    return { conns: [conn], active: { conn: conn.id, model: v.model } };
+  }
+  return AiSet.parse(raw);
+}
+
 const User = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string(),
   passHash: z.string(),
   createdAt: z.string(),
-  ai: AiStored.optional(),
+  /** 개인 AI 연결 (parseAiSet 로 읽는다) */
+  ai: z.unknown().optional(),
 });
 export type User = z.infer<typeof User>;
 
@@ -54,6 +86,8 @@ const Member = z.object({
   addedAt: z.string(),
   /** true면 이 프로젝트에서도 프로젝트 AI 설정 대신 내 개인 설정을 쓴다 */
   usePersonalAi: z.boolean().default(false),
+  /** 이 프로젝트에서 쓸 연결·모델 (없으면 프로젝트 기본) */
+  aiChoice: z.object({ scope: z.enum(["project", "personal"]), conn: z.string(), model: z.string() }).optional(),
 });
 export type Member = z.infer<typeof Member>;
 const Invite = z.object({
@@ -68,15 +102,25 @@ const Invite = z.object({
 });
 export type Invite = z.infer<typeof Invite>;
 
-/** API로 내보내는 AI 설정. 키는 절대 담지 않는다 */
-export interface AiPublic {
+/** API로 내보내는 AI 연결. 키는 절대 담지 않는다 */
+export interface AiConnPublic {
+  id: string;
+  label: string;
   provider: AiProvider;
-  model: string;
+  preset?: string;
   /** 설정 주인(프로젝트 운영자·본인)에게만 보인다 */
   baseUrl?: string;
   hasKey: boolean;
+  models: string[];
+  maxTokens?: number;
   updatedAt: string;
 }
+export interface AiSetPublic {
+  conns: AiConnPublic[];
+  active: AiPick | null;
+}
+export type AiScope = "project" | "personal";
+export type AiChoice = { scope: AiScope } & AiPick;
 /** 실제 호출에 쓰는 설정 (서버 안에서만) */
 export interface AiResolved {
   source: "project" | "personal" | "server";
@@ -84,13 +128,27 @@ export interface AiResolved {
   model: string;
   baseUrl?: string;
   apiKey?: string;
+  maxTokens?: number;
+  /** 연결 이름·ID (서버 기본이면 없음) */
+  label?: string;
+  conn?: string;
 }
-export interface AiInput {
+export interface AiConnInput {
+  id?: string;
+  label: string;
   provider: AiProvider;
-  model: string;
+  preset?: string;
   baseUrl?: string;
   apiKey?: string;
   clearKey?: boolean;
+  models?: string[];
+  maxTokens?: number | string | null;
+}
+/** 모델 목록 불러오기용 — 저장 전 입력값 또는 저장된 연결(키 재사용) */
+export interface AiProbe {
+  provider: AiProvider;
+  baseUrl?: string;
+  apiKey?: string;
 }
 
 const SESSION_DAYS = 30;
@@ -383,87 +441,149 @@ export class Accounts {
     await this.deleteInvite(inv);
   }
 
-  // ── AI 설정 ──────────────────────────────────
-  private toStored(input: AiInput, prev: AiStored | undefined, by: string): AiStored {
-    const provider = input.provider;
-    if (!AI_PROVIDERS.includes(provider)) throw new HttpError(400, "provider는 anthropic 또는 openai-compatible 입니다");
-    const model = String(input.model ?? "").trim();
-    if (!model) throw new HttpError(400, "모델 이름을 입력하세요");
-    let baseUrl = String(input.baseUrl ?? "").trim() || undefined;
-    if (baseUrl) {
-      let u: URL;
-      try {
-        u = new URL(baseUrl);
-      } catch {
-        throw new HttpError(400, "API 주소가 URL 형식이 아닙니다");
-      }
-      if (u.protocol !== "http:" && u.protocol !== "https:") throw new HttpError(400, "API 주소는 http 또는 https 여야 합니다");
-      baseUrl = u.toString().replace(/\/$/, "");
+  // ── AI 연결 ──────────────────────────────────
+  private async userSet(userId: string): Promise<AiSet> {
+    return parseAiSet((await this.getUser(userId))?.ai);
+  }
+  private async projectSet(project: string): Promise<AiSet> {
+    const s = await this.kv.get(K.pai(project));
+    return parseAiSet(s ? JSON.parse(s) : undefined);
+  }
+  async aiSet(scope: AiScope, owner: string): Promise<AiSet> {
+    return scope === "project" ? this.projectSet(owner) : this.userSet(owner);
+  }
+  private async putSet(scope: AiScope, owner: string, set: AiSet) {
+    if (scope === "project") {
+      if (set.conns.length) await this.kv.set(K.pai(owner), JSON.stringify(set));
+      else await this.kv.del(K.pai(owner));
+    } else {
+      const u = (await this.getUser(owner))!;
+      u.ai = set.conns.length ? set : undefined;
+      await this.putUser(u);
     }
-    if (provider === "openai-compatible" && !baseUrl) throw new HttpError(400, "OpenAI 호환 API는 주소가 필요합니다 (예: http://localhost:11434/v1)");
-    // 키: 새 값이 오면 바꾸고, clearKey면 지우고, 아무것도 없으면 이전 값을 그대로 둔다 (같은 provider일 때만)
+  }
+  /** 연결 추가·수정. 키는 새 값이 오면 바꾸고, clearKey면 지우고, 없으면 그대로 둔다 */
+  async saveConn(scope: AiScope, owner: string, input: AiConnInput, by: string): Promise<AiConn> {
+    const set = await this.aiSet(scope, owner);
+    const prev = input.id ? set.conns.find((c) => c.id === input.id) : undefined;
+    if (input.id && !prev) throw new HttpError(404, "없는 연결입니다");
+    const provider = input.provider;
+    if (!AI_PROVIDERS.includes(provider)) throw new HttpError(400, "호출 방법이 올바르지 않습니다");
+    const label = String(input.label ?? "").trim().slice(0, 60);
+    if (!label) throw new HttpError(400, "연결 이름을 입력하세요");
+    const baseUrl = normUrl(input.baseUrl);
+    if (provider === "openai-compatible" && !baseUrl) throw new HttpError(400, "API 주소를 입력하세요 (예: https://integrate.api.nvidia.com/v1)");
     let keyEnc = prev && prev.provider === provider ? prev.keyEnc : undefined;
     if (input.clearKey) keyEnc = undefined;
     if (input.apiKey && String(input.apiKey).trim()) keyEnc = encrypt(this.key, String(input.apiKey).trim());
-    if (provider === "anthropic" && !keyEnc) throw new HttpError(400, "Anthropic API 키가 필요합니다");
-    return { provider, model: model.slice(0, 120), baseUrl, keyEnc, updatedAt: this.iso(), updatedBy: by };
+    if (provider === "anthropic" && !keyEnc) throw new HttpError(400, "Anthropic은 API 키가 필요합니다");
+    const models = [...new Set((input.models ?? []).map((m) => String(m).trim()).filter(Boolean))].slice(0, 50).map((m) => m.slice(0, 200));
+    if (!models.length) throw new HttpError(400, "모델을 하나 이상 고르거나 입력하세요");
+    const mt = input.maxTokens === null || input.maxTokens === "" || input.maxTokens === undefined ? undefined : Number(input.maxTokens);
+    if (mt !== undefined && (!Number.isInteger(mt) || mt < 256 || mt > 200000)) throw new HttpError(400, "최대 출력 토큰은 256~200000 사이 정수입니다");
+    const conn: AiConn = { id: prev?.id ?? newId("c"), label, provider, preset: input.preset ? String(input.preset).slice(0, 20) : undefined, baseUrl, keyEnc, models, maxTokens: mt, updatedAt: this.iso(), updatedBy: by };
+    set.conns = prev ? set.conns.map((c) => (c.id === conn.id ? conn : c)) : [...set.conns, conn];
+    if (!set.active || !set.conns.some((c) => c.id === set.active!.conn)) set.active = { conn: conn.id, model: models[0]! };
+    else if (set.active.conn === conn.id && !models.includes(set.active.model)) set.active = { conn: conn.id, model: models[0]! };
+    await this.putSet(scope, owner, set);
+    return conn;
   }
-  async setUserAi(userId: string, input: AiInput) {
-    const u = (await this.getUser(userId))!;
-    u.ai = this.toStored(input, u.ai, userId);
-    await this.putUser(u);
+  async deleteConn(scope: AiScope, owner: string, id: string) {
+    const set = await this.aiSet(scope, owner);
+    if (!set.conns.some((c) => c.id === id)) throw new HttpError(404, "없는 연결입니다");
+    set.conns = set.conns.filter((c) => c.id !== id);
+    if (set.active?.conn === id) set.active = set.conns[0] ? { conn: set.conns[0].id, model: set.conns[0].models[0]! } : undefined;
+    await this.putSet(scope, owner, set);
   }
-  async clearUserAi(userId: string) {
-    const u = (await this.getUser(userId))!;
-    delete u.ai;
-    await this.putUser(u);
+  /** 기본으로 쓸 연결·모델 */
+  async setActive(scope: AiScope, owner: string, pick: AiPick) {
+    const set = await this.aiSet(scope, owner);
+    const conn = set.conns.find((c) => c.id === pick?.conn);
+    if (!conn) throw new HttpError(404, "없는 연결입니다");
+    const model = String(pick.model ?? "").trim();
+    if (!model) throw new HttpError(400, "모델을 고르세요");
+    if (!conn.models.includes(model)) conn.models.push(model);
+    set.active = { conn: conn.id, model };
+    await this.putSet(scope, owner, set);
   }
-  async setProjectAi(project: string, input: AiInput, by: string) {
-    await this.kv.set(K.pai(project), JSON.stringify(this.toStored(input, await this.projectAi(project), by)));
+  /** 멤버가 이 프로젝트에서 쓸 연결·모델 (null이면 프로젝트 기본) */
+  async setChoice(project: string, userId: string, choice: AiChoice | null) {
+    const m = await this.membership(project, userId);
+    if (!m) throw new HttpError(404, "멤버가 아닙니다");
+    if (choice) {
+      const set = await this.aiSet(choice.scope, choice.scope === "project" ? project : userId);
+      if (!set.conns.some((c) => c.id === choice.conn)) throw new HttpError(404, "없는 연결입니다");
+      if (!String(choice.model ?? "").trim()) throw new HttpError(400, "모델을 고르세요");
+    }
+    await this.putMember({ ...m, aiChoice: choice ? { scope: choice.scope, conn: choice.conn, model: String(choice.model).trim() } : undefined, usePersonalAi: false });
   }
-  async clearProjectAi(project: string) {
-    await this.kv.del(K.pai(project));
+  /** full=false면 주소를 숨긴다 (프로젝트 연결을 보는 운영자 아닌 멤버) */
+  aiSetPublic(set: AiSet, full: boolean): AiSetPublic {
+    return {
+      conns: set.conns.map((c) => ({ id: c.id, label: c.label, provider: c.provider, preset: c.preset, ...(full && c.baseUrl ? { baseUrl: c.baseUrl } : {}), hasKey: !!c.keyEnc, models: c.models, maxTokens: c.maxTokens, updatedAt: c.updatedAt })),
+      active: set.active ?? null,
+    };
   }
-  /** full=false면 주소도 숨긴다 (프로젝트 설정을 보는 운영자 아닌 멤버) */
-  aiPublic(s: AiStored | undefined, full: boolean): AiPublic | null {
-    if (!s) return null;
-    return { provider: s.provider, model: s.model, ...(full && s.baseUrl ? { baseUrl: s.baseUrl } : {}), hasKey: !!s.keyEnc, updatedAt: s.updatedAt };
-  }
-  async userAi(userId: string) {
-    return (await this.getUser(userId))?.ai;
-  }
-  projectAi(project: string) {
-    return this.json(K.pai(project), AiStored);
+  /** 모델 목록을 부를 때 쓸 주소·키 — 저장된 연결이면 키를 다시 쓴다 */
+  async probeFor(scope: AiScope, owner: string, input: AiProbe & { connId?: string }): Promise<AiProbe> {
+    const baseUrl = normUrl(input.baseUrl);
+    let apiKey = input.apiKey && String(input.apiKey).trim() ? String(input.apiKey).trim() : undefined;
+    if (!apiKey && input.connId) {
+      const conn = (await this.aiSet(scope, owner)).conns.find((c) => c.id === input.connId);
+      if (conn?.keyEnc && conn.provider === input.provider) apiKey = decrypt(this.key, conn.keyEnc);
+    }
+    if (!AI_PROVIDERS.includes(input.provider)) throw new HttpError(400, "호출 방법이 올바르지 않습니다");
+    if (input.provider === "openai-compatible" && !baseUrl) throw new HttpError(400, "API 주소를 입력하세요");
+    return { provider: input.provider, baseUrl, apiKey };
   }
   hasServerAi() {
     return !!this.opts.serverAi;
   }
+  async choiceOf(project: string, userId: string): Promise<AiChoice | null> {
+    const m = await this.membership(project, userId);
+    return m?.aiChoice ?? null;
+  }
 
-  /** 우선순위: (개인 설정 사용 선택 시) 개인 → 프로젝트 → 개인 → 서버 기본 */
-  private async pick(project: string | null, userId: string): Promise<{ s: AiStored; source: "project" | "personal" } | { s: null; source: "server" } | null> {
-    const personal = await this.userAi(userId);
+  /** 우선순위: 멤버가 고른 연결·모델 → (예전) 개인 설정 사용 → 프로젝트 기본 → 개인 기본 → 서버 기본 */
+  async resolveAi(project: string | null, userId: string, override?: AiChoice | null): Promise<AiResolved | null> {
+    const personal = await this.userSet(userId);
     const m = project ? await this.membership(project, userId) : undefined;
-    const proj = project ? await this.projectAi(project) : undefined;
-    if (m?.usePersonalAi && personal) return { s: personal, source: "personal" };
-    if (proj) return { s: proj, source: "project" };
-    if (personal) return { s: personal, source: "personal" };
-    if (this.opts.serverAi) return { s: null, source: "server" };
-    return null;
+    const proj = project ? await this.projectSet(project) : { conns: [] } as AiSet;
+    const use = (set: AiSet, pick: AiPick | undefined, source: "project" | "personal"): AiResolved | null => {
+      const c = pick && set.conns.find((x) => x.id === pick.conn);
+      if (!c || !pick) return null;
+      return { source, provider: c.provider, model: pick.model, baseUrl: c.baseUrl, apiKey: c.keyEnc ? decrypt(this.key, c.keyEnc) : undefined, maxTokens: c.maxTokens, label: c.label, conn: c.id };
+    };
+    const choice = override ?? m?.aiChoice;
+    if (choice) {
+      const r = use(choice.scope === "project" ? proj : personal, choice, choice.scope);
+      if (r) return r;
+      if (override) throw new HttpError(404, "없는 연결입니다");
+    }
+    if (m?.usePersonalAi) {
+      const r = use(personal, personal.active, "personal");
+      if (r) return r;
+    }
+    return use(proj, proj.active, "project") ?? use(personal, personal.active, "personal") ?? (this.opts.serverAi ? { source: "server", ...this.opts.serverAi, label: "서버 기본" } : null);
   }
-  /** 이 사람이 이 프로젝트에서 AI를 부를 때 쓸 설정 (키 복호화 — 서버 안에서만) */
-  async resolveAi(project: string | null, userId: string): Promise<AiResolved | null> {
-    const p = await this.pick(project, userId);
-    if (!p) return null;
-    if (!p.s) return { source: "server", ...this.opts.serverAi! };
-    return { source: p.source, provider: p.s.provider, model: p.s.model, baseUrl: p.s.baseUrl, apiKey: p.s.keyEnc ? decrypt(this.key, p.s.keyEnc) : undefined };
+  /** 어떤 연결·모델이 쓰이는지 (비밀값 없이) */
+  async aiSource(project: string | null, userId: string) {
+    const r = await this.resolveAi(project, userId);
+    return r ? { source: r.source, provider: r.provider, model: r.model, label: r.label ?? "", conn: r.conn ?? null } : null;
   }
-  /** 어떤 설정이 쓰이는지 (비밀값 없이) */
-  async aiSource(project: string | null, userId: string): Promise<{ source: AiResolved["source"]; provider: AiProvider; model: string } | null> {
-    const p = await this.pick(project, userId);
-    if (!p) return null;
-    if (!p.s) return { source: "server", provider: this.opts.serverAi!.provider, model: this.opts.serverAi!.model };
-    return { source: p.source, provider: p.s.provider, model: p.s.model };
+}
+
+function normUrl(raw: unknown): string | undefined {
+  const v = String(raw ?? "").trim();
+  if (!v) return undefined;
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    throw new HttpError(400, "API 주소가 URL 형식이 아닙니다");
   }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new HttpError(400, "API 주소는 http 또는 https 여야 합니다");
+  return u.toString().replace(/\/$/, "");
 }
 
 function publicInvite(i: Invite) {

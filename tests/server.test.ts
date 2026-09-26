@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "node:http";
 import { createApp, createLocalApp } from "../src/server/app.js";
-import type { AiResolved } from "../src/server/accounts.js";
+import { parseAiSet, type AiProbe, type AiResolved } from "../src/server/accounts.js";
 import { FileKv } from "../src/server/kv.js";
 import { KvRepo } from "../src/server/repo.js";
 
@@ -15,6 +15,7 @@ let base = "";
 let root = "";
 let close: () => void;
 const calls: AiResolved[] = [];
+const probes: AiProbe[] = [];
 const storeFile = () => path.join(root, ".service", mode === "local" ? "kv.json" : "kv-serverless.json");
 
 class Client {
@@ -34,15 +35,19 @@ class Client {
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "planning-srv-"));
+  const modelLister = async (p: AiProbe) => {
+    probes.push(p);
+    return ["m-a", "m-b"];
+  };
   const aiCaller = async (cfg: AiResolved) => {
     calls.push(cfg);
     return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
   };
   let server;
-  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller })).server;
+  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller, modelLister })).server;
   else {
     const kv = await FileKv.open(storeFile());
-    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller });
+    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller, modelLister });
     server = createServer((req, res) => void app.handle(req, res));
   }
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -137,37 +142,76 @@ describe("시나리오", () => {
     expect(r.body.project.chunks.length).toBeGreaterThan(0);
   });
 
-  it("AI 설정: 프로젝트 설정을 멤버가 기본으로 쓰고, 키와 주소는 노출되지 않는다", async () => {
+  it("AI 연결: 여러 개 저장·모델 목록·빠른 전환, 키와 주소는 노출되지 않는다", async () => {
     expect((await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "hi" })).status).toBe(409);
-    expect((await editor.req("PUT", "/api/projects/PUBINFO/ai", { provider: "anthropic", model: "claude-opus-5", apiKey: "sk-ant-SECRET" })).status).toBe(403);
-    const put = await owner.req("PUT", "/api/projects/PUBINFO/ai", { provider: "openai-compatible", model: "llama3.1", baseUrl: "http://10.0.0.5:11434/v1", apiKey: "sk-local-SECRET" });
+    const nvidia = { label: "NVIDIA", provider: "openai-compatible", preset: "nvidia", baseUrl: "https://integrate.api.nvidia.com/v1", apiKey: "nvapi-SECRET", models: ["meta/llama-3.1-70b-instruct", "qwen/qwen2.5-coder-32b-instruct"] };
+    expect((await editor.req("PUT", "/api/projects/PUBINFO/ai/conns", nvidia)).status).toBe(403);
+    const put = await owner.req("PUT", "/api/projects/PUBINFO/ai/conns", nvidia);
     expect(put.status).toBe(200);
     expect(put.raw).not.toMatch(/SECRET/);
-    expect(put.body.project).toMatchObject({ provider: "openai-compatible", baseUrl: "http://10.0.0.5:11434/v1", hasKey: true });
+    const nv = put.body.project.conns[0];
+    expect(nv).toMatchObject({ label: "NVIDIA", baseUrl: "https://integrate.api.nvidia.com/v1", hasKey: true });
+    expect(put.body.project.active).toEqual({ conn: nv.id, model: "meta/llama-3.1-70b-instruct" });
+    // 키 없는 로컬 연결 (LM Studio)
+    const lm = await owner.req("PUT", "/api/projects/PUBINFO/ai/conns", { label: "LM Studio", provider: "openai-compatible", preset: "lmstudio", baseUrl: "http://10.0.0.5:1234/v1", models: ["google/gemma-3-12b"] });
+    expect(lm.status).toBe(200);
+    const lmId = lm.body.project.conns[1].id;
+    expect(lm.body.project.conns[1].hasKey).toBe(false);
+    // 모델이 하나도 없으면 저장 불가
+    expect((await owner.req("PUT", "/api/projects/PUBINFO/ai/conns", { label: "빈", provider: "openai-compatible", baseUrl: "http://x/v1", models: [] })).status).toBe(400);
 
+    // 모델 목록: 저장된 연결의 키를 다시 쓴다 (운영자만)
+    const ml = await owner.req("POST", "/api/projects/PUBINFO/ai/models", { connId: nv.id, provider: "openai-compatible", baseUrl: "https://integrate.api.nvidia.com/v1" });
+    expect(ml.body.models).toEqual(["m-a", "m-b"]);
+    expect(probes.at(-1)).toMatchObject({ apiKey: "nvapi-SECRET" });
+    expect((await editor.req("POST", "/api/projects/PUBINFO/ai/models", { provider: "openai-compatible", baseUrl: "http://x/v1" })).status).toBe(403);
+
+    // 멤버에게는 이름·종류·모델만 (주소·키 숨김)
     const seen = await editor.req("GET", "/api/projects/PUBINFO/ai");
-    expect(seen.raw).not.toMatch(/SECRET|10\.0\.0\.5/);
-    expect(seen.body.project).toMatchObject({ provider: "openai-compatible", model: "llama3.1", hasKey: true });
-    expect(seen.body.effective.source).toBe("project");
+    expect(seen.raw).not.toMatch(/SECRET|10\.0\.0\.5|nvidia\.com/);
+    expect(seen.body.project.conns.map((c: { label: string }) => c.label)).toEqual(["NVIDIA", "LM Studio"]);
+    expect(seen.body.effective).toMatchObject({ source: "project", label: "NVIDIA", model: "meta/llama-3.1-70b-instruct" });
 
     const gen = await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "화면을 만들어 줘" });
     expect(gen.status).toBe(200);
-    expect(gen.body.source).toBe("project");
-    expect(calls.at(-1)).toMatchObject({ provider: "openai-compatible", apiKey: "sk-local-SECRET", baseUrl: "http://10.0.0.5:11434/v1" });
+    expect(calls.at(-1)).toMatchObject({ provider: "openai-compatible", apiKey: "nvapi-SECRET", model: "meta/llama-3.1-70b-instruct" });
     expect((await viewer.req("POST", "/api/projects/PUBINFO/generate", { input: "x" })).status).toBe(403);
 
-    // 개인 설정을 고르면 그 사람만 개인 설정으로 부른다
-    expect((await editor.req("PUT", "/api/me/ai", { provider: "anthropic", model: "claude-opus-5", apiKey: "sk-ant-MINE" })).raw).not.toMatch(/MINE/);
-    await editor.req("PATCH", "/api/projects/PUBINFO/members/me", { usePersonalAi: true });
+    // 운영자가 기본을 바꾸면 모두에게 적용
+    await owner.req("PUT", "/api/projects/PUBINFO/ai/active", { conn: nv.id, model: "qwen/qwen2.5-coder-32b-instruct" });
+    await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "x" });
+    expect(calls.at(-1)).toMatchObject({ model: "qwen/qwen2.5-coder-32b-instruct" });
+
+    // 작업자가 이 프로젝트에서 LM Studio 로 전환 (자기만)
+    const sw = await editor.req("PATCH", "/api/projects/PUBINFO/members/me", { aiChoice: { scope: "project", conn: lmId, model: "google/gemma-3-12b" } });
+    expect(sw.body.ai).toMatchObject({ label: "LM Studio", model: "google/gemma-3-12b" });
+    await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "x" });
+    expect(calls.at(-1)).toMatchObject({ baseUrl: "http://10.0.0.5:1234/v1", apiKey: undefined, model: "google/gemma-3-12b" });
+    await owner.req("POST", "/api/projects/PUBINFO/generate", { input: "x" });
+    expect(calls.at(-1)).toMatchObject({ model: "qwen/qwen2.5-coder-32b-instruct" });
+
+    // 개인 연결로 전환
+    const my = await editor.req("PUT", "/api/me/ai/conns", { label: "내 Claude", provider: "anthropic", apiKey: "sk-ant-MINE", models: ["claude-opus-5"] });
+    expect(my.raw).not.toMatch(/MINE/);
+    await editor.req("PATCH", "/api/projects/PUBINFO/members/me", { aiChoice: { scope: "personal", conn: my.body.ai.conns[0].id, model: "claude-opus-5" } });
     await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "x" });
     expect(calls.at(-1)).toMatchObject({ source: "personal", provider: "anthropic", apiKey: "sk-ant-MINE" });
+    // 선택 해제 → 프로젝트 기본
+    await editor.req("PATCH", "/api/projects/PUBINFO/members/me", { aiChoice: null });
+    expect((await editor.req("GET", "/api/projects/PUBINFO/ai")).body.effective.source).toBe("project");
 
-    // 키만 빼고 다시 저장하면 기존 키를 유지한다
-    await owner.req("PUT", "/api/projects/PUBINFO/ai", { provider: "openai-compatible", model: "qwen2.5", baseUrl: "http://10.0.0.5:11434/v1" });
+    // 연결 확인: 특정 조합
+    const t = await editor.req("POST", "/api/projects/PUBINFO/ai/test", { scope: "project", conn: lmId, model: "google/gemma-3-12b" });
+    expect(t.body).toMatchObject({ ok: true, label: "LM Studio" });
+
+    // 키 없이 다시 저장하면 기존 키 유지, 연결 삭제 시 기본이 다른 연결로
+    await owner.req("PUT", "/api/projects/PUBINFO/ai/conns", { ...nvidia, id: nv.id, apiKey: "" });
     await owner.req("POST", "/api/projects/PUBINFO/generate", { input: "x" });
-    expect(calls.at(-1)).toMatchObject({ model: "qwen2.5", apiKey: "sk-local-SECRET" });
+    expect(calls.at(-1)).toMatchObject({ apiKey: "nvapi-SECRET" });
+    const del = await owner.req("DELETE", `/api/projects/PUBINFO/ai/conns/${nv.id}`);
+    expect(del.body.project.active).toEqual({ conn: lmId, model: "google/gemma-3-12b" });
 
-    // 저장 파일에도 평문 키가 없다
+    // 저장소에도 평문 키가 없다
     const stored = await readFile(storeFile(), "utf8");
     expect(stored).not.toMatch(/SECRET|MINE/);
   });
@@ -225,4 +269,12 @@ describe("시나리오", () => {
     expect(await sw.text()).toContain("/api/");
   });
 });
+});
+
+describe("AI 설정 옮기기", () => {
+  it("예전 단일 설정을 연결 하나로 읽는다", () => {
+    const set = parseAiSet({ provider: "openai-compatible", model: "llama3.1", baseUrl: "http://h/v1", updatedAt: "t", updatedBy: "u" });
+    expect(set.conns).toHaveLength(1);
+    expect(set.active).toEqual({ conn: "c_legacy", model: "llama3.1" });
+  });
 });

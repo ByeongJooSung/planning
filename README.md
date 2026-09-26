@@ -43,9 +43,13 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 | `PUBLIC_URL` | 초대 링크 주소 (프록시 뒤에서) |
 | `COOKIE_SECURE=1` | HTTPS 뒤에서 Secure 쿠키 |
 
-**AI 설정** — 프로젝트 → 설정 → AI 설정. 운영자가 프로젝트 설정을 등록하면 멤버 모두가 기본으로 씁니다. 멤버에게는 호출 방법·모델 이름만 보이고 주소·키는 보이지 않습니다. 각자 내 계정에서 개인 설정을 등록하고 프로젝트마다 “내 개인 설정 사용”을 켤 수 있습니다.
-- Claude API: 호출 방법 Anthropic, 모델 `claude-opus-5`, API 키
-- 로컬 LLM: 호출 방법 OpenAI 호환, 주소 `http://<서버>:11434/v1`(Ollama)·`http://<서버>:8000/v1`(vLLM), 모델 이름
+**AI 연결** — 프로젝트 → 설정 → AI 설정(프로젝트 공통, 운영자가 관리) 또는 내 계정(개인). 연결을 여러 개 저장하고 드롭다운으로 바로 바꿉니다.
+1. **+ 연결 추가** → 종류 선택: **NVIDIA**(`https://integrate.api.nvidia.com/v1`, 키 `nvapi-…`), **LM Studio**(`http://<주소>:1234/v1`, 키 없음), Ollama, Anthropic, 직접 입력(OpenAI 호환)
+2. API 키는 선택(Anthropic만 필수) → **모델 불러오기** → 쓸 모델을 여러 개 체크(목록에 없으면 직접 입력) → 저장
+3. 운영자는 모델 옆 **기본으로**로 프로젝트 기본을 정하고, 멤버는 **나만 바꾸기** 드롭다운이나 AI 생성 창의 드롭다운으로 자기만 바꿉니다.
+- 키는 암호화 저장·화면에 다시 안 보임. 프로젝트 연결의 주소·키는 멤버에게 안 보이고 이름·모델만 보입니다.
+- 인터넷 배포(Vercel)에서는 `localhost`에 닿지 않습니다. LM Studio·Ollama는 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널)를 넣거나, 같은 네트워크에서 `planning serve`로 띄우세요.
+- 최대 출력 토큰은 연결마다 정할 수 있고(기본 8192), 모델이 그 값을 거부하면 빼고 다시 보냅니다.
 
 ### 배포
 - **Vercel** (서버리스 + Upstash Redis):

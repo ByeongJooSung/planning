@@ -20,7 +20,7 @@ import { SYSTEM_PRESETS } from "../project/presets.js";
 import { ASSET_DIR, renderViewer } from "../render/viewer/index.js";
 import { deriveProject, execute, type Command, type ProjectState } from "../service/core.js";
 import { Accounts, atLeast, HttpError, ROLES, type AiResolved, type Role, type User } from "./accounts.js";
-import { callAi, DEFAULT_ANTHROPIC_MODEL, type AiInputMessages } from "./ai.js";
+import { callAi, DEFAULT_ANTHROPIC_MODEL, listModels, type AiInputMessages } from "./ai.js";
 import { newToken } from "./crypto.js";
 import { FileKv, type Kv } from "./kv.js";
 import { FsRepo, type ProjectRepo } from "./repo.js";
@@ -44,6 +44,8 @@ export interface AppOptions {
   init?: () => Promise<void>;
   /** 테스트용 AI 호출 대체 */
   aiCaller?: typeof callAi;
+  /** 테스트용 모델 목록 대체 */
+  modelLister?: typeof listModels;
   now?: () => Date;
 }
 
@@ -66,6 +68,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   const { kv, repo } = opts;
   const acc = new Accounts(kv, { secret: opts.secret, serverAi: opts.serverAi, now: opts.now, admins: opts.admins });
   const ai = opts.aiCaller ?? callAi;
+  const models = opts.modelLister ?? listModels;
   const maxUploadMb = opts.maxUploadMb ?? 22;
   const bodyLimit = Math.ceil(maxUploadMb * 1.4 + 2) * 1024 * 1024; // base64 부풀림 + 여유
   const shell = await renderViewer({ generatedAt: new Date().toISOString(), projects: [], mode: "server" }, { title: "Planning Studio" });
@@ -185,13 +188,17 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     const invites = await acc.invitesFor(c.user!.email);
     return {
       user: { ...acc.publicUser(c.user!), isAdmin: await acc.isAdmin(c.user!) },
-      ai: acc.aiPublic(await acc.userAi(c.user!.id), true),
+      ai: acc.aiSetPublic(await acc.aiSet("personal", c.user!.id), true),
       invites: await Promise.all(invites.map(async (i) => ({ ...i, projectName: await projectName(i.project) }))),
     };
   });
   on("POST", "/api/me/password", async (c) => (await acc.changePassword(c.user!.id, c.body?.current, c.body?.next), { ok: true }));
-  on("PUT", "/api/me/ai", async (c) => (await acc.setUserAi(c.user!.id, c.body ?? {}), { ai: acc.aiPublic(await acc.userAi(c.user!.id), true) }));
-  on("DELETE", "/api/me/ai", async (c) => (await acc.clearUserAi(c.user!.id), { ai: null }));
+  // 개인 AI 연결 — 여러 개 저장, 기본 연결·모델 선택
+  const mine = async (c: Ctx) => ({ ai: acc.aiSetPublic(await acc.aiSet("personal", c.user!.id), true) });
+  on("PUT", "/api/me/ai/conns", async (c) => (await acc.saveConn("personal", c.user!.id, c.body ?? {}, c.user!.id), mine(c)));
+  on("DELETE", "/api/me/ai/conns/:id", async (c, p) => (await acc.deleteConn("personal", c.user!.id, p.id!), mine(c)));
+  on("PUT", "/api/me/ai/active", async (c) => (await acc.setActive("personal", c.user!.id, c.body ?? {}), mine(c)));
+  on("POST", "/api/me/ai/models", async (c) => ({ models: await models(await acc.probeFor("personal", c.user!.id, c.body ?? {})) }));
   on("POST", "/api/me/ai/test", async (c) => testAi(c, null));
 
   // 서비스 관리자 — 회원 목록·정리
@@ -354,7 +361,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     return {
       members: await acc.members(p.code!),
       invites: role === "OWNER" ? await acc.invitesOf(p.code!) : [],
-      me: { role, usePersonalAi: (await acc.membership(p.code!, c.user!.id))?.usePersonalAi ?? false },
+      me: { role },
     };
   });
   on("POST", "/api/projects/:code/invites", async (c, p) => {
@@ -366,7 +373,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("PATCH", "/api/projects/:code/members/:uid", async (c, p) => {
     if (p.uid === "me") {
       await need(c, p.code!, "VIEWER");
-      await acc.setUsePersonalAi(p.code!, c.user!.id, !!c.body?.usePersonalAi);
+      await acc.setChoice(p.code!, c.user!.id, c.body?.aiChoice ?? null);
       return { ok: true, ai: await acc.aiSource(p.code!, c.user!.id) };
     }
     await need(c, p.code!, "OWNER");
@@ -381,32 +388,35 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     return { ok: true };
   });
 
-  // 프로젝트 AI 설정 — 운영자만 보고 바꾼다. 다른 멤버에게는 종류·모델만 보인다 (키·주소 숨김)
+  // 프로젝트 AI 연결 — 운영자가 여러 개 저장하고 기본을 정한다. 멤버는 이름·종류·모델만 보고(주소·키 숨김) 골라 쓸 수 있다
   on("GET", "/api/projects/:code/ai", async (c, p) => {
     const role = await need(c, p.code!, "VIEWER");
     return {
-      project: acc.aiPublic(await acc.projectAi(p.code!), role === "OWNER"),
-      personal: acc.aiPublic(await acc.userAi(c.user!.id), true),
+      project: acc.aiSetPublic(await acc.aiSet("project", p.code!), role === "OWNER"),
+      personal: acc.aiSetPublic(await acc.aiSet("personal", c.user!.id), true),
+      choice: await acc.choiceOf(p.code!, c.user!.id),
       serverDefault: acc.hasServerAi(),
-      usePersonalAi: (await acc.membership(p.code!, c.user!.id))?.usePersonalAi ?? false,
       effective: await acc.aiSource(p.code!, c.user!.id),
       canManage: role === "OWNER",
     };
   });
-  on("PUT", "/api/projects/:code/ai", async (c, p) => {
-    await need(c, p.code!, "OWNER");
-    await acc.setProjectAi(p.code!, c.body ?? {}, c.user!.id);
-    return { project: acc.aiPublic(await acc.projectAi(p.code!), true) };
-  });
-  on("DELETE", "/api/projects/:code/ai", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.clearProjectAi(p.code!), { project: null }));
+  const projAi = async (code: string) => ({ project: acc.aiSetPublic(await acc.aiSet("project", code), true) });
+  on("PUT", "/api/projects/:code/ai/conns", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.saveConn("project", p.code!, c.body ?? {}, c.user!.id), projAi(p.code!)));
+  on("DELETE", "/api/projects/:code/ai/conns/:id", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.deleteConn("project", p.code!, p.id!), projAi(p.code!)));
+  on("PUT", "/api/projects/:code/ai/active", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.setActive("project", p.code!, c.body ?? {}), projAi(p.code!)));
+  on("POST", "/api/projects/:code/ai/models", async (c, p) => (await need(c, p.code!, "OWNER"), { models: await models(await acc.probeFor("project", p.code!, c.body ?? {})) }));
   on("POST", "/api/projects/:code/ai/test", async (c, p) => (await need(c, p.code!, "EDITOR"), testAi(c, p.code!)));
 
+  /** 연결 확인 — body 에 {scope, conn, model} 이 있으면 그 조합을, 없으면 지금 쓰는 설정을 부른다 */
   async function testAi(c: Ctx, code: string | null) {
-    const cfg = await acc.resolveAi(code && c.body?.scope !== "personal" ? code : null, c.user!.id);
+    const b = c.body ?? {};
+    const pick = b.conn && b.model ? { scope: (b.scope === "project" ? "project" : "personal") as "project" | "personal", conn: String(b.conn), model: String(b.model) } : null;
+    if (pick?.scope === "project" && !code) throw new HttpError(400, "프로젝트 연결은 프로젝트 화면에서 확인하세요");
+    const cfg = await acc.resolveAi(code, c.user!.id, pick);
     if (!cfg) throw new HttpError(409, "AI 설정이 없습니다");
     const t0 = Date.now();
     const r = await ai(cfg, '연결 확인입니다. {"ok":true} 만 답하세요.', { json: true });
-    return { ok: true, source: cfg.source, provider: cfg.provider, model: cfg.model, ms: Date.now() - t0, reply: JSON.stringify(r.output).slice(0, 80) };
+    return { ok: true, source: cfg.source, provider: cfg.provider, model: cfg.model, label: cfg.label ?? "", ms: Date.now() - t0, reply: JSON.stringify(r.output).slice(0, 80) };
   }
 
   // ── 세션·쿠키·요청 처리 ─────────────────────────

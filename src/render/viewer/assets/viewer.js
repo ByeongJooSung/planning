@@ -1322,20 +1322,21 @@
       return '<button class="ver-item' + (i === layer.sel ? " on" : "") + '" data-gsel="' + i + '"><b>v' + v.n + "</b>" + (v.n === doc.applied ? '<span class="pill DESIGNED">적용 중</span>' : "") + (v.scopeLabel ? '<span class="tag">' + esc(v.scopeLabel) + "</span>" : "") + "<span>" + esc(v.from ? "v" + v.from + "에서 조정: " : "") + esc(v.instruction) + '</span><em class="hint">' + esc(fmtDate(v.at)) + "</em></button>";
     }).join("");
     var canGen = !!AI.sample && (!SRV || !!P().ai);
+    if (SRV && aiCache.code !== P().model.project.code) loadAiInfo(P().model.project.code).then(function () { if (layer && layer.kind === "gen") renderLayer(); }, function () {});
     var label = !sel ? (g.requiresInstruction ? "조정 요청" : "추가 지시 (선택)") : "미세조정 프롬프트 · v" + sel.n + " 기준";
     var ph = !sel ? (g.requiresInstruction ? "예: 주 색을 더 진하게, 버튼을 둥글게" : "예: 목록은 50건까지 보이게, 반려 사유 보기 버튼 추가") : "예: 검색 조건에 '신청인' 추가, 버튼 문구를 '공개 신청하기'로";
     var chk = sel ? validateOutput(g.kind, g.target, sel.output, p, sel.scope) : null;
     var scopeNow = sel ? sel.scope : layer.scope;
     var scopeNote = g.kind === "ds" ? '<p class="scope-note"><b>조정 범위</b> ' + esc(scopeInfo(scopeNow || "global").label) + ' <span class="hint">' + esc(scopeInfo(scopeNow || "global").hint) + "</span>" + ((sel ? sel.commentIds : layer.commentIds) && (sel ? sel.commentIds : layer.commentIds).length ? '<br><span class="hint">댓글 ' + (sel ? sel.commentIds : layer.commentIds).length + "개 반영 요청</span>" : "") + "</p>" : "";
     var left = '<div class="gen-left">' + scopeNote + '<div class="gen-status">' + (g.kind === "ds" ? (doc.appliedRev ? '<span class="pill DESIGNED">누적 적용 r' + doc.appliedRev + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') : doc.applied ? '<span class="pill DESIGNED">적용: v' + doc.applied + "</span>" : '<span class="pill NOT_STARTED">저장소 기본값</span>') +
-      (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유됩니다. 적용하면 저장소 모델이 바로 바뀝니다 · AI: ' + esc(P().ai ? SOURCE_LABEL[P().ai.source] + " · " + P().ai.model : "설정 없음") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
+      (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유되고, 적용하면 저장소 모델이 바로 바뀝니다</span><span class="gen-ai"><label for="gen-ai-switch">AI</label>' + (aiCache.code === P().model.project.code ? aiSwitch("gen-ai-switch") : '<span class="hint">' + esc(effLabel(P().ai)) + "</span>") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
       (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
         '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
         : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
-    var right = '<div class="gen-right">' + (sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 Claude가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
+    var right = '<div class="gen-right">' + (sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (sel.n === doc.applied ? " 적용 중" : " 미리보기") : "") + '</span><span class="sp"></span>' +
       (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied && !SRV ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
@@ -1495,7 +1496,9 @@
     if (draftEl && layer.kind === "gen") layer.draft = draftEl.value;
     var rvDraftEl = document.getElementById("rv-in");
     if (rvDraftEl && layer.kind === "review") layer.rvDraft = rvDraftEl.value;
-    if (layer.kind === "form") {
+    if (layer.kind === "aiconn") {
+      body = renderConnLayer();
+    } else if (layer.kind === "form") {
       body = renderFormLayer();
     } else if (layer.kind === "review") {
       body = renderReviewLayer();
@@ -1520,8 +1523,9 @@
       body = '<header class="layer-h"><div><span class="eyebrow">실제 규격 미리보기 · ' + VW + " × " + (pv.h || "가변") + '</span><h2 id="layer-t">' + esc(pv.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
         '<div class="layer-stage">' + stage(pv.html, { w: VW, h: pv.h, page: !pv.h }) + "</div>";
     }
-    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : layer.kind === "form" ? " form" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
+    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : layer.kind === "form" ? " form" : layer.kind === "aiconn" ? " conn" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
     fitStages(root);
+    if (layer.kind === "aiconn") { if (!layer.opened) { layer.opened = true; var fi = document.getElementById("ac-label"); if (fi) fi.focus(); } return; }
     var gi = document.getElementById("gen-in") || document.getElementById("rv-in") || root.querySelector("#fm input, #fm select, #fm textarea");
     if (gi && !layer.busy) gi.focus();
     else { var x = root.querySelector("[data-close-layer]"); if (x) x.focus(); }
@@ -1880,22 +1884,6 @@
     leave: function () {
       confirmAct("프로젝트 나가기", "이 프로젝트에서 나갈까요? 다시 들어오려면 초대를 받아야 합니다.", "나가기", function () { return api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/members/me").then(goHome); });
     },
-    "ai-edit": function (scope) { aiForm(scope); },
-    "ai-clear": function (scope) {
-      confirmAct("AI 설정 삭제", scope === "project" ? "프로젝트 AI 설정을 지웁니다. 멤버는 각자 개인 설정(없으면 서버 기본 설정)을 쓰게 됩니다." : "내 개인 AI 설정과 저장한 키를 지웁니다.", "삭제", function () {
-        return api("DELETE", scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai").then(function () { return refreshMe(); }).then(function () { render(); });
-      });
-    },
-    "ai-test": function (scope, btn) {
-      var url = scope === "personal" && state.route.view === "account" ? "/api/me/ai/test" : "/api/projects/" + enc(P().model.project.code) + "/ai/test";
-      btn.disabled = true; btn.textContent = "확인 중…";
-      api("POST", url, { scope: scope }).then(function (r) {
-        toast("연결됨 · " + SOURCE_LABEL[r.source] + " · " + r.model + " · " + (r.ms / 1000).toFixed(1) + "초");
-      }, function (e) { toast(e.message, "err"); }).then(function () { btn.disabled = false; btn.textContent = "연결 확인"; });
-    },
-    "ai-personal": function (on) {
-      api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/me", { usePersonalAi: on === "1" }).then(function (r) { P().ai = r.ai; render(); }, function (e) { toast(e.message, "err"); });
-    },
     "pw-change": function () {
       openForm({
         title: "비밀번호 바꾸기", submit: "바꾸기",
@@ -1904,30 +1892,6 @@
       });
     }
   };
-
-  function aiForm(scope) {
-    var cur = scope === "project" ? (aiCache.project || null) : MY_AI;
-    var code = scope === "project" ? P().model.project.code : null;
-    openForm({
-      eyebrow: scope === "project" ? "프로젝트 AI 설정 · 운영자" : "내 AI 설정", title: cur ? "AI 설정 바꾸기" : "AI 설정 등록", submit: "저장",
-      intro: (scope === "project" ? "이 프로젝트의 모든 멤버가 기본으로 이 설정으로 AI를 부릅니다. 멤버에게는 종류와 모델 이름만 보이고, 주소와 키는 보이지 않습니다." : "개인 설정은 나만 씁니다. 프로젝트 설정이 없는 프로젝트, 또는 ‘내 개인 설정 사용’을 켠 프로젝트에서 쓰입니다.") +
-        " 키는 서버에 암호화해 저장하고 화면·응답에 다시 보여 주지 않습니다.",
-      fields: [
-        { name: "provider", label: "호출 방법", type: "select", options: [["anthropic", PROVIDER_LABEL.anthropic], ["openai-compatible", PROVIDER_LABEL["openai-compatible"]]], value: cur ? cur.provider : "anthropic" },
-        { name: "model", label: "모델", required: true, value: cur ? cur.model : CFG.defaultModel || "claude-opus-5", placeholder: "예: claude-opus-5 · llama3.1 · qwen2.5:14b" },
-        { name: "baseUrl", label: "API 주소", type: "url", value: cur && cur.baseUrl || "", placeholder: "예: http://localhost:11434/v1 (Ollama) · http://gpu-server:8000/v1 (vLLM)", hint: "OpenAI 호환은 필수. Anthropic은 비우면 기본 주소를 씁니다. 로컬 LLM은 이 서비스가 돌아가는 서버에서 접속할 수 있는 주소여야 합니다." },
-        { name: "apiKey", label: "API 키", type: "password", placeholder: cur && cur.hasKey ? "저장됨 — 바꿀 때만 입력" : "Anthropic은 필수, 로컬 LLM은 보통 비움" },
-        cur && cur.hasKey ? { name: "clearKey", label: "저장한 키 지우기", type: "checkbox" } : { type: "html", html: "" }
-      ],
-      onSubmit: function (v) {
-        var body = { provider: v.provider, model: v.model, baseUrl: v.baseUrl, apiKey: v.apiKey, clearKey: !!v.clearKey };
-        return api("PUT", scope === "project" ? "/api/projects/" + enc(code) + "/ai" : "/api/me/ai", body).then(function () {
-          toast("AI 설정을 저장했습니다");
-          return refreshMe().then(function () { if (code) return loadAiInfo(code); }).then(render);
-        });
-      }
-    });
-  }
 
   // ── 멤버 · AI 설정 · 내 계정 화면 ───────────────
   var memCache = null, aiCache = {};
@@ -1951,32 +1915,200 @@
     return '<section class="section"><div class="toolbar"><p class="hint" style="margin:0">운영자는 멤버를 초대하고 권한을 바꾸며 프로젝트 AI 설정을 관리합니다. 작업자는 편집과 AI 생성을, 열람자는 보기와 디자인 댓글을 할 수 있습니다.</p>' + (own ? actBtn("mem-invite", "+ 공동 작업자 초대", null, "btn-primary") : "") + "</div>" +
       '<div class="box twrap"><table><thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>참여</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" + inv + danger;
   }
+  // ── AI 연결 (여러 개 저장 · 모델 목록 불러오기 · 빠른 전환) ──
+  var AI_PRESETS = {
+    nvidia: { label: "NVIDIA", provider: "openai-compatible", baseUrl: "https://integrate.api.nvidia.com/v1", key: "nvapi-… (build.nvidia.com에서 발급)", hint: "NVIDIA API 카탈로그(build.nvidia.com)의 OpenAI 호환 주소입니다. ‘모델 불러오기’로 쓸 모델을 고르세요." },
+    lmstudio: { label: "LM Studio", provider: "openai-compatible", baseUrl: "http://localhost:1234/v1", key: "보통 비움", hint: "LM Studio → Developer(개발자) 탭 → Start Server. 이 서비스가 인터넷(Vercel)에 있으면 localhost 로는 닿지 않습니다. 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널 등)를 넣으세요." },
+    ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
+    anthropic: { label: "Anthropic", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API. 주소는 비워 두면 기본 주소를 씁니다." },
+    custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
+  };
+  var PRESET_ORDER = ["nvidia", "lmstudio", "ollama", "anthropic", "custom"];
+  function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
+  function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
+  function afterAiChange(scope) {
+    return (scope === "project" ? loadAiInfo(P().model.project.code) : refreshMe().then(function () { if (state.route.view !== "account" && state.route.view !== "home" && state.route.view !== "admin") return loadAiInfo(P().model.project.code); })).then(function () { render(); if (layer && layer.kind === "gen") renderLayer(); });
+  }
+  function effLabel(e) { return e ? (e.label ? e.label + " · " : "") + e.model : "설정 없음"; }
+
+  /** 빠른 전환 드롭다운: 프로젝트 기본 / 프로젝트 연결의 모델 / 내 연결의 모델 */
+  function aiSwitch(id) {
+    var a = aiCache, cur = a.choice ? a.choice.scope + "|" + a.choice.conn + "|" + a.choice.model : "";
+    var proj = a.project || { conns: [] }, mine = a.personal || { conns: [] };
+    var pa = proj.active && proj.conns.find(function (c) { return c.id === proj.active.conn; });
+    var opt = function (v, t) { return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(t) + "</option>"; };
+    var group = function (label, scope, set) {
+      if (!set.conns.length) return "";
+      return '<optgroup label="' + esc(label) + '">' + set.conns.map(function (c) { return c.models.map(function (m) { return opt(scope + "|" + c.id + "|" + m, c.label + " · " + m); }).join(""); }).join("") + "</optgroup>";
+    };
+    var html = opt("", "프로젝트 기본" + (pa ? " — " + pa.label + " · " + proj.active.model : mine.active ? " (없음 → 내 기본)" : "")) + group("프로젝트 연결", "project", proj) + group("내 연결", "personal", mine);
+    return '<select id="' + id + '" class="ai-switch" data-aiswitch aria-label="이 프로젝트에서 쓸 AI 연결·모델">' + html + "</select>";
+  }
+  function switchAi(val) {
+    var parts = val ? val.split("|") : null;
+    var choice = parts ? { scope: parts[0], conn: parts[1], model: parts.slice(2).join("|") } : null;
+    api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/me", { aiChoice: choice }).then(function (r) {
+      P().ai = r.ai; aiCache.choice = choice; aiCache.effective = r.ai;
+      toast("AI: " + effLabel(r.ai));
+      render(); if (layer && layer.kind === "gen") renderLayer();
+    }, function (e) { toast(e.message, "err"); });
+  }
+
+  /** 연결 카드 — 모델마다 기본 지정·연결 확인 */
+  function connCards(scope, set, manage, canTest) {
+    if (!set.conns.length) return '<div class="box empty">저장한 연결이 없습니다.' + (manage ? '<div class="row-actions center">' + actBtn("ai-conn-add", "+ 연결 추가", scope, "btn-primary") + "</div>" : "") + "</div>";
+    return '<div class="conns">' + set.conns.map(function (c) {
+      var models = c.models.map(function (m) {
+        var isDef = set.active && set.active.conn === c.id && set.active.model === m, key = scope + "|" + c.id + "|" + m;
+        return '<li class="' + (isDef ? "on" : "") + '"><span class="mono">' + esc(m) + "</span>" + (isDef ? '<span class="pill DESIGNED">기본</span>' : manage ? actBtn("ai-default", "기본으로", key) : "") + (canTest ? actBtn("ai-test", "확인", key) : "") + "</li>";
+      }).join("");
+      return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : "OpenAI 호환") + "</span>" +
+        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">키 ' + (c.hasKey ? "저장됨" : "없음") + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
+        '<ul class="models">' + models + "</ul>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-edit", "편집 · 모델 추가", scope + "|" + c.id) + actBtn("ai-conn-del", "삭제", scope + "|" + c.id, "btn-sm danger") + "</div>" : "") + "</article>";
+    }).join("") + "</div>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-add", "+ 연결 추가", scope) + "</div>" : "");
+  }
+
+  Object.assign(ACTIONS, {
+    "ai-conn-add": function (scope) { openConn(scope, null); },
+    "ai-conn-edit": function (arg) { var a = arg.split("|"); openConn(a[0], aiSetOf(a[0]).conns.find(function (c) { return c.id === a[1]; })); },
+    "ai-conn-del": function (arg) {
+      var a = arg.split("|"), c = aiSetOf(a[0]).conns.find(function (x) { return x.id === a[1]; });
+      confirmAct("연결 삭제", c.label + " 연결과 저장한 키·모델을 지웁니다." + (a[0] === "project" ? " 이 연결을 고른 멤버는 프로젝트 기본으로 돌아갑니다." : ""), "삭제", function () {
+        return api("DELETE", aiBase(a[0]) + "/conns/" + enc(a[1])).then(function () { toast("연결을 삭제했습니다"); return afterAiChange(a[0]); });
+      });
+    },
+    "ai-default": function (arg) {
+      var a = arg.split("|");
+      api("PUT", aiBase(a[0]) + "/active", { conn: a[1], model: a.slice(2).join("|") }).then(function () { toast("기본 모델: " + a.slice(2).join("|")); return afterAiChange(a[0]); }, function (e) { toast(e.message, "err"); });
+    },
+    "ai-test": function (arg, btn) {
+      var a = arg ? arg.split("|") : [], inProject = state.route.view === "project" || state.route.view === "task";
+      var url = inProject ? "/api/projects/" + enc(P().model.project.code) + "/ai/test" : "/api/me/ai/test";
+      var old = btn.textContent;
+      btn.disabled = true; btn.textContent = "확인 중…";
+      api("POST", url, a.length ? { scope: a[0], conn: a[1], model: a.slice(2).join("|") } : {}).then(function (r) {
+        toast("연결됨 · " + (r.label ? r.label + " · " : "") + r.model + " · " + (r.ms / 1000).toFixed(1) + "초");
+      }, function (e) { toast(e.message, "err"); }).then(function () { btn.disabled = false; btn.textContent = old; });
+    }
+  });
+
+  // 연결 추가·편집 레이어: 종류 고르기 → 주소·키(선택) → 모델 불러오기 → 여러 개 고르기 → 저장
+  function openConn(scope, conn) {
+    var preset = conn ? conn.preset || (conn.provider === "anthropic" ? "anthropic" : "custom") : "nvidia";
+    var ps = AI_PRESETS[preset];
+    openLayer({ kind: "aiconn", ac: {
+      scope: scope, id: conn ? conn.id : null, preset: preset, hasKey: conn ? conn.hasKey : false,
+      label: conn ? conn.label : ps.label, baseUrl: conn ? conn.baseUrl || "" : ps.baseUrl, apiKey: "", clearKey: false, maxTokens: conn && conn.maxTokens ? String(conn.maxTokens) : "",
+      models: conn ? conn.models.slice() : [], fetched: [], filter: "", busy: false, err: ""
+    } });
+  }
+  function acSync() {
+    var ac = layer && layer.ac;
+    if (!ac) return;
+    var v = function (id) { var el = document.getElementById(id); return el ? el.value : null; };
+    if (v("ac-label") != null) ac.label = v("ac-label");
+    if (v("ac-url") != null) ac.baseUrl = v("ac-url").trim();
+    if (v("ac-key") != null) ac.apiKey = v("ac-key");
+    if (v("ac-max") != null) ac.maxTokens = v("ac-max").trim();
+    var ck = document.getElementById("ac-clear");
+    if (ck) ac.clearKey = ck.checked;
+  }
+  function acChips() {
+    var ac = layer.ac;
+    return ac.models.length ? ac.models.map(function (m) { return '<span class="chip-m"><span class="mono">' + esc(m) + '</span><button data-acrm="' + esc(m) + '" aria-label="' + esc(m) + ' 빼기">✕</button></span>'; }).join("") : '<span class="hint">아직 고른 모델이 없습니다</span>';
+  }
+  function acList() {
+    var ac = layer.ac, q = ac.filter.trim().toLowerCase();
+    var rows = ac.fetched.filter(function (m) { return !q || m.toLowerCase().indexOf(q) >= 0; });
+    return rows.length ? rows.slice(0, 300).map(function (m) {
+      return '<label class="ac-model"><input type="checkbox" data-acmodel="' + esc(m) + '"' + (ac.models.indexOf(m) >= 0 ? " checked" : "") + '> <span class="mono">' + esc(m) + "</span></label>";
+    }).join("") + (rows.length > 300 ? '<p class="hint">' + (rows.length - 300) + "개 더 — 검색어로 좁혀 주세요</p>" : "") : '<p class="hint">' + (ac.fetched.length ? "검색 결과가 없습니다" : "‘모델 불러오기’를 누르면 이 연결에서 쓸 수 있는 모델이 나옵니다") + "</p>";
+  }
+  function renderConnLayer() {
+    var ac = layer.ac, ps = AI_PRESETS[ac.preset], anth = ps.provider === "anthropic";
+    var presets = '<div class="seg" role="group" aria-label="연결 종류">' + PRESET_ORDER.map(function (k) { return '<button data-acpreset="' + k + '" aria-pressed="' + (ac.preset === k) + '">' + AI_PRESETS[k].label + "</button>"; }).join("") + "</div>";
+    var chips = acChips();
+    return '<header class="layer-h"><div><span class="eyebrow">' + (ac.scope === "project" ? "프로젝트 AI 연결 · 운영자" : "내 AI 연결") + '</span><h2 id="layer-t">' + (ac.id ? "연결 편집" : "연결 추가") + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+      '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" +
+      '<div class="ac-grid"><div class="fm-row"><label for="ac-label">연결 이름</label><input id="ac-label" type="text" value="' + esc(ac.label) + '" maxlength="60"></div>' +
+      '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>' +
+      '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>" +
+      '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 8192)</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="8192"></div></div>' +
+      '<div class="ac-models"><div class="ac-mh"><b>모델</b><span class="hint">여러 개 골라 저장해 두면 드롭다운으로 바로 바꿀 수 있습니다</span><span class="sp"></span><button class="btn-sm" data-acfetch' + (ac.busy ? " disabled" : "") + ">" + (ac.busy ? "불러오는 중…" : "모델 불러오기") + "</button></div>" +
+      '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
+      (ac.fetched.length ? '<input id="ac-filter" type="search" placeholder="모델 검색 (예: llama, qwen, 70b)" value="' + esc(ac.filter) + '" autocomplete="off">' : "") + '<div id="ac-list" class="ac-list">' + acList() + "</div>" +
+      '<div class="ac-manual"><input id="ac-manual" type="text" placeholder="목록에 없으면 모델 이름을 직접 입력" autocomplete="off"><button class="btn-sm" data-acadd>추가</button></div></div>' +
+      '<p class="gen-err" role="alert"' + (ac.err ? "" : " hidden") + ">" + esc(ac.err) + "</p>" +
+      '<p class="hint">키는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다.' + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
+      '<footer class="layer-f"><span class="hint" id="ac-count">고른 모델 ' + ac.models.length + '개</span><span class="sp"></span><button class="btn-sm" data-close-layer>취소</button><button class="btn-primary" data-acsave' + (ac.busy ? " disabled" : "") + ">저장</button></footer>";
+  }
+  function connClick(b) {
+    var ac = layer.ac;
+    if (b.dataset.acpreset) {
+      acSync();
+      var old = AI_PRESETS[ac.preset], ps = AI_PRESETS[b.dataset.acpreset];
+      if (!ac.label || ac.label === old.label) ac.label = ps.label;
+      if (!ac.baseUrl || ac.baseUrl === old.baseUrl) ac.baseUrl = ps.baseUrl;
+      if (old.provider !== ps.provider) { ac.hasKey = false; ac.fetched = []; }
+      ac.preset = b.dataset.acpreset; ac.err = "";
+      renderLayer(); return true;
+    }
+    if (b.hasAttribute("data-acfetch")) {
+      acSync();
+      var ps2 = AI_PRESETS[ac.preset];
+      ac.busy = true; ac.err = ""; renderLayer();
+      api("POST", aiBase(ac.scope) + "/models", { connId: ac.id, provider: ps2.provider, baseUrl: ac.baseUrl, apiKey: ac.apiKey }).then(function (r) {
+        ac.fetched = r.models || [];
+        if (!ac.fetched.length) ac.err = "모델이 하나도 없습니다. LM Studio·Ollama는 모델을 내려받아 두었는지 확인하세요";
+      }, function (e) { ac.err = e.message; }).then(function () { ac.busy = false; if (layer && layer.ac === ac) renderLayer(); });
+      return true;
+    }
+    if (b.dataset.acrm) { acSync(); ac.models = ac.models.filter(function (m) { return m !== b.dataset.acrm; }); renderLayer(); return true; }
+    if (b.hasAttribute("data-acadd")) {
+      acSync();
+      var inp = document.getElementById("ac-manual"), m = inp ? inp.value.trim() : "";
+      if (m && ac.models.indexOf(m) < 0) ac.models.push(m);
+      renderLayer(); return true;
+    }
+    if (b.hasAttribute("data-acsave")) {
+      acSync();
+      var ps3 = AI_PRESETS[ac.preset];
+      if (!ac.models.length) { ac.err = "모델을 하나 이상 고르거나 직접 입력하세요"; renderLayer(); return true; }
+      ac.busy = true; ac.err = ""; renderLayer();
+      api("PUT", aiBase(ac.scope) + "/conns", { id: ac.id, label: ac.label, provider: ps3.provider, preset: ac.preset, baseUrl: ac.baseUrl, apiKey: ac.apiKey, clearKey: ac.clearKey, models: ac.models, maxTokens: ac.maxTokens || null }).then(function () {
+        toast("연결을 저장했습니다: " + ac.label + " · 모델 " + ac.models.length + "개");
+        var scope = ac.scope;
+        closeLayer();
+        return afterAiChange(scope);
+      }, function (e) { ac.busy = false; ac.err = e.message; if (layer && layer.ac === ac) renderLayer(); });
+      return true;
+    }
+    return false;
+  }
+
   function loadAiInfo(code) {
     return api("GET", "/api/projects/" + enc(code) + "/ai").then(function (r) { aiCache = Object.assign({ code: code }, r); P().ai = r.effective; });
-  }
-  function aiCard(title, cfg, full, actions) {
-    var body = cfg ? '<dl class="kv"><div><dt>호출 방법</dt><dd>' + esc(PROVIDER_LABEL[cfg.provider]) + '</dd></div><div><dt>모델</dt><dd class="mono">' + esc(cfg.model) + "</dd></div>" +
-      (full ? '<div><dt>API 주소</dt><dd class="mono">' + esc(cfg.baseUrl || "기본") + "</dd></div>" : "") + "<div><dt>API 키</dt><dd>" + (cfg.hasKey ? "저장됨 (보이지 않음)" : "없음") + "</dd></div><div><dt>수정</dt><dd>" + esc(fmtDate(cfg.updatedAt)) + "</dd></div></dl>" : '<p class="hint">설정 없음</p>';
-    return '<div class="box pad aicard"><h3>' + title + "</h3>" + body + '<div class="row-actions">' + actions + "</div></div>";
   }
   function renderAiSettings() {
     var p = P(), code = p.model.project.code;
     if (aiCache.code !== code) { loadAiInfo(code).then(render, function (e) { toast(e.message, "err"); }); return '<div class="box empty">불러오는 중…</div>'; }
     var a = aiCache, eff = a.effective;
-    var effLine = eff ? "<b>" + SOURCE_LABEL[eff.source] + "</b> · " + esc(PROVIDER_LABEL[eff.provider]) + ' · <span class="mono">' + esc(eff.model) + "</span>" : '<b class="warn-t">AI 설정 없음</b> — 운영자가 프로젝트 설정을 등록하거나, 내 계정에서 개인 설정을 등록하세요.';
-    var projActs = a.canManage ? actBtn("ai-edit", a.project ? "바꾸기" : "등록", "project", a.project ? "btn-sm" : "btn-primary") + (a.project ? actBtn("ai-clear", "삭제", "project") : "") : '<span class="hint">운영자만 바꿀 수 있습니다. 주소와 키는 운영자에게도 다시 보이지 않습니다.</span>';
-    var toggle = a.personal ? '<label class="fm-check"><input type="checkbox" data-aipersonal' + (a.usePersonalAi ? " checked" : "") + "> 이 프로젝트에서 프로젝트 설정 대신 내 개인 설정 사용</label>" : '<p class="hint">개인 설정이 없습니다. <button class="lnk" data-act="account">내 계정</button>에서 등록하면 이 프로젝트에서 골라 쓸 수 있습니다.</p>';
-    return '<section class="section"><div class="note"><b>지금 이 프로젝트에서 AI를 부르는 방법</b><p>' + effLine + "</p>" + (eff && canEdit() ? '<div class="row-actions">' + actBtn("ai-test", "연결 확인", "project") + "</div>" : "") +
-      '<p class="hint">우선순위: (개인 설정 사용을 켠 경우) 개인 설정 → 프로젝트 설정 → 개인 설정 → 서버 기본 설정' + (a.serverDefault ? " (있음)" : " (없음)") + "</p></div></section>" +
-      '<div class="ds-grid2">' + aiCard("프로젝트 설정 <small>멤버 공통 기본값</small>", a.project, a.canManage, projActs) + aiCard("내 개인 설정", a.personal, true, toggle + actBtn("ai-edit", a.personal ? "바꾸기" : "등록", "personal")) + "</div>" +
-      '<section class="section"><div class="note"><b>로컬 LLM 쓰는 법</b><p class="hint">Ollama·LM Studio·vLLM처럼 OpenAI 호환 API를 여는 서버를 이 서비스가 접속할 수 있는 곳에 띄우고, 호출 방법을 “OpenAI 호환 API · 로컬 LLM”으로, 주소를 <code>http://&lt;서버&gt;:11434/v1</code> 처럼 넣습니다. 생성 프롬프트는 JSON 결과를 요구하므로 지시를 잘 따르는 큰 모델(예: qwen2.5 14B 이상, llama3.1 70B)을 권합니다.</p></div></section>';
+    var effLine = eff ? "<b>" + esc(effLabel(eff)) + '</b> <span class="hint">' + SOURCE_LABEL[eff.source] + "</span>" : '<b class="warn-t">AI 설정 없음</b> — 운영자가 프로젝트 연결을 추가하거나, 내 연결을 추가하세요.';
+    var hasAny = (a.project && a.project.conns.length) || (a.personal && a.personal.conns.length);
+    return '<section class="section"><div class="box pad now"><div class="now-h"><b>지금 이 프로젝트에서 쓰는 AI</b>' + effLine + "</div>" +
+      (hasAny ? '<div class="row-actions"><label for="ai-switch" class="hint">나만 바꾸기</label>' + aiSwitch("ai-switch") + (eff && canEdit() ? actBtn("ai-test", "연결 확인", null) : "") + "</div>" : "") +
+      '<p class="hint">바꾸면 나에게만 적용됩니다. 모두의 기본은 운영자가 아래 프로젝트 연결에서 ‘기본으로’를 눌러 정합니다. 설정이 없으면 서버 기본 설정' + (a.serverDefault ? "(있음)" : "(없음)") + "을 씁니다.</p></div></section>" +
+      '<section class="section"><h2>프로젝트 연결 <small>멤버 공통 · ' + (a.canManage ? "주소·키는 운영자에게만 보임" : "운영자가 관리 — 주소·키는 보이지 않음") + "</small></h2>" + connCards("project", a.project, a.canManage, canEdit()) + "</section>" +
+      '<section class="section"><h2>내 연결 <small>나만 씀 · <button class="lnk" data-act="account">내 계정</button>에서도 관리</small></h2>' + connCards("personal", a.personal, true, canEdit()) + "</section>";
   }
   function renderAccount() {
-    var aiActs = actBtn("ai-edit", MY_AI ? "바꾸기" : "등록", "personal", MY_AI ? "btn-sm" : "btn-primary") + (MY_AI ? actBtn("ai-clear", "삭제", "personal") + actBtn("ai-test", "연결 확인", "personal") : "");
+    var mine = MY_AI || { conns: [], active: null };
+    var act = mine.active && mine.conns.find(function (c) { return c.id === mine.active.conn; });
     return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>내 계정</h1><p>' + esc(ME.name) + " · " + esc(ME.email) + "</p></header>" +
-      '<div class="ds-grid2">' + aiCard("내 AI 설정 <small>개인 계정</small>", MY_AI, true, aiActs) +
-      installBox() + '<div class="box pad"><h3>계정</h3><dl class="kv"><div><dt>이름</dt><dd>' + esc(ME.name) + "</dd></div><div><dt>이메일</dt><dd>" + esc(ME.email) + "</dd></div><div><dt>가입</dt><dd>" + esc(fmtDate(ME.createdAt)) + '</dd></div></dl><div class="row-actions">' + actBtn("pw-change", "비밀번호 바꾸기") + actBtn("logout", "로그아웃") + "</div></div></div>";
+      '<section class="section"><h2>내 AI 연결 <small>기본: ' + (act ? esc(act.label + " · " + mine.active.model) : "없음") + " · 프로젝트 AI 설정에서 프로젝트마다 골라 쓸 수 있음</small></h2>" + connCards("personal", mine, true, !!mine.conns.length) + "</section>" +
+      '<div class="ds-grid2">' + installBox() + '<div class="box pad"><h3>계정</h3><dl class="kv"><div><dt>이름</dt><dd>' + esc(ME.name) + "</dd></div><div><dt>이메일</dt><dd>" + esc(ME.email) + "</dd></div><div><dt>가입</dt><dd>" + esc(fmtDate(ME.createdAt)) + '</dd></div></dl><div class="row-actions">' + actBtn("pw-change", "비밀번호 바꾸기") + actBtn("logout", "로그아웃") + "</div></div></div>";
   }
+
   function invitesBanner() {
     if (!INVITES.length) return "";
     return '<section class="section"><h2>받은 초대 <small>' + INVITES.length + "건</small></h2>" + INVITES.map(function (i) {
@@ -2147,6 +2279,7 @@
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
       if (layer.kind === "review" && reviewClick(target, ev)) return;
       if (lb && layer.kind === "form" && lb.dataset.copy != null) { copyText(lb.dataset.copy, lb, "복사함"); return; }
+      if (lb && layer.kind === "aiconn" && connClick(lb)) return;
       if (lb && lb.dataset.cmtgen != null) { commentGen(lb.dataset.cmtgen); return; }
       if (lb && layer.kind === "gen") {
         var gin = document.getElementById("gen-in");
@@ -2228,6 +2361,7 @@
   }
   document.addEventListener("input", function (ev) {
     if (ev.target.id === "kb-q") { state.kbQ = ev.target.value; runSearch(); }
+    if (ev.target.id === "ac-filter" && layer && layer.ac) { layer.ac.filter = ev.target.value; document.getElementById("ac-list").innerHTML = acList(); }
     if (ev.target.id === "adm-q") {
       var q = ev.target.value.trim().toLowerCase();
       document.querySelectorAll("[data-admrow]").forEach(function (tr) { tr.hidden = q && tr.getAttribute("data-admrow").indexOf(q) < 0; });
@@ -2244,7 +2378,16 @@
       return;
     }
     if (tg.dataset && tg.dataset.admsel) { adminSel[tg.dataset.admsel] = tg.checked; render(); return; }
-    if (tg.hasAttribute && tg.hasAttribute("data-aipersonal")) { aiCache = {}; ACTIONS["ai-personal"](tg.checked ? "1" : "0"); return; }
+    if (tg.hasAttribute && tg.hasAttribute("data-aiswitch")) { switchAi(tg.value); return; }
+    if (tg.dataset && tg.dataset.acmodel != null && layer && layer.ac) {
+      var acm = tg.dataset.acmodel, ac = layer.ac;
+      acSync();
+      if (tg.checked) { if (ac.models.indexOf(acm) < 0) ac.models.push(acm); } else ac.models = ac.models.filter(function (x) { return x !== acm; });
+      // 목록 스크롤을 지키려고 고른 모델 칩과 개수만 다시 그린다
+      document.getElementById("ac-chips").innerHTML = acChips();
+      document.getElementById("ac-count").textContent = "고른 모델 " + ac.models.length + "개";
+      return;
+    }
     if (ev.target.id !== "lnb-select") return;
     var v = ev.target.value;
     if (v === "home") SRV ? goHome() : go({ view: "home" });
