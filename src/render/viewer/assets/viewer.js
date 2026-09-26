@@ -1075,6 +1075,51 @@
   function dsUndoable(code) { var o = overlayOf("ds:" + code); return !!(o && o.history && o.history.length); }
   /** 저장소 기준 디자인 시스템 (미세조정 패치는 항상 이것을 기준으로 한다) */
   function baseDesign(p, code) { return p.base.design.systems.find(function (d) { return d.systemCode === code && d.status === "SELECTED"; }); }
+  /** 디자인 패치에서 적용할 수 없는 값을 빼낸다 → { patch, dropped[] } */
+  var LAYOUT_ALLOWED = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
+  function sanitizeDsPatch(out, d, scope) {
+    var hex = /^#[0-9A-Fa-f]{6}$/, dropped = [], o = JSON.parse(JSON.stringify(out || {}));
+    var sc = scope ? scopeInfo(scope) : null, inScope = function (pth) { return !sc || sc.allowed.some(function (a) { return pth === a || pth.indexOf(a + ".") === 0; }); };
+    // 범위 밖
+    patchPaths(o).forEach(function (pth) {
+      if (inScope(pth)) return;
+      dropped.push("범위(" + sc.label + ") 밖: " + pth);
+      var parts = pth.split("."), cur = o;
+      for (var i = 0; i < parts.length - 1 && cur; i++) cur = cur[parts[i]];
+      if (cur) delete cur[parts[parts.length - 1]];
+    });
+    // 색 토큰
+    if (o.tokens && o.tokens.color) Object.keys(o.tokens.color).forEach(function (k) { if (!d.tokens.color.hasOwnProperty(k) || !hex.test(String(o.tokens.color[k]))) { dropped.push("색상 " + k + ": " + o.tokens.color[k]); delete o.tokens.color[k]; } });
+    // 숫자 토큰
+    (function walk(base, obj, path) {
+      if (!obj || typeof obj !== "object") return;
+      Object.keys(obj).forEach(function (k) {
+        if (path === "" && k === "color") return;
+        var b = base ? base[k] : undefined, v = obj[k];
+        if (v && typeof v === "object" && !Array.isArray(v)) return walk(b, v, path + k + ".");
+        if (b === undefined) { dropped.push("없는 토큰: tokens." + path + k); delete obj[k]; }
+        else if (path === "" && k === "shadow" && ["none", "soft", "strong"].indexOf(v) < 0) { dropped.push("tokens.shadow 값: " + v); delete obj[k]; }
+        else if (typeof b === "number" && typeof v !== "number") { dropped.push("tokens." + path + k + " 값 형식: " + v); delete obj[k]; }
+      });
+    })(d.tokens, o.tokens, "");
+    // 레이아웃
+    Object.keys(o.layout || {}).forEach(function (k) { if (!LAYOUT_ALLOWED[k] || LAYOUT_ALLOWED[k].indexOf(o.layout[k]) < 0) { dropped.push("레이아웃 " + k + ": " + o.layout[k]); delete o.layout[k]; } });
+    // 컴포넌트 스타일
+    var known = {};
+    d.components.forEach(function (x) { known[x.id] = true; });
+    ((o.components && o.components.add) || []).forEach(function (x) { known[x.id] = true; });
+    Object.keys(o.componentStyles || {}).forEach(function (cid) {
+      if (!known[cid]) { dropped.push("없는 컴포넌트: " + cid); delete o.componentStyles[cid]; return; }
+      var vars = styleVarsOf(cid);
+      Object.keys(o.componentStyles[cid] || {}).forEach(function (vn) {
+        var sv = vars.find(function (x) { return x.name === vn; }), val = String(o.componentStyles[cid][vn]);
+        var bad = !sv ? cid + "에 없는 변수: " + vn : (sv.type === "color" ? !hex.test(val) : sv.type === "px" ? !/^\d{1,4}(\.\d+)?px$/.test(val) : !/^\d{1,4}$/.test(val)) ? cid + " " + vn + " 값 형식: " + val : "";
+        if (bad) { dropped.push(bad); delete o.componentStyles[cid][vn]; }
+      });
+      if (!Object.keys(o.componentStyles[cid]).length) delete o.componentStyles[cid];
+    });
+    return { patch: o, dropped: dropped };
+  }
   function validateOutput(kind, target, out, p, scope) {
     var errs = [], warns = [];
     if (!out || typeof out !== "object") return { errs: ["JSON 객체가 아닙니다"], warns: warns };
@@ -1117,27 +1162,12 @@
       }
     } else if (kind === "ds") {
       var d0 = selectedDesign(p, target);
-      var nd = designWithPatch(d0, out);
-      var hex = /^#[0-9A-Fa-f]{6}$/;
-      Object.keys(nd.tokens.color).forEach(function (k) { if (!hex.test(nd.tokens.color[k])) errs.push("색상 " + k + " 값 오류: " + nd.tokens.color[k]); });
-      var allowed = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
-      Object.keys(nd.layout).forEach(function (k) { if (allowed[k] && allowed[k].indexOf(nd.layout[k]) < 0) errs.push("레이아웃 " + k + " 값 오류: " + nd.layout[k]); });
-      var known = {};
-      nd.components.forEach(function (x) { known[x.id] = true; });
-      Object.keys(out.componentStyles || {}).forEach(function (cid) {
-        if (!known[cid]) { errs.push("디자인 시스템에 없는 컴포넌트: " + cid); return; }
-        var vars = styleVarsOf(cid);
-        Object.keys(out.componentStyles[cid] || {}).forEach(function (vn) {
-          var sv = vars.find(function (x) { return x.name === vn; }), val = String(out.componentStyles[cid][vn]);
-          if (!sv) errs.push(cid + "에서 조정할 수 없는 변수: " + vn);
-          else if (sv.type === "color" ? !hex.test(val) : sv.type === "px" ? !/^\d{1,4}(\.\d+)?px$/.test(val) : !/^\d{1,4}$/.test(val)) errs.push(cid + " " + vn + " 값 형식 오류: " + val);
-        });
-      });
-      if (scope) {
-        var sc = scopeInfo(scope);
-        patchPaths(out).forEach(function (pth) { if (!sc.allowed.some(function (a) { return pth === a || pth.indexOf(a + ".") === 0; })) errs.push("‘" + sc.label + "’ 범위 밖 값: " + pth); });
-      }
-      if (!designChanges(d0, nd).length) errs.push("바뀐 내용이 없습니다");
+      var clean = sanitizeDsPatch(normDsPatch(out, d0), d0, scope);
+      clean.dropped.forEach(function (x) { warns.push("적용하지 않고 뺀 값 — " + x); });
+      var nd = designWithPatch(d0, clean.patch);
+      if (!designChanges(d0, nd).length) errs.push(clean.dropped.length ? "적용할 수 있는 값이 없습니다 (모두 형식·범위 오류). 다시 생성하거나 요청을 구체적으로 적어 주세요" : "바뀐 내용이 없습니다 — 현재 디자인과 같습니다");
+      var cres = Array.isArray(out.comments) ? out.comments : [];
+      cres.forEach(function (c) { if (c && c.done === false) warns.push("댓글 " + (c.id || "") + " 반영 못함 — " + (c.reason || "이유 없음")); });
     }
     return { errs: errs, warns: warns };
   }
@@ -1159,9 +1189,17 @@
     session_expired: "다시 로그인해 주세요.", empty_completion: "결과가 비었습니다. 요청을 바꿔 다시 시도해 주세요."
   };
   /** 디자인 미세조정 프롬프트 채우기 (src/ai/generate.ts fillDsPrompt와 같은 규칙) */
+  var COMMENT_RULES = [
+    "### 댓글 반영 규칙",
+    "- 댓글이 특정 컴포넌트를 가리키면 그 컴포넌트의 componentStyles(바로 위에 적은 변수)로 먼저 고친다. 화면 전체 색·글꼴(tokens)은 댓글이 전체를 말할 때만 바꾼다",
+    "- 변수 이름은 위에 적은 것만 그대로 쓴다. 없는 변수를 만들지 않는다",
+    "- 디자인 시스템으로 바꿀 수 없는 요청(문구·항목 추가/삭제·배치 순서·데이터 등 화면 내용)은 고치지 말고 done:false 로 이유를 적는다",
+    "- 출력 JSON에 댓글별 결과를 반드시 넣는다: \"comments\":[{\"id\":\"C1\",\"done\":true,\"change\":\"data-table 머리글 배경 #E8EEF7 → #1F2A3C\"},{\"id\":\"C2\",\"done\":false,\"reason\":\"문구 변경은 화면설계서에서 고칠 내용\"}]"
+  ].join("\n");
   function fillDs(template, p, code, scope, commentIds) {
     var d = selectedDesign(p, code), sc = scopeInfo(scope), slots = DATA.design.slots;
-    var ids = scope.indexOf("cmp:") === 0 ? [scope.slice(4)] : d.components.map(function (x) { return x.id; });
+    var cmts = scope === "comments" ? commentItems(p, code, commentIds).map(function (x) { return x.cmp; }).filter(Boolean) : [];
+    var ids = scope.indexOf("cmp:") === 0 ? [scope.slice(4)] : cmts.length ? cmts.filter(function (x, i) { return cmts.indexOf(x) === i; }) : d.components.map(function (x) { return x.id; });
     var vars = ids.map(function (id) {
       return "- " + id + ": " + styleVarsOf(id).map(function (v) { var cur = d.componentStyles && d.componentStyles[id] && d.componentStyles[id][v.name]; return v.name + "(" + v.label + ", " + v.type + ", 기본 " + v.base + (cur ? ", 현재 " + cur : "") + ")"; }).join(" · ");
     }).join("\n");
@@ -1169,13 +1207,23 @@
       .replace(slots.scope, "- " + sc.label + ": " + sc.hint + "\n- 바꿀 수 있는 경로: " + sc.allowed.join(", "))
       .replace(slots.design, JSON.stringify({ tokens: d.tokens, layout: d.layout, componentStyles: d.componentStyles || {} }))
       .replace(slots.vars, vars)
-      .replace(slots.comments, commentText(p, code, commentIds) || "- (없음)");
+      .replace(slots.comments, commentText(p, code, commentIds) ? commentText(p, code, commentIds) + "\n\n" + COMMENT_RULES : "- (없음)");
+  }
+  /** 댓글 목록 → 프롬프트. 댓글마다 C1, C2 … 번호와, 가리키는 컴포넌트에서 바꿀 수 있는 변수(현재 값)를 바로 붙인다 */
+  function commentItems(p, code, ids) {
+    var all = reviewsOf(p, code).items || [];
+    return (ids || []).map(function (id) { return all.find(function (x) { return x.id === id; }); }).filter(Boolean);
   }
   function commentText(p, code, ids) {
-    if (!ids || !ids.length) return "";
-    var items = (reviewsOf(p, code).items || []).filter(function (x) { return ids.indexOf(x.id) >= 0; });
-    return items.map(function (x) {
-      return "- [" + x.target.label + "] " + x.n + "번 · 컴포넌트 " + (x.cmp || "(빈 곳)") + " · 위치 x=" + Math.round(x.x) + ", y=" + Math.round(x.y) + " (1920×1080 기준)" + (x.snippet ? " · 요소 글자 “" + x.snippet + "”" : "") + "\n  댓글: " + x.comment;
+    var items = commentItems(p, code, ids);
+    if (!items.length) return "";
+    var d = selectedDesign(p, code);
+    return items.map(function (x, i) {
+      var comp = x.cmp && d ? d.components.find(function (c) { return c.id === x.cmp; }) : null;
+      var vars = x.cmp ? styleVarsOf(x.cmp).map(function (v) { var cur = d && d.componentStyles && d.componentStyles[x.cmp] && d.componentStyles[x.cmp][v.name]; return v.name + "(" + v.label + ", " + v.type + (cur ? ", 현재 " + cur : ", 기본 " + v.base) + ")"; }).join(" · ") : "";
+      return "- [C" + (i + 1) + "] 화면 “" + x.target.label + "”의 " + x.n + "번 핀 · 컴포넌트 " + (x.cmp ? x.cmp + (comp ? " (" + comp.name + ")" : "") : "(특정 컴포넌트 아님 — 화면 전체)") +
+        " · 위치 x=" + Math.round(x.x) + ", y=" + Math.round(x.y) + " (1920×1080 기준)" + (x.snippet ? " · 핀 아래 글자 “" + x.snippet + "”" : "") +
+        "\n  댓글: " + x.comment + (vars ? "\n  이 컴포넌트에서 바꿀 수 있는 변수: " + vars : "");
     }).join("\n");
   }
   function genRun(instruction) {
@@ -1211,7 +1259,8 @@
   /** 서비스 모드: 생성 결과를 서버 모델에 바로 반영한다. 디자인은 적용 전 디자인을 기록해 되돌릴 수 있다 */
   function genApplySrv(apply) {
     var p = P(), key = layer.key, doc = JSON.parse(JSON.stringify(overlayOf(key))), v = doc.versions[layer.sel];
-    var out = doc.kind === "ds" ? normDsPatch(v.output, selectedDesign(p, doc.target)) : v.output;
+    var out = doc.kind === "ds" ? sanitizeDsPatch(normDsPatch(v.output, selectedDesign(p, doc.target)), selectedDesign(p, doc.target), v.scope).patch : v.output;
+    if (doc.kind === "ds") delete out.comments;
     var chk = apply ? validateOutput(doc.kind, doc.target, out, p, v.scope) : { errs: [] };
     if (chk.errs.length) { layer.err = "적용할 수 없습니다: " + chk.errs[0]; renderLayer(); return; }
     var before = doc.kind === "ds" ? JSON.parse(JSON.stringify(selectedDesign(p, doc.target))) : null;
@@ -1231,7 +1280,7 @@
           doc.appliedRev = after.revision;
           doc.applied = v.n;
           layer.err = "";
-          if (v.commentIds && v.commentIds.length) resolveComments(p, doc.target, v.commentIds, after.revision);
+          if (v.commentIds && v.commentIds.length) resolveComments(p, doc.target, v.commentIds, after.revision, v.output && v.output.comments);
         } else {
           var gone = doc.history.pop();
           doc.applied = doc.history.length ? doc.history[doc.history.length - 1].n : null;
@@ -1299,9 +1348,18 @@
     if (!AI.db || !AI.dbWrite) return Promise.resolve(false);
     return AI.db.collection("reviews").doc(id).set(doc).then(function () { return true; }, function (e) { if (e && e.code === "invalid_argument") AI.dbWrite = false; return false; });
   }
-  function resolveComments(p, sys, ids, rev) {
+  /** results: AI가 돌려준 댓글별 결과 [{id:"C1", done, change, reason}] — 반영 못한 댓글은 이유를 남기고 열어 둔다 */
+  function resolveComments(p, sys, ids, rev, results) {
     var doc = JSON.parse(JSON.stringify(reviewsOf(p, sys)));
-    doc.items = (doc.items || []).map(function (x) { return ids.indexOf(x.id) >= 0 ? Object.assign(x, { status: "resolved", rev: rev }) : x; });
+    var byC = {};
+    (Array.isArray(results) ? results : []).forEach(function (r) { if (r && r.id) byC[String(r.id).toUpperCase()] = r; });
+    doc.items = (doc.items || []).map(function (x) {
+      var i = ids.indexOf(x.id);
+      if (i < 0) return x;
+      var r = byC["C" + (i + 1)];
+      if (r && r.done === false) return Object.assign(x, { aiNote: r.reason || "AI가 반영하지 못했습니다", aiRev: rev });
+      return Object.assign(x, { status: "resolved", rev: rev, aiNote: r && r.change ? r.change : null });
+    });
     saveReviews(p, sys, doc);
   }
   function reopenComments(p, sys, rev) {
@@ -1335,7 +1393,7 @@
       return (wire ? stage(wire, { page: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>";
     }
     if (g.kind === "ds") {
-      var d0 = selectedDesign(p, g.target), nd = designWithPatch(d0, out, d0.revision + 1), ch = designChanges(d0, nd), ctx = wireCtx(p, g.target, null);
+      var d0 = selectedDesign(p, g.target), nd = designWithPatch(d0, sanitizeDsPatch(normDsPatch(out, d0), d0, null).patch, d0.revision + 1), ch = designChanges(d0, nd), ctx = wireCtx(p, g.target, null);
       var screens = p.model.storyboard.screens.filter(function (x) { return x.systemCode === g.target; });
       var shots = screens.slice(0, 4).map(function (sb) {
         var node = p.model.ia.nodes.find(function (n) { return n.id === sb.screenId; }) || {};
@@ -1343,7 +1401,11 @@
         if (node.kind === "POPUP") { c2.popup = true; c2.parent = p.model.storyboard.screens.find(function (s) { return s.screenId === node.parentId; }); }
         return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.screen(nd, sb, c2), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + esc(sb.screenId) + "</figcaption></figure>";
       }).join("");
-      return (out.summary ? "<p><b>" + esc(out.summary) + "</b></p>" : "") + '<ul class="changes">' + ch.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
+      var cres = Array.isArray(out.comments) ? out.comments : [];
+      var cbox = cres.length ? '<div class="cmt-results"><b>댓글별 반영 결과</b>' + cres.map(function (c) {
+        return '<div class="' + (c.done === false ? "no" : "ok") + '"><span class="mono">' + esc(c.id || "") + "</span>" + (c.done === false ? "✕ 반영 못함 — " + esc(c.reason || "") : "✓ " + esc(c.change || "반영")) + "</div>";
+      }).join("") + "</div>" : "";
+      return (out.summary ? "<p><b>" + esc(out.summary) + "</b></p>" : "") + cbox + '<ul class="changes">' + ch.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
         '<h4 class="gen-sub">바뀐 디자인으로 다시 그린 화면 <small>이 디자인 시스템을 쓰는 화면 ' + screens.length + "개 중 " + Math.min(4, screens.length) + "개</small></h4>" + '<div class="thumbs">' + shots + "</div>" +
         '<h4 class="gen-sub">템플릿</h4><div class="thumbs">' + ["list", "form", "confirm", "modal"].map(function (t) { return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.template(nd, t, ctx), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + t + "</figcaption></figure>"; }).join("") + "</div>";
     }
@@ -1407,7 +1469,7 @@
     var pend = l.pending ? '<div class="rv-new"><div class="rv-new-h"><span class="rv-n new">' + nextN + "</span><b>" + nextN + '번 댓글</b><span class="tag mono">' + esc(l.pending.cmp || "빈 곳") + "</span></div>" + (l.pending.snippet ? '<span class="hint">“' + esc(l.pending.snippet) + "”</span>" : "") +
       '<label class="sr" for="rv-in">댓글</label><textarea id="rv-in" rows="3" placeholder="예: 이 표 머리글 배경을 더 진하게, 글자는 흰색으로">' + esc(l.rvDraft || "") + '</textarea><div class="gen-actions"><button class="btn-primary" data-rvsave>댓글 남기기</button><button class="btn-sm" data-rvcancel>취소</button></div></div>' : "";
     var list = mine.map(function (x) {
-      return '<div class="rv-item ' + x.status + '"><span class="rv-n">' + x.n + '</span><div><span class="tag mono">' + esc(x.cmp || "빈 곳") + "</span> " + (x.status === "resolved" ? '<span class="pill DESIGNED">반영됨 r' + esc(x.rev) + "</span>" : '<span class="pill IN_DESIGN">열림</span>') + "<p>" + esc(x.comment) + "</p></div>" + (x.status === "open" ? '<button class="btn-sm" data-rvdel="' + esc(x.id) + '" aria-label="' + x.n + '번 댓글 삭제">삭제</button>' : "") + "</div>";
+      return '<div class="rv-item ' + x.status + '"><span class="rv-n">' + x.n + '</span><div><span class="tag mono">' + esc(x.cmp || "빈 곳") + "</span> " + (x.status === "resolved" ? '<span class="pill DESIGNED">반영됨 r' + esc(x.rev) + "</span>" : '<span class="pill IN_DESIGN">열림</span>') + "<p>" + esc(x.comment) + "</p>" + (x.aiNote ? '<p class="ai-note ' + (x.status === "resolved" ? "ok" : "no") + '">' + (x.status === "resolved" ? "AI: " : "AI 반영 못함: ") + esc(x.aiNote) + "</p>" : "") + "</div>" + (x.status === "open" ? '<button class="btn-sm" data-rvdel="' + esc(x.id) + '" aria-label="' + x.n + '번 댓글 삭제">삭제</button>' : "") + "</div>";
     }).join("");
     var body = '<header class="layer-h"><div><span class="eyebrow">디자인 검토 · ' + esc(l.sys) + " · 실제 규격 " + v.w + " × " + (v.h || "가변") + '</span><h2 id="layer-t">' + esc(l.target.label) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="rv-body"><div class="rv-main">' + stage(v.html, { w: v.w, h: v.h, cls: "rv", cap: false }) + '</div><div class="rv-side">' +

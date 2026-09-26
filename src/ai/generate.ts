@@ -213,6 +213,8 @@ function dsGen(c: Ctx, code: string): GenPrompt {
         "- componentStyles 값: 색은 #RRGGBB, 크기는 \"12px\" 처럼 px, 굵기는 \"600\" 처럼 숫자. 위 목록에 있는 변수만 쓴다",
         "- 새 컴포넌트는 components.add로만 추가(id는 영문 소문자·하이픈). 기존 컴포넌트 ID는 바꾸지 않는다(화면설계서가 ID로 참조)",
         "- 댓글이 있으면 각 댓글이 가리키는 컴포넌트·위치를 근거로 고치고, summary에 댓글 번호별로 무엇을 바꿨는지 쓴다",
+        "- 댓글이 특정 컴포넌트를 가리키면 그 컴포넌트의 componentStyles로 먼저 고친다. 디자인 시스템으로 바꿀 수 없는 요청(문구·항목·배치·데이터)은 고치지 말고 comments에 done:false와 이유를 적는다",
+        '- 댓글이 있으면 댓글별 결과를 넣는다: "comments":[{"id":"C1","done":true,"change":"무엇을 바꿨나"},{"id":"C2","done":false,"reason":"왜 못 했나"}]',
         "- 요청과 관계없는 값은 넣지 않는다",
       ].join("\n"),
     ),

@@ -760,3 +760,10 @@ html.layer-open .shell { user-select: none; -webkit-user-select: none; }
 .layer { overscroll-behavior: contain; touch-action: none; }
 .layer-box { touch-action: auto; }
 .layer-box, .layer-box * { overscroll-behavior: contain; }
+.cmt-results { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface); font-size: 12.5px; }
+.cmt-results .ok { color: var(--st-done); }
+.cmt-results .no { color: var(--crit); }
+.cmt-results .mono { margin-right: 6px; color: var(--ink-3); }
+.ai-note { font-size: 12px; margin: 2px 0 0; }
+.ai-note.ok { color: var(--st-done); }
+.ai-note.no { color: var(--crit); }
