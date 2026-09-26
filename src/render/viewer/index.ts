@@ -48,7 +48,7 @@ export async function collectViewerProject(dir: string, now = new Date(), opts: 
   return { model, rtm: buildRtm(model, now), snapshots, diff, chunks, prompts: buildPrompts(model, chunks, opts), gens: buildGenPrompts(model, chunks, opts) };
 }
 
-const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets");
+export const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets");
 
 // 뷰어 글꼴 + 디자인 컨셉 글꼴(Noto Sans KR, Gothic A1)
 const FONTS =
@@ -62,6 +62,16 @@ const JS_FILES = ["search.js", "flow.js", "wire.js", "viewer.js"];
  * @param standalone true면 <!doctype html> 문서 전체, false면 본문 조각(<title>부터).
  *                   조각은 문서 뼈대를 따로 씌우는 호스팅(예: Claude 아티팩트)에 올릴 때 쓴다.
  */
+/** 설치형 앱(PWA) 머리 — 웹 서비스 모드에서만 (manifest·아이콘·서비스 워커는 서버가 낸다) */
+const PWA_HEAD = `<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#1f5e8c">
+<meta name="application-name" content="Planning Studio">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planning Studio">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+`;
+
 export async function renderViewer(data: ViewerData, opts: { standalone?: boolean; title?: string } = {}): Promise<string> {
   const read = (f: string) => readFile(path.join(ASSET_DIR, f), "utf8");
   const css = (await Promise.all(CSS_FILES.map(read))).join("\n");
@@ -75,7 +85,7 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
   }).replace(/</g, "\\u003c");
   const title = opts.title ?? (data.projects.length === 1 ? `${data.projects[0]!.model.project.name}` : "Planning Studio 뷰어");
   const body = `<title>${escapeHtml(title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+${data.mode === "server" ? PWA_HEAD : ""}<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONTS}">
 <style>

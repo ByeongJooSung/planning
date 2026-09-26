@@ -201,7 +201,7 @@
     html += '<label class="sr" for="lnb-select">메뉴</label><select id="lnb-select" class="lnb-select">' + opts.map(function (o) {
       return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>";
     }).join("") + "</select>";
-    html += SRV && ME ? '<div class="side-foot user-foot"><b>' + esc(ME.name) + "</b><span>" + esc(ME.email) + '</span><span class="row-actions">' + actBtn("account", "내 계정") + actBtn("logout", "로그아웃") + "</span></div>" :
+    html += SRV && ME ? '<div class="side-foot user-foot">' + (installEvt ? actBtn("install", "⤓ 앱으로 설치", null, "btn-primary install-btn") : "") + "<b>" + esc(ME.name) + "</b><span>" + esc(ME.email) + '</span><span class="row-actions">' + actBtn("account", "내 계정") + actBtn("logout", "로그아웃") + "</span></div>" :
       '<div class="side-foot">생성 ' + esc(fmtDate(DATA.generatedAt)) + "<br><code>planning view</code></div>";
     document.getElementById("side").innerHTML = html;
   }
@@ -1975,7 +1975,7 @@
     var aiActs = actBtn("ai-edit", MY_AI ? "바꾸기" : "등록", "personal", MY_AI ? "btn-sm" : "btn-primary") + (MY_AI ? actBtn("ai-clear", "삭제", "personal") + actBtn("ai-test", "연결 확인", "personal") : "");
     return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>내 계정</h1><p>' + esc(ME.name) + " · " + esc(ME.email) + "</p></header>" +
       '<div class="ds-grid2">' + aiCard("내 AI 설정 <small>개인 계정</small>", MY_AI, true, aiActs) +
-      '<div class="box pad"><h3>계정</h3><dl class="kv"><div><dt>이름</dt><dd>' + esc(ME.name) + "</dd></div><div><dt>이메일</dt><dd>" + esc(ME.email) + "</dd></div><div><dt>가입</dt><dd>" + esc(fmtDate(ME.createdAt)) + '</dd></div></dl><div class="row-actions">' + actBtn("pw-change", "비밀번호 바꾸기") + actBtn("logout", "로그아웃") + "</div></div></div>";
+      installBox() + '<div class="box pad"><h3>계정</h3><dl class="kv"><div><dt>이름</dt><dd>' + esc(ME.name) + "</dd></div><div><dt>이메일</dt><dd>" + esc(ME.email) + "</dd></div><div><dt>가입</dt><dd>" + esc(fmtDate(ME.createdAt)) + '</dd></div></dl><div class="row-actions">' + actBtn("pw-change", "비밀번호 바꾸기") + actBtn("logout", "로그아웃") + "</div></div></div>";
   }
   function invitesBanner() {
     if (!INVITES.length) return "";
@@ -2035,6 +2035,26 @@
     render();
   };
   ACTIONS["adm-reload"] = function () { adminCache = null; render(); };
+
+  // ── 설치형 앱 (PWA) ────────────────────────────
+  // Chrome·Edge가 설치할 수 있다고 알려 주면(beforeinstallprompt) 메뉴에 "앱으로 설치" 버튼을 띄운다
+  var installEvt = null;
+  var standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  if (SRV) {
+    window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installEvt = e; if (ME) { renderLnb(); if (state.route.view === "account") render(); } });
+    window.addEventListener("appinstalled", function () { installEvt = null; standalone = true; toast("앱으로 설치했습니다. 바탕화면·시작 메뉴에서 Planning Studio를 여세요"); if (ME) render(); });
+    if ("serviceWorker" in navigator) window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () { /* 설치 기능만 빠진다 */ }); });
+  }
+  ACTIONS.install = function () {
+    if (!installEvt) return;
+    installEvt.prompt();
+    installEvt.userChoice.then(function () { installEvt = null; render(); });
+  };
+  function installBox() {
+    var how = standalone ? "<p>지금 설치한 앱으로 열려 있습니다.</p>" : installEvt ? '<p class="hint">바탕화면·시작 메뉴·작업 표시줄에서 바로 여는 앱으로 설치합니다. 창이 따로 열리고 주소창이 없습니다.</p><div class="row-actions">' + actBtn("install", "⤓ 앱으로 설치", null, "btn-primary") + "</div>" :
+      '<p class="hint">설치 버튼이 안 보이면: Chrome 주소창 오른쪽의 설치 아이콘(⊕ 또는 모니터 모양), 또는 ⋮ 메뉴 → <b>전송, 저장, 공유 → 페이지를 앱으로 설치</b>(버전에 따라 “Planning Studio 설치”). 이미 설치했다면 ⋮ 메뉴에 “Planning Studio 열기”가 보입니다. 아이폰 Safari는 공유 버튼 → <b>홈 화면에 추가</b>.</p>';
+    return '<div class="box pad"><h3>앱으로 설치</h3>' + how + "</div>";
+  }
 
   // ── 로그인 · 가입 · 초대 링크 ───────────────────
   var authState = { mode: "login", invite: null, token: null, err: "" };

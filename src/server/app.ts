@@ -17,7 +17,7 @@ import { extractSegments, SUPPORTED_EXT, UnsupportedFormatError } from "../knowl
 import type { Segment } from "../knowledge/extract-text.js";
 import { buildNewProject } from "../project/model-files.js";
 import { SYSTEM_PRESETS } from "../project/presets.js";
-import { renderViewer } from "../render/viewer/index.js";
+import { ASSET_DIR, renderViewer } from "../render/viewer/index.js";
 import { deriveProject, execute, type Command, type ProjectState } from "../service/core.js";
 import { Accounts, atLeast, HttpError, ROLES, type AiResolved, type Role, type User } from "./accounts.js";
 import { callAi, DEFAULT_ANTHROPIC_MODEL, type AiInputMessages } from "./ai.js";
@@ -70,6 +70,34 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   const bodyLimit = Math.ceil(maxUploadMb * 1.4 + 2) * 1024 * 1024; // base64 부풀림 + 여유
   const shell = await renderViewer({ generatedAt: new Date().toISOString(), projects: [], mode: "server" }, { title: "Planning Studio" });
   let ready: Promise<void> | null = null;
+  // 설치형 앱(PWA): manifest · 서비스 워커 · 아이콘
+  const manifest = JSON.stringify({
+    name: "Planning Studio — 서비스 기획 산출물",
+    short_name: "Planning Studio",
+    description: "요구사항에서 기획안·정보구조도·다이어그램·화면설계서·프로토타입까지 프로젝트 단위로 만들고 함께 관리합니다.",
+    lang: "ko",
+    id: "/",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    display_override: ["window-controls-overlay", "standalone"],
+    background_color: "#f3f5f8",
+    theme_color: "#1f5e8c",
+    categories: ["productivity", "business"],
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+    ],
+    shortcuts: [
+      { name: "전체 프로젝트", url: "/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "내 계정 · AI 설정", url: "/account", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+    ],
+  });
+  const sw = await readFile(path.join(ASSET_DIR, "sw.js"), "utf8");
+  const icons = new Map<string, Buffer>();
+  for (const f of ["icon.svg", "icon-maskable.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png", "favicon-32.png"]) icons.set(f, await readFile(path.join(ASSET_DIR, "icons", f)));
 
   /** 운영자가 없는 기존 프로젝트(CLI로 만든 것·샘플)는 첫 가입자에게 맡긴다 */
   async function claimOrphans(user: User) {
@@ -405,6 +433,11 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
       if (!url.pathname.startsWith("/api/")) {
         if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, "허용되지 않는 요청");
         if (url.pathname === "/healthz") return send(res, 200, "ok", "text/plain");
+        if (url.pathname === "/manifest.webmanifest") return send(res, 200, manifest, "application/manifest+json; charset=utf-8", "public, max-age=3600");
+        if (url.pathname === "/sw.js") return send(res, 200, sw, "text/javascript; charset=utf-8", "no-cache");
+        if (url.pathname === "/favicon.ico") return sendBuf(res, icons.get("favicon-32.png")!, "image/png");
+        const icon = url.pathname.startsWith("/icons/") ? icons.get(url.pathname.slice(7)) : undefined;
+        if (icon) return sendBuf(res, icon, url.pathname.endsWith(".svg") ? "image/svg+xml" : "image/png");
         if (url.pathname === "/" || url.pathname === "/account" || url.pathname === "/admin" || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/p/")) return send(res, 200, shell, "text/html; charset=utf-8");
         throw new HttpError(404, "없는 페이지입니다");
       }
@@ -459,10 +492,15 @@ export async function createLocalApp(o: Omit<AppOptions, "kv" | "repo" | "secret
   return { ...app, server, root };
 }
 
-function send(res: ServerResponse, status: number, body: string, type: string) {
+function sendBuf(res: ServerResponse, body: Buffer, type: string) {
+  res.writeHead(200, { "content-type": type, "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" });
+  res.end(body);
+}
+
+function send(res: ServerResponse, status: number, body: string, type: string, cache = "no-store") {
   res.writeHead(status, {
     "content-type": type,
-    "cache-control": "no-store",
+    "cache-control": cache,
     "x-content-type-options": "nosniff",
     "referrer-policy": "same-origin",
     "x-frame-options": "DENY",

@@ -214,6 +214,15 @@ describe("시나리오", () => {
     const html = await r.text();
     expect(html).toContain('"mode":"server"');
     expect((await fetch(base + "/invite/abc")).status).toBe(200);
+    // 설치형 앱(PWA)
+    expect(html).toContain('rel="manifest"');
+    const man = await (await fetch(base + "/manifest.webmanifest")).json();
+    expect(man).toMatchObject({ display: "standalone", start_url: "/" });
+    expect(man.icons.map((i: { sizes: string }) => i.sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));
+    for (const i of man.icons) expect((await fetch(base + i.src)).status).toBe(200);
+    const sw = await fetch(base + "/sw.js");
+    expect(sw.headers.get("content-type")).toMatch(/javascript/);
+    expect(await sw.text()).toContain("/api/");
   });
 });
 });
