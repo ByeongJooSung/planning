@@ -2014,6 +2014,16 @@
     var ck = document.getElementById("ac-clear");
     if (ck) ac.clearKey = ck.checked;
   }
+  /** 모델 불러오기 결과 — 성공/실패와 원인·해결 방법·요청 정보 */
+  function acProbeBox() {
+    var ac = layer.ac, r = ac.probe;
+    if (ac.busy) return '<div class="ac-probe busy" role="status"><b>불러오는 중…</b><span>최대 20초 · GET ' + esc((ac.baseUrl || "").replace(/\/$/, "") + "/models") + "</span></div>";
+    if (!r) return "";
+    var meta = [r.url ? "GET " + r.url : "", r.status ? "HTTP " + r.status : "", r.code ? r.code : "", r.ms != null ? (r.ms / 1000).toFixed(1) + "초" : ""].filter(Boolean).join(" · ");
+    if (r.ok) return '<div class="ac-probe ok" role="status"><b>✓ 불러오기 성공 — 모델 ' + r.models.length + "개</b>" + (meta ? '<span class="mono">' + esc(meta) + "</span>" : "") + "<span>아래 목록에서 쓸 모델을 체크하세요.</span></div>";
+    return '<div class="ac-probe fail" role="alert"><b>✕ 불러오기 실패 — ' + esc(r.error || "알 수 없는 오류") + "</b>" + (r.hint ? '<span class="fix"><em>해결</em> ' + esc(r.hint) + "</span>" : "") +
+      (meta ? '<span class="mono">' + esc(meta) + "</span>" : "") + (r.detail ? '<span class="mono detail">서버 응답: ' + esc(r.detail) + "</span>" : "") + '<span>목록 없이도 아래 칸에 모델 이름을 직접 입력해 저장할 수 있습니다.</span></div>';
+  }
   function acChips() {
     var ac = layer.ac;
     return ac.models.length ? ac.models.map(function (m) { return '<span class="chip-m"><span class="mono">' + esc(m) + '</span><button data-acrm="' + esc(m) + '" aria-label="' + esc(m) + ' 빼기">✕</button></span>'; }).join("") : '<span class="hint">아직 고른 모델이 없습니다</span>';
@@ -2021,6 +2031,7 @@
   function acList() {
     var ac = layer.ac, q = ac.filter.trim().toLowerCase();
     var rows = ac.fetched.filter(function (m) { return !q || m.toLowerCase().indexOf(q) >= 0; });
+    if (!ac.fetched.length) return ac.probe ? "" : '<p class="hint">‘모델 불러오기’를 누르면 이 연결에서 쓸 수 있는 모델이 나옵니다</p>';
     return rows.length ? rows.slice(0, 300).map(function (m) {
       return '<label class="ac-model"><input type="checkbox" data-acmodel="' + esc(m) + '"' + (ac.models.indexOf(m) >= 0 ? " checked" : "") + '> <span class="mono">' + esc(m) + "</span></label>";
     }).join("") + (rows.length > 300 ? '<p class="hint">' + (rows.length - 300) + "개 더 — 검색어로 좁혀 주세요</p>" : "") : '<p class="hint">' + (ac.fetched.length ? "검색 결과가 없습니다" : "‘모델 불러오기’를 누르면 이 연결에서 쓸 수 있는 모델이 나옵니다") + "</p>";
@@ -2036,7 +2047,7 @@
       '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>" +
       '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 8192)</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="8192"></div></div>' +
       '<div class="ac-models"><div class="ac-mh"><b>모델</b><span class="hint">여러 개 골라 저장해 두면 드롭다운으로 바로 바꿀 수 있습니다</span><span class="sp"></span><button class="btn-sm" data-acfetch' + (ac.busy ? " disabled" : "") + ">" + (ac.busy ? "불러오는 중…" : "모델 불러오기") + "</button></div>" +
-      '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
+      acProbeBox() + '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
       (ac.fetched.length ? '<input id="ac-filter" type="search" placeholder="모델 검색 (예: llama, qwen, 70b)" value="' + esc(ac.filter) + '" autocomplete="off">' : "") + '<div id="ac-list" class="ac-list">' + acList() + "</div>" +
       '<div class="ac-manual"><input id="ac-manual" type="text" placeholder="목록에 없으면 모델 이름을 직접 입력" autocomplete="off"><button class="btn-sm" data-acadd>추가</button></div></div>' +
       '<p class="gen-err" role="alert"' + (ac.err ? "" : " hidden") + ">" + esc(ac.err) + "</p>" +
@@ -2057,11 +2068,15 @@
     if (b.hasAttribute("data-acfetch")) {
       acSync();
       var ps2 = AI_PRESETS[ac.preset];
-      ac.busy = true; ac.err = ""; renderLayer();
+      ac.busy = true; ac.err = ""; ac.probe = null; renderLayer();
       api("POST", aiBase(ac.scope) + "/models", { connId: ac.id, provider: ps2.provider, baseUrl: ac.baseUrl, apiKey: ac.apiKey }).then(function (r) {
-        ac.fetched = r.models || [];
-        if (!ac.fetched.length) ac.err = "모델이 하나도 없습니다. LM Studio·Ollama는 모델을 내려받아 두었는지 확인하세요";
-      }, function (e) { ac.err = e.message; }).then(function () { ac.busy = false; if (layer && layer.ac === ac) renderLayer(); });
+        ac.probe = r;
+        if (r.ok) { ac.fetched = r.models || []; toast("모델 불러오기 성공 · " + ac.fetched.length + "개"); }
+        else toast("모델 불러오기 실패 · " + r.error, "err");
+      }, function (e) {
+        ac.probe = { ok: false, error: e.message, url: "", hint: e.status === 400 ? "입력한 주소를 확인하세요." : "" };
+        toast("모델 불러오기 실패 · " + e.message, "err");
+      }).then(function () { ac.busy = false; if (layer && layer.ac === ac) renderLayer(); });
       return true;
     }
     if (b.dataset.acrm) { acSync(); ac.models = ac.models.filter(function (m) { return m !== b.dataset.acrm; }); renderLayer(); return true; }

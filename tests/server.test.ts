@@ -35,19 +35,19 @@ class Client {
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(os.tmpdir(), "planning-srv-"));
-  const modelLister = async (p: AiProbe) => {
+  const modelProber = async (p: AiProbe) => {
     probes.push(p);
-    return ["m-a", "m-b"];
+    return { ok: true, models: ["m-a", "m-b"], url: `${p.baseUrl}/models`, ms: 1 };
   };
   const aiCaller = async (cfg: AiResolved) => {
     calls.push(cfg);
     return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
   };
   let server;
-  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller, modelLister, version: "v-test", eventsWindowMs: 300 })).server;
+  if (mode === "local") server = (await createLocalApp({ root, secret: "test-secret", aiCaller, modelProber, version: "v-test", eventsWindowMs: 300 })).server;
   else {
     const kv = await FileKv.open(storeFile());
-    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller, modelLister, version: "v-test", eventsWindowMs: 300 });
+    const app = await createApp({ kv, repo: new KvRepo(kv), secret: "test-secret-serverless", aiCaller, modelProber, version: "v-test", eventsWindowMs: 300 });
     server = createServer((req, res) => void app.handle(req, res));
   }
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -162,7 +162,7 @@ describe("시나리오", () => {
 
     // 모델 목록: 저장된 연결의 키를 다시 쓴다 (운영자만)
     const ml = await owner.req("POST", "/api/projects/PUBINFO/ai/models", { connId: nv.id, provider: "openai-compatible", baseUrl: "https://integrate.api.nvidia.com/v1" });
-    expect(ml.body.models).toEqual(["m-a", "m-b"]);
+    expect(ml.body).toMatchObject({ ok: true, models: ["m-a", "m-b"], url: "https://integrate.api.nvidia.com/v1/models" });
     expect(probes.at(-1)).toMatchObject({ apiKey: "nvapi-SECRET" });
     expect((await editor.req("POST", "/api/projects/PUBINFO/ai/models", { provider: "openai-compatible", baseUrl: "http://x/v1" })).status).toBe(403);
 

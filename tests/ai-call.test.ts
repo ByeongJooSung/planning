@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callAi, listModels, parseJson } from "../src/server/ai.js";
+import { callAi, listModels, parseJson, probeModels } from "../src/server/ai.js";
 
 /** NVIDIA·LM Studio 처럼 동작하는 OpenAI 호환 서버 */
 let base = "";
@@ -16,6 +16,15 @@ beforeAll(async () => {
       const body = b ? JSON.parse(b) : undefined;
       seen.push({ auth: req.headers.authorization, body });
       if (req.url === "/v1/models") return res.end(JSON.stringify({ object: "list", data: [{ id: "qwen/qwen2.5" }, { id: "meta/llama-3.1-70b-instruct" }] }));
+      if (req.url === "/html/models") {
+        res.setHeader("content-type", "text/html");
+        return res.end("<!doctype html><html><body>ngrok warning</body></html>");
+      }
+      if (req.url === "/empty/v1/models") return res.end(JSON.stringify({ data: [] }));
+      if (req.url === "/auth/v1/models") {
+        res.statusCode = 401;
+        return res.end(JSON.stringify({ error: { message: "Unauthorized" } }));
+      }
       if (req.url === "/v1/chat/completions") {
         if (body.max_tokens > 4096) {
           res.statusCode = 400;
@@ -48,7 +57,27 @@ describe("OpenAI 호환 호출", () => {
     expect(seen.at(-1)!.body.max_tokens).toBe(2048);
   });
   it("연결 안 되는 주소", async () => {
-    await expect(listModels({ provider: "openai-compatible", baseUrl: "http://127.0.0.1:1/v1" })).rejects.toThrow(/연결하지 못했습니다/);
+    await expect(listModels({ provider: "openai-compatible", baseUrl: "http://127.0.0.1:59999/v1" })).rejects.toThrow(/연결을 거부/);
+  });
+  it("모델 불러오기 결과: 성공·실패 원인과 해결 방법", async () => {
+    const ok = await probeModels({ provider: "openai-compatible", baseUrl: base }, {});
+    expect(ok).toMatchObject({ ok: true, url: `${base}/models`, status: 200 });
+    expect(ok.models).toHaveLength(2);
+    const root = base.replace(/\/v1$/, "");
+    const no404 = await probeModels({ provider: "openai-compatible", baseUrl: root }, {});
+    expect(no404).toMatchObject({ ok: false, status: 404 });
+    expect(no404.hint).toMatch(/\/v1/);
+    expect(await probeModels({ provider: "openai-compatible", baseUrl: `${root}/html` }, {})).toMatchObject({ ok: false, error: expect.stringMatching(/HTML/) });
+    expect(await probeModels({ provider: "openai-compatible", baseUrl: `${root}/empty/v1` }, {})).toMatchObject({ ok: false, error: expect.stringMatching(/0개/) });
+    expect(await probeModels({ provider: "openai-compatible", baseUrl: `${root}/auth/v1` }, {})).toMatchObject({ ok: false, status: 401, error: expect.stringMatching(/키/) });
+    const refused = await probeModels({ provider: "openai-compatible", baseUrl: "http://127.0.0.1:59999/v1" }, {});
+    expect(refused).toMatchObject({ ok: false, code: "ECONNREFUSED" });
+    expect(refused.hint).toMatch(/Start Server/);
+    // 인터넷 배포(Vercel)에서는 localhost 를 부르기 전에 막고 터널 방법을 알려 준다
+    const onVercel = await probeModels({ provider: "openai-compatible", baseUrl: "http://localhost:1234/v1" }, { VERCEL: "1" });
+    expect(onVercel).toMatchObject({ ok: false, code: "PRIVATE_ADDRESS" });
+    expect(onVercel.hint).toMatch(/cloudflared/);
+    expect(await probeModels({ provider: "openai-compatible", baseUrl: "not a url" }, {})).toMatchObject({ ok: false, error: expect.stringMatching(/URL/) });
   });
   it("parseJson", () => {
     expect(parseJson('설명\n{"a":1}\n끝')).toEqual({ a: 1 });

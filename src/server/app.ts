@@ -20,7 +20,7 @@ import { SYSTEM_PRESETS } from "../project/presets.js";
 import { ASSET_DIR, renderViewer } from "../render/viewer/index.js";
 import { deriveProject, execute, type Command, type ProjectState } from "../service/core.js";
 import { Accounts, atLeast, HttpError, ROLES, type AiResolved, type Role, type User } from "./accounts.js";
-import { callAi, DEFAULT_ANTHROPIC_MODEL, listModels, type AiInputMessages } from "./ai.js";
+import { callAi, DEFAULT_ANTHROPIC_MODEL, probeModels, type AiInputMessages } from "./ai.js";
 import { newToken } from "./crypto.js";
 import { FileKv, type Kv } from "./kv.js";
 import { FsRepo, type ProjectRepo } from "./repo.js";
@@ -49,7 +49,7 @@ export interface AppOptions {
   /** 테스트용 AI 호출 대체 */
   aiCaller?: typeof callAi;
   /** 테스트용 모델 목록 대체 */
-  modelLister?: typeof listModels;
+  modelProber?: typeof probeModels;
   now?: () => Date;
 }
 
@@ -72,7 +72,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   const { kv, repo } = opts;
   const acc = new Accounts(kv, { secret: opts.secret, serverAi: opts.serverAi, now: opts.now, admins: opts.admins });
   const ai = opts.aiCaller ?? callAi;
-  const models = opts.modelLister ?? listModels;
+  const models = opts.modelProber ?? probeModels;
   const maxUploadMb = opts.maxUploadMb ?? 22;
   const bodyLimit = Math.ceil(maxUploadMb * 1.4 + 2) * 1024 * 1024; // base64 부풀림 + 여유
   // 배포 버전: Vercel은 커밋, 그 밖에는 PLANNING_VERSION 또는 화면(HTML·JS·CSS) 내용 해시
@@ -205,7 +205,8 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("PUT", "/api/me/ai/conns", async (c) => (await acc.saveConn("personal", c.user!.id, c.body ?? {}, c.user!.id), mine(c)));
   on("DELETE", "/api/me/ai/conns/:id", async (c, p) => (await acc.deleteConn("personal", c.user!.id, p.id!), mine(c)));
   on("PUT", "/api/me/ai/active", async (c) => (await acc.setActive("personal", c.user!.id, c.body ?? {}), mine(c)));
-  on("POST", "/api/me/ai/models", async (c) => ({ models: await models(await acc.probeFor("personal", c.user!.id, c.body ?? {})) }));
+  // 모델 불러오기: 실패해도 200 으로 원인(error·hint·url·status)을 돌려준다
+  on("POST", "/api/me/ai/models", async (c) => models(await acc.probeFor("personal", c.user!.id, c.body ?? {})));
   on("POST", "/api/me/ai/test", async (c) => testAi(c, null));
 
   // 서비스 관리자 — 회원 목록·정리
@@ -411,7 +412,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("PUT", "/api/projects/:code/ai/conns", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.saveConn("project", p.code!, c.body ?? {}, c.user!.id), projAi(p.code!)));
   on("DELETE", "/api/projects/:code/ai/conns/:id", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.deleteConn("project", p.code!, p.id!), projAi(p.code!)));
   on("PUT", "/api/projects/:code/ai/active", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.setActive("project", p.code!, c.body ?? {}), projAi(p.code!)));
-  on("POST", "/api/projects/:code/ai/models", async (c, p) => (await need(c, p.code!, "OWNER"), { models: await models(await acc.probeFor("project", p.code!, c.body ?? {})) }));
+  on("POST", "/api/projects/:code/ai/models", async (c, p) => (await need(c, p.code!, "OWNER"), models(await acc.probeFor("project", p.code!, c.body ?? {}))));
   on("POST", "/api/projects/:code/ai/test", async (c, p) => (await need(c, p.code!, "EDITOR"), testAi(c, p.code!)));
 
   /** 연결 확인 — body 에 {scope, conn, model} 이 있으면 그 조합을, 없으면 지금 쓰는 설정을 부른다 */

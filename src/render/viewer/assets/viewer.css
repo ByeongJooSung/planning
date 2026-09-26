@@ -740,3 +740,12 @@ body.auth-on .side { display: none; }
 #update-bar .btn-primary { background: #f2b441; color: #16202c; }
 #update-bar.mini { width: auto; padding: 0; background: none; box-shadow: none; left: auto; right: 16px; top: auto; bottom: 16px; transform: none; }
 #update-bar.mini button { border: 0; border-radius: 999px; padding: 8px 14px; background: #f2b441; color: #16202c; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.ac-probe { display: flex; flex-direction: column; gap: 4px; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; border: 1px solid; }
+.ac-probe b { font-size: 13px; }
+.ac-probe .mono { font-size: 11.5px; word-break: break-all; opacity: .85; }
+.ac-probe .detail { opacity: .7; }
+.ac-probe .fix em { font-style: normal; font-weight: 700; margin-right: 4px; }
+.ac-probe.ok { background: var(--st-done-bg); border-color: var(--st-done); color: var(--st-done); }
+.ac-probe.fail { background: var(--crit-bg); border-color: var(--crit); color: var(--crit); }
+.ac-probe.fail .fix, .ac-probe.fail span:last-child { color: var(--ink); }
+.ac-probe.busy { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink-2); }
