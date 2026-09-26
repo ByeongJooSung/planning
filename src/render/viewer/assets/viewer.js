@@ -1226,6 +1226,28 @@
         "\n  댓글: " + x.comment + (vars ? "\n  이 컴포넌트에서 바꿀 수 있는 변수: " + vars : "");
     }).join("\n");
   }
+  /** 생성·적용 중 오른쪽 영역 — 진행 막대와 결과 모양 스켈레톤, 경과 시간 */
+  function genSkeleton(g) {
+    var applying = !layer.ctl, ai = P().ai;
+    var line = function (w) { return '<span class="sk-line" style="width:' + w + '%"></span>'; };
+    var body = g.kind === "ds" || g.kind === "sb" ?
+      '<div class="sk-card">' + line(38) + line(92) + line(76) + "</div>" + '<div class="sk-grid"><span class="sk-thumb"></span><span class="sk-thumb"></span><span class="sk-thumb"></span><span class="sk-thumb"></span></div>' :
+      g.kind === "flow" ? '<div class="sk-flow"><span></span><i></i><span></span><i></i><span></span><i></i><span></span></div>' + '<div class="sk-card">' + line(60) + line(45) + "</div>" :
+      '<div class="sk-card">' + line(30) + '<div class="sk-tree">' + [70, 55, 62, 48, 66, 52].map(function (w, i) { return '<span class="sk-line" style="width:' + w + "%;margin-left:" + (i % 3) * 24 + 'px"></span>'; }).join("") + "</div></div>";
+    return '<div class="gen-skel" role="status" aria-live="polite"><div class="sk-bar" aria-hidden="true"><span></span></div>' +
+      '<div class="sk-head"><b>' + (applying ? "저장소에 적용하는 중…" : "AI가 만드는 중…") + '</b><span class="hint"><span id="gen-elapsed">' + Math.round((Date.now() - (layer.t0 || Date.now())) / 1000) + "</span>초 · " + (applying ? "잠시만 기다려 주세요" : esc(ai ? effLabel(ai) : "AI") + " · 보통 10~60초, 요청이 몰리면 자동으로 다시 시도합니다") + "</span></div>" +
+      '<div class="sk-body" aria-hidden="true">' + body + "</div></div>";
+  }
+  var elapsedTimer = null;
+  function startElapsed() {
+    layer.t0 = Date.now();
+    clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(function () {
+      var el = document.getElementById("gen-elapsed");
+      if (!layer || !layer.busy) { clearInterval(elapsedTimer); return; }
+      if (el) el.textContent = Math.round((Date.now() - layer.t0) / 1000);
+    }, 1000);
+  }
   function genRun(instruction) {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
     var base = layer.sel != null && !layer.fresh ? doc.versions[layer.sel] : null;
@@ -1239,6 +1261,7 @@
     var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: DATA.refine + instruction }] : first;
     layer.ctl = new AbortController();
     layer.busy = true; layer.err = ""; layer.stream = 0;
+    startElapsed();
     renderLayer();
     AI.sample.json(input, { signal: layer.ctl.signal, cache: false, onText: function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; } })
       .then(function (out) {
@@ -1254,7 +1277,7 @@
       }, function (e) {
         layer.err = e && e.code === "cancelled" ? "" : e && e.code === "server" ? e.message : (SAMPLE_ERR[e && e.code] || "생성하지 못했습니다(" + (e && e.code) + "). 다시 눌러 주세요.");
       })
-      .then(function () { layer.busy = false; layer.ctl = null; if (layer) { render(); renderLayer(); } });
+      .then(function () { if (!layer) return; layer.busy = false; layer.ctl = null; render(); renderLayer(); });
   }
   /** 서비스 모드: 생성 결과를 서버 모델에 바로 반영한다. 디자인은 적용 전 디자인을 기록해 되돌릴 수 있다 */
   function genApplySrv(apply) {
@@ -1271,7 +1294,7 @@
       if (!last) return;
       run = cmd({ op: "design.revert", systemCode: doc.target, design: last.beforeDesign });
     }
-    layer.busy = true; renderLayer();
+    layer.busy = true; layer.ctl = null; startElapsed(); renderLayer();
     run.then(function () {
       if (doc.kind === "ds") {
         var after = selectedDesign(P(), doc.target);
@@ -1402,9 +1425,11 @@
         return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.screen(nd, sb, c2), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + esc(sb.screenId) + "</figcaption></figure>";
       }).join("");
       var cres = Array.isArray(out.comments) ? out.comments : [];
-      var cbox = cres.length ? '<div class="cmt-results"><b>댓글별 반영 결과</b>' + cres.map(function (c) {
-        return '<div class="' + (c.done === false ? "no" : "ok") + '"><span class="mono">' + esc(c.id || "") + "</span>" + (c.done === false ? "✕ 반영 못함 — " + esc(c.reason || "") : "✓ " + esc(c.change || "반영")) + "</div>";
-      }).join("") + "</div>" : "";
+      var cres2 = cres.filter(function (c) { return c && typeof c === "object"; });
+      var cbox = cres2.length ? '<div class="cmt-results"><b>댓글별 반영 결과</b><ul>' + cres2.map(function (c) {
+        var no = c.done === false;
+        return '<li class="' + (no ? "cr-no" : "cr-ok") + '"><span class="cr-id">' + esc(c.id || "") + '</span><span class="cr-mark" aria-hidden="true">' + (no ? "✕" : "✓") + '</span><span class="cr-text"><b>' + (no ? "반영 못함" : "반영") + "</b>" + esc(no ? c.reason || "이유 없음" : c.change || "") + "</span></li>";
+      }).join("") + "</ul></div>" : "";
       return (out.summary ? "<p><b>" + esc(out.summary) + "</b></p>" : "") + cbox + '<ul class="changes">' + ch.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
         '<h4 class="gen-sub">바뀐 디자인으로 다시 그린 화면 <small>이 디자인 시스템을 쓰는 화면 ' + screens.length + "개 중 " + Math.min(4, screens.length) + "개</small></h4>" + '<div class="thumbs">' + shots + "</div>" +
         '<h4 class="gen-sub">템플릿</h4><div class="thumbs">' + ["list", "form", "confirm", "modal"].map(function (t) { return '<figure class="thumb"><div class="thumb-in">' + stage(Wire.template(nd, t, ctx), { w: VW, h: VH, cap: false }) + "</div><figcaption>" + t + "</figcaption></figure>"; }).join("") + "</div>";
@@ -1439,7 +1464,7 @@
       (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 미세조정 프롬프트를 적으세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
-    var right = '<div class="gen-right">' + (sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
+    var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (isApplied ? " 적용됨" : " 미리보기") : "") + '</span><span class="sp"></span>' +
       (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied && !SRV ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
@@ -1469,7 +1494,7 @@
     var pend = l.pending ? '<div class="rv-new"><div class="rv-new-h"><span class="rv-n new">' + nextN + "</span><b>" + nextN + '번 댓글</b><span class="tag mono">' + esc(l.pending.cmp || "빈 곳") + "</span></div>" + (l.pending.snippet ? '<span class="hint">“' + esc(l.pending.snippet) + "”</span>" : "") +
       '<label class="sr" for="rv-in">댓글</label><textarea id="rv-in" rows="3" placeholder="예: 이 표 머리글 배경을 더 진하게, 글자는 흰색으로">' + esc(l.rvDraft || "") + '</textarea><div class="gen-actions"><button class="btn-primary" data-rvsave>댓글 남기기</button><button class="btn-sm" data-rvcancel>취소</button></div></div>' : "";
     var list = mine.map(function (x) {
-      return '<div class="rv-item ' + x.status + '"><span class="rv-n">' + x.n + '</span><div><span class="tag mono">' + esc(x.cmp || "빈 곳") + "</span> " + (x.status === "resolved" ? '<span class="pill DESIGNED">반영됨 r' + esc(x.rev) + "</span>" : '<span class="pill IN_DESIGN">열림</span>') + "<p>" + esc(x.comment) + "</p>" + (x.aiNote ? '<p class="ai-note ' + (x.status === "resolved" ? "ok" : "no") + '">' + (x.status === "resolved" ? "AI: " : "AI 반영 못함: ") + esc(x.aiNote) + "</p>" : "") + "</div>" + (x.status === "open" ? '<button class="btn-sm" data-rvdel="' + esc(x.id) + '" aria-label="' + x.n + '번 댓글 삭제">삭제</button>' : "") + "</div>";
+      return '<div class="rv-item ' + x.status + '"><span class="rv-n">' + x.n + '</span><div><span class="tag mono">' + esc(x.cmp || "빈 곳") + "</span> " + (x.status === "resolved" ? '<span class="pill DESIGNED">반영됨 r' + esc(x.rev) + "</span>" : '<span class="pill IN_DESIGN">열림</span>') + "<p>" + esc(x.comment) + "</p>" + (x.aiNote ? '<p class="ai-note ' + (x.status === "resolved" ? "ai-ok" : "ai-no") + '">' + (x.status === "resolved" ? "AI: " : "AI 반영 못함: ") + esc(x.aiNote) + "</p>" : "") + "</div>" + (x.status === "open" ? '<button class="btn-sm" data-rvdel="' + esc(x.id) + '" aria-label="' + x.n + '번 댓글 삭제">삭제</button>' : "") + "</div>";
     }).join("");
     var body = '<header class="layer-h"><div><span class="eyebrow">디자인 검토 · ' + esc(l.sys) + " · 실제 규격 " + v.w + " × " + (v.h || "가변") + '</span><h2 id="layer-t">' + esc(l.target.label) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="rv-body"><div class="rv-main">' + stage(v.html, { w: v.w, h: v.h, cls: "rv", cap: false }) + '</div><div class="rv-side">' +
