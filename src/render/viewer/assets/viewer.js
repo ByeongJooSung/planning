@@ -51,6 +51,7 @@
     aiset: ["AI 설정", "이 프로젝트에서 AI를 부르는 방법 — 로컬 LLM 또는 외부 API"]
   };
 
+  var ACTIONS_LATE = {};
   var state = { route: { view: "home" }, rtmView: "matrix", off: {}, flowSys: "ALL", dsSys: {}, kbQ: "", proto: {} };
   if (!SRV) try {
     var saved = JSON.parse(localStorage.getItem("planning-viewer-2") || "{}");
@@ -408,7 +409,7 @@
       if (row.crIds.length) sub.push("변경 요청 " + esc(row.crIds.join(", ")));
       return '<article class="box req"><div class="req-head"><span class="req-id">' + esc(row.requirementId) + '</span><span class="req-title">' + esc(row.title) + "</span>" + pill(row.status) + "</div>" +
         '<div class="req-sub">' + sub.map(function (s) { return "<span>" + s + "</span>"; }).join("") + "</div>" +
-        (req.description ? '<p class="req-desc">' + esc(req.description) + "</p>" : "") +
+        (req.description ? '<p class="req-desc">' + esc(req.description) + "</p>" : "") + specLine(p, row.requirementId) +
         (row.status === "EXCLUDED" ? '<div class="hint">제외 사유: ' + esc(row.excludeReason) + "</div>" :
           steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다.' + (SRV ? "" : copyBox("planning -p " + m.project.code + " task auto " + row.requirementId)) + "</div>") +
         (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + '<span class="sp"></span>' + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
@@ -520,12 +521,110 @@
       var left = wire ? sbCanvas(p, sb) :
         '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
       var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
-        return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
-      }).join("") + "</tbody></table>";
+        var rowTools = SRV && canEdit() ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
+        return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
+      }).join("") + "</tbody></table>" + (SRV && canEdit() ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
       var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
       return '<article class="box sheet">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
     }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다. 공공기관 제출 양식으로 내보내면 장표 단위로 나뉘고, 한 장을 넘으면 같은 화면 ID로 “다음 페이지에 계속”이 붙습니다(S4 출력 기능).</p>';
   }
+
+  // ── 기능 명세 보기·편집 (요구사항·추적표) ──
+  function specOf(p, reqId) { return (p.specs && p.specs[reqId]) || { id: reqId, title: "", draft: "", from: [] }; }
+  function specBtn(p, reqId) {
+    var sp = specOf(p, reqId), has = sp.saved != null, dr = !!sp.draft;
+    return '<button class="btn-sm spec-b' + (has ? " on" : "") + '" data-act="spec-edit" data-arg="' + esc(reqId) + '">명세 ' + (has ? "✓" : dr ? "초안" : "없음") + "</button>";
+  }
+  function specLine(p, reqId) {
+    var sp = specOf(p, reqId), text = sp.saved != null ? sp.saved : sp.draft;
+    return '<div class="spec-line">' + specBtn(p, reqId) + (text ? '<span class="hint">' + esc(text.replace(/\s+/g, " ").slice(0, 140)) + (text.length > 140 ? "…" : "") + "</span>" : '<span class="hint">기능 명세 없음 — 참조자료에 기능명세서를 올리거나 직접 적으세요</span>') + "</div>";
+  }
+  ACTIONS_LATE["spec-edit"] = function (reqId) {
+    var p = P(), sp = specOf(p, reqId), req = p.model.requirements.find(function (r) { return r.id === reqId; }) || {};
+    var from = sp.from && sp.from.length ? "참조자료 초안 출처: " + sp.from.map(esc).join(" · ") : "참조자료에서 요구사항 ID(" + esc(sp.originalId || reqId) + ")로 찾은 항목이 없습니다.";
+    openForm({
+      eyebrow: reqId + " " + (req.title || ""), title: "기능 명세", submit: canEdit() ? "저장" : null,
+      intro: "화면설계서·프로세스 플로우를 AI로 만들 때 프롬프트에 그대로 실립니다. 저장하면 이 요구사항과 연결된 완료 산출물은 ‘재검토 필요’가 됩니다.",
+      fields: [
+        { name: "spec", label: "기능 명세", type: "textarea", rows: 14, value: sp.saved != null ? sp.saved : sp.draft, placeholder: "예: 입력 항목과 필수 여부, 검증 규칙, 처리 조건·상태 변화, 예외, 안내 메시지" },
+        { type: "html", html: '<div class="fm-tools"><span class="hint">' + from + "</span>" + (sp.draft && canEdit() ? '<button type="button" class="btn-sm" data-specdraft>참조자료 초안 넣기</button>' : "") + (sp.saved != null && canEdit() ? '<button type="button" class="btn-sm" data-specclear>저장본 지우기 (초안 사용)</button>' : "") + "</div>" }
+      ],
+      onSubmit: function (v) { if (!canEdit()) return; return cmd({ op: "req.spec", id: reqId, spec: layer.clear ? "" : v.spec }); }
+    });
+    layer.specDraft = sp.draft;
+  };
+
+  // ── 화면설계서 항목 편집 ──
+  function sbCompForm(sid, c) {
+    var p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === sid; });
+    var ds = selectedDesign(p, sb.systemCode), v = c.validation || {}, o = c.options || {};
+    var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name]; }) : [];
+    var screens = p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU" && n.systemCode === sb.systemCode; }).map(function (n) { return [n.id, n.id + " " + n.name]; });
+    openForm({
+      eyebrow: sid + (c.no ? " · " + c.no + "번" : ""), title: c.no ? c.no + ". " + c.label + " 편집" : "항목 추가", submit: "저장",
+      fields: [
+        { name: "label", label: "항목명", required: true, value: c.label },
+        { name: "component", label: "와이어프레임 컴포넌트", type: "select", options: [["", "(없음 — 글로만)"]].concat(comps), value: c.ui ? c.ui.component : "" },
+        { name: "planner", label: "기획자 관점 (정책·조건·규칙·예외)", type: "textarea", rows: 3, value: c.planner },
+        { name: "customer", label: "고객 관점 (보이는 것·할 수 있는 것·안내 문구)", type: "textarea", rows: 3, value: c.customer },
+        { name: "values", label: "선택지 (쉼표로 구분)", value: (o.values || []).join(", "), placeholder: "예: 전체공개, 부분공개" },
+        { name: "default", label: "기본 선택", value: o.default || "" },
+        { name: "required", label: "필수 입력", type: "checkbox", value: !!v.required },
+        { name: "minLength", label: "최소 글자수", type: "number", value: v.minLength != null ? String(v.minLength) : "" },
+        { name: "maxLength", label: "최대 글자수", type: "number", value: v.maxLength != null ? String(v.maxLength) : "" },
+        { name: "format", label: "형식", value: v.format || "", placeholder: "예: 이메일, YYYY-MM-DD" },
+        { name: "timing", label: "검증 시점", type: "select", options: [["", "(없음)"], ["ON_SUBMIT", "제출할 때"], ["ON_BLUR", "칸을 벗어날 때"], ["ON_INPUT", "입력 중"], ["ON_BLUR,ON_SUBMIT", "칸을 벗어날 때 + 제출할 때"]], value: (v.timing || []).join(",") },
+        { name: "messages", label: "안내 문구 (한 줄에 하나, ‘조건 → 문구’)", type: "textarea", rows: 3, value: (v.messages || []).map(function (m) { return m.condition + " → " + m.text; }).join("\n"), placeholder: "미입력 → 제목을 입력해 주세요." },
+        { name: "link", label: "누르면 이동할 화면", type: "select", options: [["", "(없음)"]].concat(screens), value: c.ui && c.ui.link || "" }
+      ],
+      onSubmit: function (f) {
+        var input = { no: c.no, label: f.label, kind: f.component || c.kind || "text", planner: f.planner, customer: f.customer };
+        var vals = f.values.split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+        if (vals.length) input.options = { values: vals, default: f.default || undefined, note: o.note };
+        var val = { required: f.required, timing: f.timing ? f.timing.split(",") : [], messages: f.messages.split("\n").map(function (l) { var m = l.split(/\s*(?:→|->)\s*/); return l.trim() ? { condition: m.length > 1 ? m[0].trim() : "", text: (m.length > 1 ? m.slice(1).join(" → ") : l).trim() } : null; }).filter(Boolean) };
+        if (f.minLength) val.minLength = Number(f.minLength);
+        if (f.maxLength) val.maxLength = Number(f.maxLength);
+        if (f.format) val.format = f.format;
+        if (val.required || val.minLength != null || val.maxLength != null || val.format || val.timing.length || val.messages.length) input.validation = val;
+        if (f.component) input.ui = { component: f.component, props: c.ui && c.ui.component === f.component ? c.ui.props : {}, link: f.link || undefined };
+        if (c.marker) input.marker = c.marker;
+        return cmd({ op: "sb.component", screenId: sid, no: c.no, input: input });
+      }
+    });
+  }
+  ACTIONS_LATE["sb-edit"] = function (arg) {
+    var a = arg.split("|"), p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === a[0]; });
+    var c = sb && sb.components.find(function (x) { return x.no === Number(a[1]); });
+    if (c) sbCompForm(a[0], c);
+  };
+  ACTIONS_LATE["sb-add"] = function (sid) { sbCompForm(sid, { label: "", planner: "", customer: "" }); };
+  ACTIONS_LATE["sb-rm"] = function (arg) {
+    var a = arg.split("|");
+    confirmAct("항목 삭제", a[0] + " " + a[1] + "번 항목을 삭제할까요? 뒤 번호가 앞으로 당겨집니다.", "삭제", function () { return cmd({ op: "sb.component", screenId: a[0], no: Number(a[1]), remove: true }); });
+  };
+  /** 설명만 AI로 다시 쓰기 — 항목 하나 또는 화면 전체 */
+  ACTIONS_LATE["sb-desc"] = function (arg, btn) {
+    var a = arg.split("|"), sid = a[0], only = a[1] ? Number(a[1]) : null, p = P();
+    var g = p.gens["desc:" + sid], sb = p.model.storyboard.screens.find(function (x) { return x.screenId === sid; });
+    if (!g || !sb) { toast("이 화면의 설명 작성 프롬프트가 없습니다", "err"); return; }
+    if (!AI.sample || (SRV && !p.ai)) { toast("AI 설정이 없습니다. AI 설정에서 연결을 등록하세요", "err"); return; }
+    var targets = sb.components.filter(function (c) { return only == null || c.no === only; });
+    var lines = targets.map(function (c) { return "- no " + c.no + " · " + c.label + " · " + (c.ui ? c.ui.component : c.kind) + (c.options ? " · 선택지: " + c.options.values.join("/") : "") + "\n  현재 기획: " + (c.planner || "(없음)") + "\n  현재 고객: " + (c.customer || "(없음)"); }).join("\n");
+    var prompt = fillSpecs(g.prompt, g).replace(DATA.descSlot || "{{COMPONENTS}}", function () { return lines; });
+    var old = btn.textContent;
+    btn.disabled = true; btn.textContent = "작성 중…";
+    document.querySelectorAll('[data-act="sb-desc"]').forEach(function (b) { b.disabled = true; });
+    AI.sample.json(prompt, { cache: false }).then(function (out) {
+      var comps = out && Array.isArray(out.components) ? out.components : Array.isArray(out) ? out : null;
+      if (!comps) throw new Error("AI 결과에 components 목록이 없습니다");
+      if (only != null) comps = comps.filter(function (c) { return Number(c.no) === only; });
+      return cmd({ op: "sb.desc", screenId: sid, components: comps });
+    }).catch(function (e) {
+      toast(e.message || String(e), "err");
+      btn.disabled = false; btn.textContent = old;
+      document.querySelectorAll('[data-act="sb-desc"]').forEach(function (b) { b.disabled = false; });
+    });
+  };
 
   // ── 화면설계서 캔버스: 화면 원본(1920) 위에 설명 번호를 올리고, 번호는 끌어서 옮긴다 ──
   var CV_PAD = 44, MK = 24;
@@ -1010,7 +1109,7 @@
         var scr = c.screens.length ? '<span class="s">' + c.screens.map(esc).join("<br>") + "</span>" : '<span class="s' + (c.screenless ? "" : " none") + '">' + (c.screenless ? "화면 없음" : "화면 미연결") + "</span>";
         return '<td><div class="cell"><span class="t">' + c.taskIds.map(function (t) { return '<button class="lnk" data-task="' + esc(t) + '">' + esc(shortTask(t, r.requirementId)) + "</button>"; }).join(", ") + "</span>" + scr + "<span>" + pill(c.status) + "</span></div></td>";
       }).join("");
-      return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + '><td class="req-cell"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "</td>" + cells + "<td>" + pill(r.status) + "</td></tr>";
+      return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + '><td class="req-cell"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "<br>" + specBtn(p, r.requirementId) + "</td>" + cells + "<td>" + pill(r.status) + "</td></tr>";
     }).join("");
     return "<table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>";
   }
@@ -1020,7 +1119,7 @@
     function list(xs) { return xs.length ? '<div class="ids">' + xs.map(esc).join("<br>") + "</div>" : '<span class="dash">—</span>'; }
     var rows = p.rtm.rows.map(function (r) {
       var tasks = r.tasks.filter(function (t) { return sysOn(t.systemCode); });
-      var reqCell = '<td class="req-cell" rowspan="' + Math.max(tasks.length, 1) + '"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "<br>" + pill(r.status) + "</td>";
+      var reqCell = '<td class="req-cell" rowspan="' + Math.max(tasks.length, 1) + '"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "<br>" + pill(r.status) + "<br>" + specBtn(p, r.requirementId) + "</td>";
       if (!tasks.length) {
         var msg = r.tasks.length ? "필터로 숨김" : r.status === "EXCLUDED" ? "제외: " + esc(r.excludeReason) : "Task 미분해";
         return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + ">" + reqCell + '<td colspan="10" class="hint">' + msg + "</td></tr>";
@@ -2858,6 +2957,8 @@
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
       if (layer.kind === "review" && reviewClick(target, ev)) return;
       if (lb && layer.kind === "form" && lb.dataset.copy != null) { copyText(lb.dataset.copy, lb, "복사함"); return; }
+      if (lb && layer.kind === "form" && lb.hasAttribute("data-specdraft")) { var sta = document.getElementById("f-spec"); if (sta) { sta.value = layer.specDraft || ""; sta.focus(); } return; }
+      if (lb && layer.kind === "form" && lb.hasAttribute("data-specclear")) { layer.clear = true; submitForm(document.getElementById("fm")); return; }
       if (lb && lb.hasAttribute("data-gotologs")) { closeLayer(); aiLogs = null; go({ view: "project", p: state.route.p, page: "aiset" }); return; }
       if (lb && layer.kind === "aiconn" && connClick(lb)) return;
       if (lb && lb.dataset.cmtgen != null) { commentGen(lb.dataset.cmtgen); return; }
@@ -2913,7 +3014,7 @@
       return;
     }
     var acb = target.closest && target.closest("[data-act]");
-    if (acb && ACTIONS[acb.dataset.act]) { ACTIONS[acb.dataset.act](acb.dataset.arg, acb); return; }
+    if (acb && (ACTIONS[acb.dataset.act] || ACTIONS_LATE[acb.dataset.act])) { (ACTIONS[acb.dataset.act] || ACTIONS_LATE[acb.dataset.act])(acb.dataset.arg, acb); return; }
     var pvb = target.closest && target.closest("[data-preview]");
     if (pvb) { openLayer({ kind: "preview", index: Number(pvb.dataset.preview) }); return; }
     var rvb = target.closest && target.closest("[data-review]");

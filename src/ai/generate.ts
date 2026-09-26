@@ -57,6 +57,7 @@ export function buildGenPrompts(m: Model, chunks: Chunk[], opts: PromptOptions =
   const out: Record<string, GenPrompt> = {};
   for (const s of m.systems.filter((x) => x.hasScreens)) out[`ia:${s.code}`] = iaGen(c, s.code);
   for (const n of m.ia.nodes.filter((x) => x.kind !== "MENU")) out[`sb:${n.id}`] = sbGen(c, n.id);
+  for (const sb of m.storyboard.screens) if (c.node(sb.screenId)) out[`desc:${sb.screenId}`] = descGen(c, sb.screenId);
   for (const r of c.rtm.rows) if (r.status !== "EXCLUDED" && r.tasks.length) out[`flow:${r.requirementId}`] = flowGen(c, r.requirementId);
   for (const d of m.design.systems) if (d.status === "SELECTED") out[`ds:${d.systemCode}`] = dsGen(c, d.systemCode);
   return out;
@@ -154,6 +155,46 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
     ),
   ]);
   return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 화면설계서`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, reqs.map((r) => r.id)) };
+}
+
+/** 설명(디스크립션)만 다시 쓰기 — 항목·와이어프레임은 그대로 두고 planner·customer·options·validation을 채운다. 대상 항목은 요청할 때 채운다 */
+export const DESC_SLOT = "{{COMPONENTS}}";
+function descGen(c: Ctx, screenId: string): GenPrompt {
+  const node = c.node(screenId)!;
+  const s = c.system(node.systemCode);
+  const tasks = c.tasksOfScreen(screenId);
+  const reqs = [...new Set(tasks.map(({ r }) => r.requirementId))].map((id) => c.m.requirements.find((r) => r.id === id)!);
+  const states = c.m.policies.stateSets.map((x) => `- ${x.name}(${x.id}): ${x.values.join(" → ")}`).join("\n");
+  const ev = c.evidence(`${node.name} ${tasks.map(({ t }) => t.action).join(" ")} ${reqs.map((r) => r.title).join(" ")}`, 5);
+  const prompt = finish([
+    head(`${screenId} ${node.name} 화면설계서 설명 작성`, "아래 화면 항목들의 설명(디스크립션)을 써 주세요. 항목 구성·번호·라벨·컴포넌트는 바꾸지 않고, 설명·옵션·유효성만 채웁니다."),
+    section(
+      "대상",
+      [
+        projectLine(c),
+        `- 시스템: ${node.systemCode} ${s?.name ?? ""} (주 사용자: ${s?.users.join(", ") || "-"})`,
+        `- 화면: ${screenId} ${node.name} · ${KIND[node.kind]} · Location: ${c.path(screenId).join(" > ")}`,
+        ...tasks.map(({ r, t }) => `- Task: ${t.taskId} [${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action} (${r.requirementId} ${r.title})`),
+      ].join("\n"),
+    ),
+    section("요구사항 원문", reqs.map((r) => `- ${r.id} ${r.title}: ${r.description || "(설명 없음)"}`).join("\n")),
+    section("기능 명세 (작업자 확인)", SPEC_SLOT),
+    section("공통 상태값", states),
+    section("참조자료 근거", ev.text),
+    section("설명을 쓸 항목 (no·label·kind·현재 설명)", DESC_SLOT),
+    section(
+      "작성 규칙",
+      [
+        "- planner(기획자 관점): 정책·노출 조건·규칙·예외·상태 변화. customer(고객 관점): 보이는 것·할 수 있는 것·안내 문구. 개발자 관점(API, DB, 구현)은 쓰지 않는다",
+        "- 기능 명세와 요구사항 원문에 있는 규칙·조건·메시지를 해당 항목에 빠짐없이 넣는다. 근거 없는 수치·문구는 지어내지 말고 planner에 ‘확인 필요’로 적는다",
+        '- 선택 요소는 options {"values":[…],"default":"…"}, 입력 요소는 validation {required, minLength, maxLength, format, timing[ON_INPUT|ON_BLUR|ON_SUBMIT], messages[{condition,text}]}. 해당 없으면 넣지 않는다',
+        "- 현재 설명이 있으면 더 정확하고 구체적으로 다듬는다. 각 설명은 1~3문장",
+        "- 요청한 항목 번호(no)만, 빠짐없이 답한다",
+      ].join("\n"),
+    ),
+    section("출력 형식", '{"components":[{"no":1,"planner":"…","customer":"…","options":{"values":["전체공개","부분공개"],"default":"전체공개"},"validation":{"required":true,"maxLength":100,"timing":["ON_SUBMIT"],"messages":[{"condition":"미입력","text":"제목을 입력해 주세요."}]}}]}'),
+  ]);
+  return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 설명 AI 작성`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, reqs.map((r) => r.id)) };
 }
 
 function flowGen(c: Ctx, requirementId: string): GenPrompt {

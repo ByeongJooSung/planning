@@ -7,6 +7,9 @@
  *  deriveProject(state)    → 화면에 필요한 RTM·Diff·프롬프트 (ViewerProject)
  */
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
+import { specItems, type SpecItem } from "../ai/spec.js";
+import { ComponentSpec } from "../model/schema.js";
+import { normalizeStoryboardOutput } from "../ai/apply.js";
 import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
@@ -60,6 +63,8 @@ export interface ViewerProject {
   prompts: Record<string, PromptSet>;
   gens: Record<string, GenPrompt>;
   work: WorkBoard;
+  /** 요구사항별 기능 명세 (저장본·참조자료 초안) — 추적표·요구사항 화면에서 보고 편집 */
+  specs: Record<string, SpecItem>;
 }
 
 export type Command =
@@ -72,6 +77,10 @@ export type Command =
   | { op: "work.set"; key: string; status: string; note?: string; by?: string }
   /** 화면설계서 설명 번호 위치 (null이면 기본 위치로) */
   | { op: "sb.marker"; screenId: string; no: number; pos: { x: number; y: number } | null }
+  /** 화면설계서 항목 직접 편집 — no가 있으면 교체, 없으면 끝에 추가. remove면 삭제 후 번호 재정렬 */
+  | { op: "sb.component"; screenId: string; no?: number; input?: unknown; remove?: boolean }
+  /** 설명(planner·customer·options·validation)만 AI 결과로 갱신 — 항목·와이어프레임은 그대로 */
+  | { op: "sb.desc"; screenId: string; components: unknown }
   /** 기능 명세 저장 (빈 문자열이면 지워 참조자료 초안으로 돌아간다) */
   | { op: "req.spec"; id: string; spec: string }
   | { op: "task.add"; requirementId: string; input: AddTaskInput }
@@ -182,6 +191,47 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       }
       message = `${cmd.key.replace(/^(\w+):/, (_, k: string) => `${WORK_KIND[k] ?? k} `)} → ${WORK_LABEL[st]}`;
       detail = workOf(m, cmd.key);
+      break;
+    }
+    case "sb.component": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      if (cmd.remove) {
+        const i = sb.components.findIndex((x) => x.no === cmd.no);
+        if (i < 0) throw new Error(`${cmd.no}번 항목이 없습니다`);
+        sb.components.splice(i, 1);
+        sb.components.forEach((x, k) => (x.no = k + 1));
+        message = `${cmd.screenId} ${cmd.no}번 항목을 삭제했습니다 (번호 재정렬)`;
+      } else {
+        const norm = normalizeStoryboardOutput({ components: [cmd.input] }) as { components: unknown[] };
+        const c = ComponentSpec.parse({ ...(norm.components[0] as object), no: cmd.no ?? sb.components.length + 1 });
+        const i = sb.components.findIndex((x) => x.no === c.no);
+        if (i >= 0) {
+          const was = sb.components[i]!;
+          if (was.marker && !c.marker) c.marker = was.marker;
+          sb.components[i] = c;
+        } else sb.components.push(c);
+        message = `${cmd.screenId} ${c.no}번 ${c.label}을(를) ${i >= 0 ? "수정" : "추가"}했습니다`;
+      }
+      touchStoryboard(m, sb.screenId, now);
+      break;
+    }
+    case "sb.desc": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      const norm = normalizeStoryboardOutput({ components: cmd.components }) as { components: { no: number; planner: string; customer: string; options?: unknown; validation?: unknown }[] };
+      let n = 0;
+      for (const d of norm.components) {
+        const c = sb.components.find((x) => x.no === d.no);
+        if (!c) continue;
+        const next = ComponentSpec.parse({ ...c, planner: d.planner || c.planner, customer: d.customer || c.customer, ...(d.options ? { options: d.options } : {}), ...(d.validation ? { validation: d.validation } : {}) });
+        Object.assign(c, next);
+        n++;
+      }
+      if (!n) throw new Error("AI 결과에 이 화면의 항목 번호와 맞는 설명이 없습니다");
+      touchStoryboard(m, sb.screenId, now);
+      message = `${cmd.screenId} 설명 ${n}개를 AI로 다시 썼습니다`;
+      detail = { updated: n };
       break;
     }
     case "sb.marker": {
@@ -331,6 +381,15 @@ function addKnowledge(m: Model, chunks: Chunk[], cmd: Extract<Command, { op: "kb
   return { source, chunks: [...chunks.filter((x) => x.sourceId !== id), ...added], duplicateOf: undefined };
 }
 
+/** 내용을 고쳤으므로 완료였던 화면설계서는 다시 진행중으로 */
+function touchStoryboard(m: Model, screenId: string, now: Date) {
+  const key = `sb:${screenId}`;
+  const w = m.rtmRecords.work[key];
+  if (w?.status === "DONE") m.rtmRecords.work[key] = { status: "IN_PROGRESS", at: now.toISOString(), by: "내용 편집", note: "" };
+  const sb = m.storyboard.screens.find((x) => x.screenId === screenId);
+  if (sb) sb.status = "DRAFT";
+}
+
 /** 화면 데이터 — RTM, 마지막 스냅샷 대비 변경, AI 요청·생성 프롬프트 */
 export function deriveProject(state: ProjectState, now = new Date(), opts: { viewerUrl?: string } = {}): ViewerProject {
   const { model, chunks } = state;
@@ -344,6 +403,7 @@ export function deriveProject(state: ProjectState, now = new Date(), opts: { vie
     prompts: buildPrompts(model, chunks, opts),
     gens: buildGenPrompts(model, chunks, opts),
     work: workBoard(model),
+    specs: Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x])),
   };
 }
 
