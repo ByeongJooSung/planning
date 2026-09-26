@@ -20,7 +20,7 @@ import { SYSTEM_PRESETS } from "../project/presets.js";
 import { ASSET_DIR, renderViewer } from "../render/viewer/index.js";
 import { deriveProject, execute, type Command, type ProjectState } from "../service/core.js";
 import { Accounts, atLeast, HttpError, ROLES, type AiResolved, type Role, type User } from "./accounts.js";
-import { callAi, DEFAULT_ANTHROPIC_MODEL, probeModels, type AiInputMessages } from "./ai.js";
+import { AiParseError, callAi, DEFAULT_ANTHROPIC_MODEL, probeModels, type AiInputMessages } from "./ai.js";
 import { newToken } from "./crypto.js";
 import { FileKv, type Kv } from "./kv.js";
 import { FsRepo, type ProjectRepo } from "./repo.js";
@@ -288,7 +288,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     if (c.body?.confirm !== p.code) throw new HttpError(400, "확인용으로 프로젝트 코드를 정확히 입력하세요");
     await repo.lock(p.code!, () => repo.remove(p.code!));
     await acc.dropProject(p.code!);
-    await kv.del(`${KV_PREFIX.gens}:${p.code}`, `${KV_PREFIX.reviews}:${p.code}`);
+    await kv.del(`${KV_PREFIX.gens}:${p.code}`, `${KV_PREFIX.reviews}:${p.code}`, `ailog:${p.code}`);
     return { ok: true };
   });
   on("POST", "/api/projects/:code/commands", async (c, p) => {
@@ -359,9 +359,35 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     c.res.on("close", () => {
       if (!c.res.writableEnded) ctl.abort();
     });
-    const r = await ai(cfg, c.body?.input as AiInputMessages, { signal: ctl.signal });
-    return { output: r.output, source: cfg.source, model: r.model };
+    const t0 = Date.now();
+    const base = { at: new Date().toISOString(), user: c.user!.name, task: String(c.body?.task ?? "").slice(0, 60), label: cfg.label ?? "", model: cfg.model, source: cfg.source };
+    try {
+      const r = await ai(cfg, c.body?.input as AiInputMessages, { signal: ctl.signal });
+      await logAi(p.code!, { ...base, ok: true, ms: Date.now() - t0, repaired: !!r.repaired, chars: r.text.length });
+      return { output: r.output, source: cfg.source, model: r.model, repaired: !!r.repaired };
+    } catch (e) {
+      const raw = e instanceof AiParseError ? e.raw : "";
+      await logAi(p.code!, { ...base, ok: false, ms: Date.now() - t0, status: e instanceof HttpError ? e.status : 500, error: (e as Error).message.slice(0, 600), reason: e instanceof AiParseError ? e.reason : undefined, chars: raw.length || undefined, raw: clip(raw) });
+      throw e;
+    }
   });
+  on("GET", "/api/projects/:code/ai/logs", async (c, p) => {
+    await need(c, p.code!, "EDITOR");
+    const s = await kv.get(`ailog:${p.code}`);
+    return { logs: s ? JSON.parse(s) : [] };
+  });
+
+  /** AI 호출 기록 — 프로젝트마다 최근 30건. 실패하면 모델이 보낸 원문(앞·뒤 일부)을 남겨 원인을 볼 수 있게 한다 */
+  async function logAi(code: string, entry: Record<string, unknown>) {
+    try {
+      const s = await kv.get(`ailog:${code}`);
+      const logs = s ? (JSON.parse(s) as unknown[]) : [];
+      await kv.set(`ailog:${code}`, JSON.stringify([entry, ...logs].slice(0, 30)), { ttlSec: 30 * 86400 });
+    } catch {
+      /* 기록 실패는 무시 */
+    }
+  }
+  const clip = (t: string) => (t.length <= 6000 ? t : `${t.slice(0, 4000)}\n\n… (${t.length - 6000}자 생략) …\n\n${t.slice(-2000)}`);
 
   // 멤버·초대 (운영자)
   on("GET", "/api/projects/:code/members", async (c, p) => {

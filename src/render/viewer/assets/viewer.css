@@ -791,3 +791,18 @@ html.layer-open .shell { user-select: none; -webkit-user-select: none; }
 .sk-flow i { width: 22px; height: 2px; background: var(--line-strong); }
 @keyframes sk-shine { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .sk-bar span, .sk-line, .sk-thumb, .sk-flow span { animation: none; } .sk-bar span { left: 0; width: 100%; opacity: .5; } }
+
+/* ── AI 호출 기록 ── */
+.ailogs { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.ailog { border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.ailog summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; cursor: pointer; font-size: 12.5px; list-style: none; }
+.ailog summary::-webkit-details-marker { display: none; }
+.ailog .al-mark { font-weight: 700; }
+.ailog.ok .al-mark { color: var(--st-done); }
+.ailog.fail { border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); }
+.ailog.fail .al-mark { color: var(--crit); }
+.ailog .al-model { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.ailog > p, .ailog > .al-raw-h, .ailog > .al-raw { margin: 0 12px 10px; }
+.al-err { color: var(--crit); font-size: 12.5px; }
+.al-raw-h { display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
+.al-raw { max-height: 360px; overflow: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }

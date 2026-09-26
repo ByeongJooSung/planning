@@ -12,11 +12,6 @@ export type AiInputMessages = string | Turn[];
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5";
 const SYSTEM = "당신은 서비스 기획 산출물을 만드는 도우미입니다. 요청한 형식의 JSON만 답합니다. 설명·코드 블록 표시 없이 JSON 하나만 출력하세요.";
 
-export interface AiResult {
-  text: string;
-  output: unknown;
-  model: string;
-}
 
 function toTurns(input: AiInputMessages): Turn[] {
   const turns = typeof input === "string" ? [{ role: "user" as const, content: input }] : input;
@@ -27,11 +22,49 @@ function toTurns(input: AiInputMessages): Turn[] {
   return turns;
 }
 
-export async function callAi(cfg: AiResolved, input: AiInputMessages, opts: { signal?: AbortSignal; json?: boolean } = {}): Promise<AiResult> {
+export interface AiResult {
+  text: string;
+  output: unknown;
+  model: string;
+  /** JSON을 못 읽어 모델에게 다시 요청했는지 */
+  repaired?: boolean;
+}
+
+/** JSON을 끝내 못 읽었을 때 — 원문을 함께 들고 있어 호출 기록에 남긴다 */
+export class AiParseError extends HttpError {
+  constructor(message: string, public raw: string, public reason: string) {
+    super(502, message);
+  }
+}
+
+const REPAIR_PROMPT =
+  "방금 답을 JSON으로 읽지 못했습니다. 생각 과정·설명·코드 블록 표시 없이, 요청한 형식의 JSON 객체 하나만 다시 출력하세요. 문자열 안 따옴표는 \\\" 로 이스케이프하고, 마지막 항목 뒤에 쉼표를 두지 마세요.";
+
+export async function callAi(cfg: AiResolved, input: AiInputMessages, opts: { signal?: AbortSignal; json?: boolean; repair?: boolean } = {}): Promise<AiResult> {
   const turns = toTurns(input);
-  const text = cfg.provider === "anthropic" ? await callAnthropic(cfg, turns, opts.signal) : await callOpenAiCompatible(cfg, turns, opts.signal);
+  const call = (t: Turn[]) => (cfg.provider === "anthropic" ? callAnthropic(cfg, t, opts.signal) : callOpenAiCompatible(cfg, t, opts.signal));
+  const text = await call(turns);
   if (opts.json === false) return { text, output: null, model: cfg.model };
-  return { text, output: parseJson(text), model: cfg.model };
+  const first = extractJson(text);
+  if (first.ok) return { text, output: first.value, model: cfg.model };
+  if (opts.repair === false || opts.signal?.aborted) throw new AiParseError(parseFailMessage(first.reason), text, first.reason);
+  // 한 번 더: 같은 모델에게 JSON만 다시 달라고 한다 (추론형·소형 모델에 효과가 크다)
+  const again = await call([...turns, { role: "assistant", content: stripThink(text).slice(0, 12000) || "(빈 답)" }, { role: "user", content: REPAIR_PROMPT }]);
+  const second = extractJson(again);
+  if (second.ok) return { text: again, output: second.value, model: cfg.model, repaired: true };
+  throw new AiParseError(parseFailMessage(second.reason), `${text}\n\n----- 다시 요청한 답 -----\n${again}`, second.reason);
+}
+
+function parseFailMessage(reason: string) {
+  return `AI 결과를 JSON으로 읽지 못했습니다 (${reason}). 한 번 더 요청해도 같았습니다. 다른 모델로 바꾸거나, 추론형(reasoning) 모델이면 최대 출력 토큰을 늘려 보세요. AI 설정 화면의 ‘최근 AI 호출 기록’에서 모델이 보낸 원문을 볼 수 있습니다.`;
+}
+
+function truncatedMessage(text: string, maxTokens?: number) {
+  const thinkingOnly = !stripThink(text) && /<think|<\/think/i.test(text);
+  const cur = `지금 ${maxTokens ?? 8192}`;
+  return thinkingOnly
+    ? `AI가 생각 과정을 쓰다가 최대 출력 토큰(${cur})에 닿아 결과(JSON)를 쓰지 못했습니다. 추론형(reasoning) 모델은 AI 설정 → 연결 편집에서 최대 출력 토큰을 16000~32000으로 늘리거나, 추론 없는 모델로 바꿔 보세요.`
+    : `AI 결과가 최대 출력 토큰(${cur})에 닿아 중간에 잘렸습니다. AI 설정 → 연결 편집에서 최대 출력 토큰을 늘리거나 요청 범위를 줄여 주세요.`;
 }
 
 async function callAnthropic(cfg: AiResolved, turns: Turn[], signal?: AbortSignal): Promise<string> {
@@ -45,7 +78,7 @@ async function callAnthropic(cfg: AiResolved, turns: Turn[], signal?: AbortSigna
     if (msg.stop_reason === "refusal") throw new HttpError(422, "AI가 이 요청을 처리하지 않았습니다. 요청을 바꿔 주세요");
     const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     if (!text.trim()) throw new HttpError(502, "AI 결과가 비었습니다. 다시 시도해 주세요");
-    if (msg.stop_reason === "max_tokens") throw new HttpError(502, "AI 결과가 너무 길어 잘렸습니다. 요청 범위를 줄여 주세요");
+    if (msg.stop_reason === "max_tokens") throw new AiParseError("AI 결과가 너무 길어 잘렸습니다. 요청 범위를 줄여 주세요", text, "최대 출력 토큰에 닿아 잘림");
     return text;
   } catch (e) {
     throw mapAnthropicError(e);
@@ -232,27 +265,114 @@ async function callOpenAiCompatible(cfg: AiResolved, turns: Turn[], signal?: Abo
   const choice = body?.choices?.[0];
   const text = choice?.message?.content ?? "";
   if (!text.trim()) throw new HttpError(502, "AI 결과가 비었습니다. 다시 시도해 주세요");
-  if (choice?.finish_reason === "length") throw new HttpError(502, "AI 결과가 너무 길어 잘렸습니다. 요청 범위를 줄이거나 모델 컨텍스트를 늘리세요");
+  if (choice?.finish_reason === "length") {
+    const r = extractJson(text);
+    if (r.ok) return text;
+    throw new AiParseError(truncatedMessage(text, cfg.maxTokens), text, "최대 출력 토큰에 닿아 잘림");
+  }
   return text;
 }
 
-/** 답에서 JSON 하나를 꺼낸다 (코드 블록·앞뒤 설명·<think> 블록 허용) */
-export function parseJson(text: string): unknown {
-  let t = text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) t = fence[1]!.trim();
-  try {
-    return JSON.parse(t);
-  } catch {
-    const start = t.search(/[{[]/);
-    const end = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(t.slice(start, end + 1));
-      } catch {
-        /* 아래에서 오류 */
+/** 생각 과정 지우기: <think>…</think>, 여는 태그 없이 </think> 만 있는 경우(그 앞을 모두 버림), 닫히지 않은 <think> */
+export function stripThink(text: string): string {
+  let t = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, "");
+  const closes = [...t.matchAll(/<\/(think|thinking|reasoning)>/gi)];
+  const last = closes[closes.length - 1];
+  if (last) t = t.slice(last.index! + last[0].length);
+  const open = t.search(/<(think|thinking|reasoning)>/i);
+  if (open >= 0) t = t.slice(0, open);
+  return t.trim();
+}
+
+/** 문자열 안을 건너뛰며 짝이 맞는 {…}·[…] 덩어리를 모두 찾는다 */
+function balancedBlocks(t: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] !== "{" && t[i] !== "[") continue;
+    const stack: string[] = [];
+    let inStr = false;
+    for (let j = i; j < t.length; j++) {
+      const ch = t[j]!;
+      if (inStr) {
+        if (ch === "\\") j++;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === "{" || ch === "[") stack.push(ch === "{" ? "}" : "]");
+      else if (ch === "}" || ch === "]") {
+        if (stack.pop() !== ch) break;
+        if (!stack.length) {
+          out.push(t.slice(i, j + 1));
+          i = j;
+          break;
+        }
       }
     }
   }
-  throw new HttpError(502, "AI 결과를 JSON으로 읽지 못했습니다. 다시 생성하거나 요청을 줄여 주세요");
+  return out;
+}
+
+/** 흔한 형식 오류 고치기: 둥근 따옴표, 한 줄·여러 줄 주석, 끝 쉼표, 문자열 안 줄바꿈 */
+function repairJson(s: string): string {
+  let out = "";
+  let inStr = false;
+  let curly = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (inStr) {
+      if (ch === "\\") { out += ch + (s[i + 1] ?? ""); i++; continue; }
+      if (curly && (ch === "\u201d" || ch === "\u201c")) { inStr = false; out += '"'; continue; }
+      if (ch === '"') {
+        if (curly) { out += '\\"'; continue; }
+        inStr = false;
+      }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') { inStr = true; curly = false; out += ch; continue; }
+    if (ch === "\u201c" || ch === "\u201d") { inStr = true; curly = true; out += '"'; continue; }
+    if (ch === "/" && s[i + 1] === "/") { while (i < s.length && s[i] !== "\n") i++; continue; }
+    if (ch === "/" && s[i + 1] === "*") { const e = s.indexOf("*/", i + 2); i = e < 0 ? s.length : e + 1; continue; }
+    out += ch;
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
+
+/**
+ * 답에서 JSON 하나를 꺼낸다 — 생각 과정·코드 블록·앞뒤 설명·여러 덩어리·흔한 형식 오류를 견딘다.
+ * 덩어리가 여럿이면 가장 큰 객체를 고른다 (보통 결과 본문).
+ */
+export function extractJson(text: string): { ok: true; value: unknown } | { ok: false; reason: string } {
+  const t = stripThink(text ?? "");
+  if (!t) return { ok: false, reason: /<think|<\/think/i.test(text ?? "") ? "생각 과정만 쓰고 결과를 쓰기 전에 끝남 — 최대 출력 토큰이 부족했을 수 있음" : "빈 답" };
+  const tries: string[] = [t];
+  for (const m of t.matchAll(/```(?:json|JSON)?\s*([\s\S]*?)```/g)) tries.push(m[1]!.trim());
+  const blocks = balancedBlocks(t).sort((a, b) => b.length - a.length);
+  tries.push(...blocks);
+  // 닫히지 않은 코드 블록 (답이 중간에 끊김)
+  const open = t.match(/```(?:json)?\s*([\s\S]*)$/);
+  if (open) tries.push(open[1]!.trim());
+  for (const c of tries) {
+    for (const s of [c, repairJson(c)]) {
+      try {
+        const v = JSON.parse(s);
+        if (v && typeof v === "object") return { ok: true, value: v };
+      } catch {
+        /* 다음 후보 */
+      }
+    }
+  }
+  if (!/[{[]/.test(t)) return { ok: false, reason: "JSON 없이 글로만 답함" };
+  if (!blocks.length) return { ok: false, reason: "JSON이 중간에 끊김 — 최대 출력 토큰 부족 또는 답이 잘림" };
+  return { ok: false, reason: "JSON 형식 오류" };
+}
+
+/** 답에서 JSON 하나를 꺼낸다 (못 읽으면 던진다) */
+export function parseJson(text: string): unknown {
+  const r = extractJson(text);
+  if (r.ok) return r.value;
+  throw new AiParseError(parseFailMessage(r.reason), text, r.reason);
 }

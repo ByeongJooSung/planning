@@ -1,13 +1,14 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { callAi, listModels, parseJson, probeModels } from "../src/server/ai.js";
+import { AiParseError, callAi, extractJson, listModels, parseJson, probeModels, stripThink } from "../src/server/ai.js";
 
 /** NVIDIA·LM Studio 처럼 동작하는 OpenAI 호환 서버 */
 let base = "";
 let srv: Server;
 const seen: { auth?: string; body?: any }[] = [];
 let busy = 0;
+let sloppy = 0;
 beforeAll(async () => {
   srv = createServer((req, res) => {
     let b = "";
@@ -34,6 +35,17 @@ beforeAll(async () => {
           return res.end(JSON.stringify({ error: "ResourceExhausted: Worker local total request limit reached (74/16)" }));
         }
         return res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }] }));
+      }
+      if (req.url === "/sloppy/v1/chat/completions") {
+        sloppy++;
+        const content = sloppy === 1 ? "요청하신 화면을 정리하면 다음과 같습니다. 제목, 버튼, 목록" : '{"ok":true}';
+        return res.end(JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }] }));
+      }
+      if (req.url === "/never/v1/chat/completions") {
+        return res.end(JSON.stringify({ choices: [{ message: { content: "죄송하지만 형식을 맞추기 어렵습니다" }, finish_reason: "stop" }] }));
+      }
+      if (req.url === "/cut/v1/chat/completions") {
+        return res.end(JSON.stringify({ choices: [{ message: { content: "<think>음… 먼저 구조를 생각해 보면" }, finish_reason: "length" }] }));
       }
       if (req.url === "/down/v1/chat/completions") {
         res.statusCode = 503;
@@ -108,5 +120,48 @@ describe("OpenAI 호환 호출", () => {
   }, 20000);
   it("parseJson", () => {
     expect(parseJson('설명\n{"a":1}\n끝')).toEqual({ a: 1 });
+  });
+  it("추론형 모델 답에서 JSON을 찾아 읽는다", () => {
+    const ok = (t: string) => {
+      const r = extractJson(t);
+      expect(r.ok, t).toBe(true);
+      return (r as { value: unknown }).value;
+    };
+    // 여는 태그 없이 닫는 </think> 만 오는 경우 (nemotron 등)
+    expect(ok('먼저 요구를 보면 {"x": 1} 같은 모양이 좋겠다.</think>\n{"a":1}')).toEqual({ a: 1 });
+    expect(ok('<think>{"draft":true}</think>\n결과입니다:\n```json\n{"a":2}\n```')).toEqual({ a: 2 });
+    // 설명 글 사이에 낀 JSON, 문자열 안 괄호
+    expect(ok('다음과 같습니다.\n{"a":"괄호 } 포함","b":[1,2]}\n이상입니다.')).toEqual({ a: "괄호 } 포함", b: [1, 2] });
+    // 끝 쉼표·주석·굽은 따옴표·문자열 안 줄바꿈
+    expect(ok('{\n  // 제목\n  "a": [1, 2,],\n  "b": "줄\n바꿈",\n}')).toEqual({ a: [1, 2], b: "줄\n바꿈" });
+    expect(ok("{\u201ca\u201d: 1}")).toEqual({ a: 1 });
+    // 작은 조각보다 큰 결과 블록을 고른다
+    expect(ok('예: {"k":1}\n최종:\n{"screens":[{"id":"S1"}],"notes":"n"}')).toEqual({ screens: [{ id: "S1" }], notes: "n" });
+    const fail = (t: string) => (extractJson(t) as { reason: string }).reason;
+    expect(fail("<think>아직 생각 중")).toMatch(/생각 과정만/);
+    expect(fail("")).toMatch(/빈 답/);
+    expect(fail("그냥 글로만 답합니다")).toMatch(/글로만/);
+    expect(fail('{"a": [1, 2, {"b": "끊')).toMatch(/끊김/);
+    expect(stripThink("a<think>b</think>c")).toBe("ac");
+    expect(stripThink("x</think>y")).toBe("y");
+  });
+  it("JSON을 못 읽으면 한 번 다시 요청하고, 그래도 안 되면 원문을 담아 알린다", async () => {
+    const root = base.replace(/\/v1$/, "");
+    const r = await callAi({ source: "project", provider: "openai-compatible", baseUrl: `${root}/sloppy/v1`, model: "m" }, "hi");
+    expect(r).toMatchObject({ output: { ok: true }, repaired: true });
+    const msgs = seen.at(-1)!.body.messages;
+    expect(msgs.at(-2).role).toBe("assistant");
+    expect(msgs.at(-1).content).toMatch(/JSON 객체 하나만/);
+    const e = await callAi({ source: "project", provider: "openai-compatible", baseUrl: `${root}/never/v1`, model: "m" }, "hi").catch((x) => x);
+    expect(e).toBeInstanceOf(AiParseError);
+    expect(e.message).toMatch(/글로만/);
+    expect(e.raw).toMatch(/다시 요청한 답/);
+    // 추론형 모델이 생각만 하다 토큰 한도에 닿으면 다시 요청하지 않고 원인·해결을 알린다
+    const n = seen.length;
+    const cut = await callAi({ source: "project", provider: "openai-compatible", baseUrl: `${root}/cut/v1`, model: "m", maxTokens: 4096 }, "hi").catch((x) => x);
+    expect(cut).toBeInstanceOf(AiParseError);
+    expect(cut.message).toMatch(/생각 과정.*최대 출력 토큰\(지금 4096\)/);
+    expect(cut.raw).toMatch(/<think>/);
+    expect(seen.length - n).toBe(1);
   });
 });

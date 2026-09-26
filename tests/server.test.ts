@@ -8,6 +8,7 @@ import { createApp, createLocalApp } from "../src/server/app.js";
 import { parseAiSet, type AiProbe, type AiResolved } from "../src/server/accounts.js";
 import { FileKv } from "../src/server/kv.js";
 import { KvRepo } from "../src/server/repo.js";
+import { AiParseError } from "../src/server/ai.js";
 
 const MODES = ["local", "serverless"] as const;
 describe.each(MODES)("웹 서비스 (%s)", (mode) => {
@@ -39,8 +40,9 @@ beforeAll(async () => {
     probes.push(p);
     return { ok: true, models: ["m-a", "m-b"], url: `${p.baseUrl}/models`, ms: 1 };
   };
-  const aiCaller = async (cfg: AiResolved) => {
+  const aiCaller = async (cfg: AiResolved, input?: unknown) => {
     calls.push(cfg);
+    if (input === "BADJSON") throw new AiParseError("AI 결과를 JSON으로 읽지 못했습니다 (JSON 형식 오류)", "</think>{\"a\": 1,,}", "JSON 형식 오류");
     return { text: "{}", output: { ok: true, provider: cfg.provider }, model: cfg.model };
   };
   let server;
@@ -176,6 +178,13 @@ describe("시나리오", () => {
     expect(gen.status).toBe(200);
     expect(calls.at(-1)).toMatchObject({ provider: "openai-compatible", apiKey: "nvapi-SECRET", model: "meta/llama-3.1-70b-instruct" });
     expect((await viewer.req("POST", "/api/projects/PUBINFO/generate", { input: "x" })).status).toBe(403);
+    // 호출 기록: 성공·실패, 실패는 모델 원문까지 (키는 남기지 않음)
+    expect((await editor.req("POST", "/api/projects/PUBINFO/generate", { input: "BADJSON", task: "design" })).status).toBe(502);
+    const logs = await editor.req("GET", "/api/projects/PUBINFO/ai/logs");
+    expect(logs.body.logs[0]).toMatchObject({ ok: false, task: "design", reason: "JSON 형식 오류", raw: expect.stringContaining("</think>"), label: "NVIDIA" });
+    expect(logs.body.logs[1]).toMatchObject({ ok: true, model: "meta/llama-3.1-70b-instruct" });
+    expect(logs.raw).not.toMatch(/SECRET/);
+    expect((await viewer.req("GET", "/api/projects/PUBINFO/ai/logs")).status).toBe(403);
 
     // 운영자가 기본을 바꾸면 모두에게 적용
     await owner.req("PUT", "/api/projects/PUBINFO/ai/active", { conn: nv.id, model: "qwen/qwen2.5-coder-32b-instruct" });

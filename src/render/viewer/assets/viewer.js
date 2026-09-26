@@ -1462,7 +1462,7 @@
         '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
         : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
       (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 미세조정 프롬프트를 적으세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
-      (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + "</p>" : "") +
+      (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + (SRV && canEdit() ? ' <button class="lnk" data-gotologs>호출 기록 보기</button>' : "") + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
     var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (isApplied ? " 적용됨" : " 미리보기") : "") + '</span><span class="sp"></span>' +
@@ -2298,8 +2298,24 @@
       (hasAny ? '<div class="row-actions"><label for="ai-switch" class="hint">나만 바꾸기</label>' + aiSwitch("ai-switch") + (eff && canEdit() ? actBtn("ai-test", "연결 확인", null) : "") + "</div>" : "") +
       '<p class="hint">바꾸면 나에게만 적용됩니다. 모두의 기본은 운영자가 아래 프로젝트 연결에서 ‘기본으로’를 눌러 정합니다. 설정이 없으면 서버 기본 설정' + (a.serverDefault ? "(있음)" : "(없음)") + "을 씁니다.</p></div></section>" +
       '<section class="section"><h2>프로젝트 연결 <small>멤버 공통 · ' + (a.canManage ? "주소·키는 운영자에게만 보임" : "운영자가 관리 — 주소·키는 보이지 않음") + "</small></h2>" + connCards("project", a.project, a.canManage, canEdit()) + "</section>" +
-      '<section class="section"><h2>내 연결 <small>나만 씀 · <button class="lnk" data-act="account">내 계정</button>에서도 관리</small></h2>' + connCards("personal", a.personal, true, canEdit()) + "</section>";
+      '<section class="section"><h2>내 연결 <small>나만 씀 · <button class="lnk" data-act="account">내 계정</button>에서도 관리</small></h2>' + connCards("personal", a.personal, true, canEdit()) + "</section>" +
+      (canEdit() ? renderAiLogs(code) : "");
   }
+  /** 최근 AI 호출 기록 — 실패하면 모델이 보낸 원문을 펼쳐 볼 수 있다 */
+  var aiLogs = null;
+  function renderAiLogs(code) {
+    if (!aiLogs || aiLogs.code !== code) {
+      aiLogs = { code: code, logs: null };
+      api("GET", "/api/projects/" + enc(code) + "/ai/logs").then(function (r) { aiLogs = { code: code, logs: r.logs }; if (state.route.page === "aiset") render(); }, function () { aiLogs = { code: code, logs: [] }; });
+    }
+    var logs = aiLogs.logs;
+    var rows = !logs ? '<div class="empty">불러오는 중…</div>' : !logs.length ? '<div class="empty">아직 기록이 없습니다. AI 생성을 하면 여기에 남습니다.</div>' : logs.map(function (x, i) {
+      return '<details class="ailog ' + (x.ok ? "ok" : "fail") + '"><summary><span class="al-mark">' + (x.ok ? "✓" : "✕") + '</span><span class="mono">' + esc(fmtDate(x.at)) + "</span><span>" + esc(x.user || "") + '</span><span class="mono">' + esc(x.task || "") + '</span><span class="al-model">' + esc((x.label ? x.label + " · " : "") + x.model) + '</span><span class="hint">' + (x.ms / 1000).toFixed(1) + "초" + (x.repaired ? " · 다시 요청해 성공" : "") + "</span></summary>" +
+        (x.ok ? '<p class="hint">성공 · 답 ' + (x.chars || 0).toLocaleString() + "자</p>" : '<p class="al-err">' + esc(x.error || "") + "</p>" + (x.raw ? '<div class="al-raw-h"><b>모델이 보낸 원문</b> <span class="hint">' + (x.chars || 0).toLocaleString() + '자</span><button class="btn-sm" data-ailogcopy="' + i + '">원문 복사</button></div><pre class="al-raw">' + esc(x.raw) + "</pre>" : "")) + "</details>";
+    }).join("");
+    return '<section class="section"><h2>최근 AI 호출 기록 <small>최근 30건 · 실패하면 원문을 펼쳐 볼 수 있습니다</small><button class="btn-sm" data-act="ailog-reload">새로고침</button></h2><div class="box ailogs">' + rows + "</div></section>";
+  }
+  ACTIONS["ailog-reload"] = function () { aiLogs = null; render(); };
   function renderAccount() {
     var mine = MY_AI || { conns: [], active: null };
     var act = mine.active && mine.conns.find(function (c) { return c.id === mine.active.conn; });
@@ -2507,7 +2523,9 @@
     var pre = m ? api("GET", "/api/invite-links/" + enc(m[1])).then(function (r) { authState.invite = r; authState.token = m[1]; authState.mode = r.hasAccount ? "login" : "signup"; }, function (e) { authState.err = e.message; history.replaceState(null, "", "/"); }) : Promise.resolve();
     AI.sample = {
       json: function (input, opts) {
-        return api("POST", "/api/projects/" + enc(P().model.project.code) + "/generate", { input: input }, opts && opts.signal).then(function (r) { return r.output; }, function (e) {
+        var task = layer && layer.key ? layer.key : "";
+        return api("POST", "/api/projects/" + enc(P().model.project.code) + "/generate", { input: input, task: task }, opts && opts.signal).then(function (r) { if (r.repaired) toast("AI 답을 한 번에 읽지 못해 다시 요청해 받았습니다"); aiLogs = null; return r.output; }, function (e) {
+          aiLogs = null;
           if (e.name === "AbortError") { var c = new Error("cancelled"); c.code = "cancelled"; throw c; }
           throw e;
         });
@@ -2539,6 +2557,7 @@
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
       if (layer.kind === "review" && reviewClick(target, ev)) return;
       if (lb && layer.kind === "form" && lb.dataset.copy != null) { copyText(lb.dataset.copy, lb, "복사함"); return; }
+      if (lb && lb.hasAttribute("data-gotologs")) { closeLayer(); aiLogs = null; go({ view: "project", p: state.route.p, page: "aiset" }); return; }
       if (lb && layer.kind === "aiconn" && connClick(lb)) return;
       if (lb && lb.dataset.cmtgen != null) { commentGen(lb.dataset.cmtgen); return; }
       if (lb && layer.kind === "gen") {
@@ -2556,6 +2575,8 @@
     }
     var amb = target.closest && target.closest("[data-authmode]");
     if (amb) { authState.err = ""; showAuth(amb.dataset.authmode); return; }
+    var alc = target.closest && target.closest("[data-ailogcopy]");
+    if (alc && aiLogs && aiLogs.logs) { copyText(aiLogs.logs[Number(alc.dataset.ailogcopy)].raw || "", alc, "복사함"); return; }
     var acb = target.closest && target.closest("[data-act]");
     if (acb && ACTIONS[acb.dataset.act]) { ACTIONS[acb.dataset.act](acb.dataset.arg, acb); return; }
     var pvb = target.closest && target.closest("[data-preview]");
