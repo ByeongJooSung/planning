@@ -348,7 +348,7 @@ function dsGen(c: Ctx, code: string): GenPrompt {
   const s = c.system(code);
   const screens = c.m.storyboard.screens.filter((x) => x.systemCode === code).map((x) => `${x.screenId} ${x.title}`);
   const prompt = finish([
-    head(`${code} ${s?.name ?? ""} 디자인 시스템 미세조정`, "아래 디자인 시스템을 작업자의 요청대로 조정하는 패치를 만들어 주세요. 바뀌는 값만 넣습니다."),
+    head(`${code} ${s?.name ?? ""} 디자인 시스템 조정`, "아래 디자인 시스템을 작업자의 요청대로 조정하는 패치를 만들어 주세요. 바뀌는 값만 넣습니다."),
     section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s?.name ?? ""} (주 사용자: ${s?.users.join(", ") || "-"})`),
     section("조정 범위 (이 범위 밖의 값은 넣지 않는다)", DS_SLOTS.scope),
     section("현재 디자인 시스템 (적용된 조정 포함, JSON)", DS_SLOTS.design),
@@ -381,7 +381,7 @@ function dsGen(c: Ctx, code: string): GenPrompt {
     ),
     "## 요청\n",
   ]);
-  return { kind: "ds", target: code, title: `${code} ${s?.name ?? ""} 디자인 시스템 미세조정`, prompt, requiresInstruction: true };
+  return { kind: "ds", target: code, title: `${code} ${s?.name ?? ""} 디자인 시스템 조정`, prompt, requiresInstruction: true };
 }
 
 export interface DesignFill {

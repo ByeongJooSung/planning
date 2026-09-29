@@ -2295,7 +2295,7 @@
     var scope = base ? base.scope || "global" : layer.scope || "global";
     var cids = base ? base.commentIds || [] : layer.commentIds || [];
     if (g.requiresInstruction && !base && !instruction && !cids.length) { layer.err = "조정 요청을 적어 주세요."; renderLayer(); return; }
-    if (base && !instruction) { layer.err = "미세조정 프롬프트를 적어 주세요."; renderLayer(); return; }
+    if (base && !instruction) { layer.err = "고칠 내용을 적어 주세요."; renderLayer(); return; }
     captureSpecs();
     var tpl = g.kind === "ds" ? fillDs(g.prompt, p, g.target, scope, cids) : fillSpecs(g.prompt, g);
     var rootText = base ? base.root || "" : instruction || (cids.length ? "위 댓글을 모두 반영해 주세요." : "");
@@ -2448,7 +2448,7 @@
 
   /** 결과 형식이 틀려도(로컬 LLM 등) 레이어가 깨지지 않게 한다 — 오류 목록은 왼쪽 검사 결과에 나온다 */
   function genPreview(p, g, out) {
-    try { return genPreviewRaw(p, g, out); } catch (e) { return '<div class="empty">결과 형식이 올바르지 않아 미리보기를 그릴 수 없습니다. 왼쪽 검사 결과를 확인하고 다시 생성하거나 미세조정하세요.</div>'; }
+    try { return genPreviewRaw(p, g, out); } catch (e) { return '<div class="empty">결과 형식이 올바르지 않아 미리보기를 그릴 수 없습니다. 왼쪽 검사 결과를 확인하고 다시 생성하거나 ‘이 버전 고치기’로 고치세요.</div>'; }
   }
   function genPreviewRaw(p, g, out) {
     if (!out) return '<div class="empty">아직 생성한 결과가 없습니다. 왼쪽에서 생성하세요.</div>';
@@ -2521,7 +2521,7 @@
     }).join("");
     var canGen = !!AI.sample && (!SRV || !!P().ai);
     if (SRV && aiCache.code !== P().model.project.code) loadAiInfo(P().model.project.code).then(function () { if (layer && layer.kind === "gen") renderLayer(); }, function () {});
-    var label = !sel ? (g.requiresInstruction ? "조정 요청" : "추가 지시 (선택)") : "미세조정 프롬프트 · v" + sel.n + " 기준";
+    var label = !sel ? (g.requiresInstruction ? "조정 요청" : "추가 지시 (선택)") : "고칠 내용 · v" + sel.n + " 기준으로 고칩니다";
     var ph = !sel ? (g.requiresInstruction ? "예: 주 색을 더 진하게, 버튼을 둥글게" : "예: 목록은 50건까지 보이게, 반려 사유 보기 버튼 추가") : "예: 검색 조건에 '신청인' 추가, 버튼 문구를 '공개 신청하기'로";
     var appliedHist = sel && g.kind === "ds" ? (doc.history || []).find(function (h) { return h.n === sel.n; }) : null;
     var isApplied = sel && (appliedHist || (g.kind !== "ds" && sel.n === doc.applied));
@@ -2533,17 +2533,17 @@
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
       (g.specs ? specSummary(g) : "") +
       (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
-        '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "미세조정 생성" : "1차 생성") : "미세조정") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
+        '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "조정안 만들기" : "1차 생성") : "✦ 이 버전 고치기") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
         : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
-      (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 미세조정 프롬프트를 적으세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
+      (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 고칠 내용을 적고 ‘이 버전 고치기’를 누르세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + (SRV && canEdit() ? ' <button class="lnk" data-gotologs>호출 기록 보기</button>' : "") + "</p>" : "") +
       (chk && (chk.errs.length || chk.warns.length) ? '<ul class="chk">' + chk.errs.map(function (x) { return '<li class="e">' + esc(x) + "</li>"; }).join("") + chk.warns.map(function (x) { return '<li class="w">' + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>";
     var showSpec = !!g.specs && !layer.busy && (layer.specEdit || !sel);
-    var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : showSpec ? specEditor(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘미세조정 생성’을 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 미세조정 프롬프트로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
+    var right = '<div class="gen-right">' + (layer.busy ? genSkeleton(g) : showSpec ? specEditor(g) : sel ? genPreview(p, g, sel.output) : '<div class="empty">' + (g.kind === "ds" ? "바꾸고 싶은 점을 적고 ‘조정안 만들기’를 누르세요. 결과를 확인한 뒤 적용하면 이 디자인 시스템을 쓰는 모든 화면이 한꺼번에 바뀝니다." : "‘1차 생성’을 누르면 저장소의 요구사항·Task·참조자료·디자인 시스템을 근거로 AI가 만듭니다. 결과를 본 뒤 ‘이 버전 고치기’로 이어서 고칠 수 있습니다.") + "</div>") + "</div>";
     var foot = '<footer class="layer-f"><span class="hint">' + (sel ? "v" + sel.n + (isApplied ? " 적용됨" : " 미리보기") : "") + '</span><span class="sp"></span>' +
       (sel ? '<button class="btn-sm" data-gjson>JSON 복사</button>' : "") + (g.kind === "ds" ? (doc.history && doc.history.length ? '<button class="btn-sm" data-gunapply>마지막 적용 되돌리기</button>' : "") : doc.applied && !SRV ? '<button class="btn-sm" data-gunapply>적용 해제</button>' : "") +
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
-    return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 미세조정</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+    return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 고치기</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="gen-body">' + left + right + "</div>" + foot;
   }
   function copyText(text, btn, okLabel) {
