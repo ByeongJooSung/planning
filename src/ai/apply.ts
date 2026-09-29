@@ -252,8 +252,16 @@ export function normalizeFlowOutput(output: unknown): unknown {
   return { ...output, ...(nodes ? { nodes } : {}), ...(edges ? { edges } : {}), ...(lanes ? { lanes } : {}) };
 }
 
-export function applyFlow(m: Model, requirementId: string, output: unknown): ApplyResult {
-  const flow = FlowOutput.parse(normalizeFlowOutput(output));
+export function applyFlow(m: Model, requirementId: string, output: unknown, opts: { keepPos?: boolean } = {}): ApplyResult {
+  const norm = normalizeFlowOutput(output) as { nodes?: Record<string, unknown>[] };
+  // AI 결과의 좌표는 뜻이 없으므로 자동 배치에 맡긴다 (캔버스에서 직접 옮긴 위치만 보존)
+  if (!opts.keepPos && Array.isArray(norm?.nodes)) for (const n of norm.nodes) (delete n.x, delete n.y);
+  const flow = FlowOutput.parse(norm);
+  const ids = new Set(flow.nodes.map((n) => n.id));
+  if (ids.size !== flow.nodes.length) throw new Error("노드 ID가 중복됩니다");
+  const laneIds = new Set(flow.lanes.map((l) => l.id));
+  for (const n of flow.nodes) if (n.lane && !laneIds.has(n.lane)) throw new Error(`노드 ${n.id}의 레인 ${n.lane}이 없습니다`);
+  for (const e of flow.edges) if (!ids.has(e.from) || !ids.has(e.to)) throw new Error(`없는 노드를 잇는 연결입니다: ${e.from} → ${e.to}`);
   const work = structuredClone(m);
   const prev = work.flows.find((f) => f.id === flow.id);
   work.flows = prev ? work.flows.map((f) => (f.id === flow.id ? flow : f)) : [...work.flows, flow];

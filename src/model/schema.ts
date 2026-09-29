@@ -235,6 +235,9 @@ export const FlowNode = z.object({
   screenId: z.string().optional(),
   taskIds: z.array(z.string()).default([]),
   change: ChangeMark.default("NEW"),
+  /** 캔버스에서 직접 옮긴 위치 (x: 내용 영역 왼쪽부터의 중심, y: 소속 레인 위쪽부터의 중심). 없으면 자동 배치 */
+  x: z.number().optional(),
+  y: z.number().optional(),
 });
 
 export const FlowEdge = z.object({

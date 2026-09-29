@@ -9,7 +9,9 @@
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
 import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec } from "../model/schema.js";
-import { normalizeStoryboardOutput } from "../ai/apply.js";
+import { applyFlow, normalizeStoryboardOutput } from "../ai/apply.js";
+
+const applyGenerated0 = (m: Model, reqId: string, flow: unknown) => applyFlow(m, reqId, flow, { keepPos: true });
 import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
@@ -81,6 +83,8 @@ export type Command =
   | { op: "sb.component"; screenId: string; no?: number; input?: unknown; remove?: boolean }
   /** 설명(planner·customer·options·validation)만 AI 결과로 갱신 — 항목·와이어프레임은 그대로 */
   | { op: "sb.desc"; screenId: string; components: unknown }
+  /** 프로세스 플로우 저장 (캔버스에서 직접 편집한 결과 — 옮긴 위치 포함) */
+  | { op: "flow.save"; requirementId: string; flow: unknown }
   /** 기능 명세 저장 (빈 문자열이면 지워 참조자료 초안으로 돌아간다) */
   | { op: "req.spec"; id: string; spec: string }
   | { op: "task.add"; requirementId: string; input: AddTaskInput }
@@ -232,6 +236,15 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       touchStoryboard(m, sb.screenId, now);
       message = `${cmd.screenId} 설명 ${n}개를 AI로 다시 썼습니다`;
       detail = { updated: n };
+      break;
+    }
+    case "flow.save": {
+      const req = m.requirements.find((x) => x.id === cmd.requirementId && x.status !== "DELETED");
+      if (!req) throw new Error(`요구사항을 찾을 수 없습니다: ${cmd.requirementId}`);
+      const r = applyGenerated0(m, cmd.requirementId, cmd.flow);
+      m.rtmRecords.work[`flow:${req.id}`] = { status: "IN_PROGRESS", at: now.toISOString(), by: "내용 편집", note: "" };
+      message = r.summary;
+      detail = r;
       break;
     }
     case "sb.marker": {

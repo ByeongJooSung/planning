@@ -468,13 +468,60 @@
     var fbar = '<div class="ai-bar">' + genBtn("flow:" + t.requirementId, "이 요구사항 플로우 AI 생성·조정") + "</div>" + workCtl(p, "flow:" + t.requirementId, "프로세스 플로우");
     return fbar + taskFlowBody(p, t);
   }
+  // ── 플로우차트 캔버스 편집기 연결 ──
+  /** 플로우가 속한 요구사항 (노드 Task ID → 요구사항, 없으면 PF-요구사항ID) */
+  function reqOfFlow(p, f) {
+    var tids = {};
+    allTasks(p).forEach(function (t) { tids[t.taskId] = t.requirementId; });
+    for (var i = 0; i < f.nodes.length; i++) for (var j = 0; j < (f.nodes[i].taskIds || []).length; j++) if (tids[f.nodes[i].taskIds[j]]) return tids[f.nodes[i].taskIds[j]];
+    var m = /^PF-(.+)$/.exec(f.id);
+    return m && p.model.requirements.some(function (r) { return r.id === m[1]; }) ? m[1] : null;
+  }
+  function flowOfReq(p, reqId) {
+    return p.model.flows.find(function (f) { return f.id === "PF-" + reqId; }) || p.model.flows.find(function (f) { return reqOfFlow(p, f) === reqId; });
+  }
+  /** 새로 그릴 때의 기본 틀: Task 시스템별 레인, 시작 → Task 처리 → 종료 */
+  function flowTemplate(p, reqId) {
+    var row = p.rtm.rows.find(function (r) { return r.requirementId === reqId; }), lanes = [], seen = {}, nodes = [{ id: "n1", shape: "TERMINATOR", label: "시작", taskIds: [], change: "NEW" }], edges = [];
+    (row ? row.tasks : []).forEach(function (t, i) {
+      if (!seen[t.systemCode]) { seen[t.systemCode] = "L-" + t.systemCode; var s = sysOf(p, t.systemCode); lanes.push({ id: "L-" + t.systemCode, label: (s ? s.name : t.systemCode) + (t.actor ? " · " + t.actor : ""), systemCode: t.systemCode }); }
+      nodes.push({ id: "n" + (i + 2), shape: "PROCESS", label: t.action, lane: seen[t.systemCode], taskIds: [t.taskId], change: "NEW" });
+    });
+    if (!lanes.length) lanes.push({ id: "L1", label: "처리" });
+    nodes[0].lane = lanes[0].id;
+    nodes.push({ id: "n" + (nodes.length + 1), shape: "TERMINATOR", label: "종료", lane: nodes[nodes.length - 1].lane || lanes[0].id, taskIds: [], change: "NEW" });
+    for (var i = 0; i + 1 < nodes.length; i++) edges.push({ from: nodes[i].id, to: nodes[i + 1].id, label: "" });
+    return { id: "PF-" + reqId, kind: "PROCESS", title: (row ? row.title : reqId) + " 처리 프로세스", lanes: lanes, nodes: nodes, edges: edges };
+  }
+  /** 캔버스 열기. flow가 없으면 저장된 플로우(없으면 기본 틀), onSaved: 저장 뒤 할 일 */
+  function openFlowEditor(reqId, flow, onSaved) {
+    var p = P(), g = reqId ? p.gens["flow:" + reqId] : null;
+    flow = flow || (reqId ? flowOfReq(p, reqId) : null) || flowTemplate(p, reqId);
+    var canAi = !!(g && AI.sample && (!SRV || p.ai));
+    FlowEdit.open({
+      flow: flow,
+      editable: SRV ? canEdit() && !!reqId : true,
+      systems: p.model.systems.map(function (s) { return { code: s.code, name: s.name, color: s.color }; }),
+      screens: p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).map(function (n) { return { id: n.id, name: n.name, systemCode: n.systemCode }; }),
+      tasks: allTasks(p).map(function (t) { return { id: t.taskId, label: (t.actor ? t.actor + ": " : "") + t.action, systemCode: t.systemCode }; }),
+      color: sysColor,
+      project: p.model.project.name,
+      save: SRV && canEdit() && reqId ? function (doc) { return cmd({ op: "flow.save", requirementId: reqId, flow: doc }).then(function (r) { if (onSaved) onSaved(r); return r; }); } : null,
+      ai: g ? { available: canAi, label: p.ai ? effLabel(p.ai) : "", refine: DATA.refine, prompt: function () { return fillSpecs(g.prompt, g); }, run: function (input, signal) { return AI.sample.json(input, { signal: signal, cache: false }); } } : null,
+      toast: toast,
+      onClose: function () { render(); }
+    });
+  }
+  function flowEditBtn(p, reqId, label) {
+    return reqId ? '<button class="btn-sm fe-open" data-flowedit="' + esc(reqId) + '">▣ ' + esc(label || "캔버스 · 전체보기") + "</button>" : "";
+  }
   function taskFlowBody(p, t) {
     var ids = p.rtm.rows.find(function (r) { return r.requirementId === t.requirementId; }).tasks.map(function (x) { return x.taskId; });
     var flows = p.model.flows.filter(function (f) { return f.nodes.some(function (n) { return n.taskIds.some(function (id) { return ids.indexOf(id) >= 0; }); }); });
-    if (!flows.length) return '<div class="box empty">이 요구사항의 Task는 아직 프로세스 플로우에 연결되지 않았습니다. 다이어그램 단계(S3)에서 만듭니다.</div>';
+    if (!flows.length) return '<div class="box empty">이 요구사항의 Task는 아직 프로세스 플로우에 연결되지 않았습니다.' + (canEdit() || !SRV ? '<div class="row-actions center">' + flowEditBtn(p, t.requirementId, "캔버스에서 직접 그리기") + genBtn("flow:" + t.requirementId, "AI로 그리기") + "</div>" : "") + "</div>";
     var mine = t.flowNodes.length;
     return flows.map(function (f) {
-      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + " · 진하게 표시한 노드가 이 Task" + (mine ? "" : " (이 Task는 아직 노드가 없습니다)") + '</small></h2><div class="box flow-box">' +
+      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + " · 진하게 표시한 노드가 이 Task" + (mine ? "" : " (이 Task는 아직 노드가 없습니다)") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, reqOfFlow(p, f) || t.requirementId, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + '</div><div class="box flow-box">' +
         Flow.svg(f, { color: sysColor, highlight: [t.taskId], suffix: "-t" }) + "</div></section>";
     }).join("") + '<p class="hint">같은 요구사항의 다른 Task는 흐리게 표시합니다. 점선 화살표는 반려·보완처럼 되돌아가는 흐름입니다.</p>';
   }
@@ -1202,7 +1249,7 @@
   // ── 통합: 시스템별 프로세스 플로우 ─────────────
   function renderFlows() {
     var p = P(), flows = p.model.flows;
-    if (!flows.length) return '<div class="box empty">아직 작성된 플로우가 없습니다. Task별 플로우가 다이어그램 단계(S3)에서 만들어지면 여기로 통합됩니다.</div>';
+    if (!flows.length) return '<div class="box empty">아직 작성된 플로우가 없습니다. 요구사항마다 캔버스에서 직접 그리거나 AI로 그리면 여기로 통합됩니다.' + (canEdit() || !SRV ? '<div class="row-actions center">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return flowEditBtn(p, r.requirementId, r.requirementId + " 그리기"); }).join("") + "</div>" : "") + "</div>";
     var withLanes = p.model.systems.filter(function (s) { return flows.some(function (f) { return f.lanes.some(function (l) { return l.systemCode === s.code; }); }); });
     var cur = state.flowSys;
     var chips = '<div class="filters"><button class="fchip" data-fsys="ALL" aria-pressed="' + (cur === "ALL") + '">전체 통합</button>' + withLanes.map(function (s) {
@@ -1211,10 +1258,11 @@
     var body = flows.map(function (f) {
       var g = cur === "ALL" ? f : Flow.forSystem(f, cur);
       if (!g) return "";
-      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="box flow-box">' + Flow.svg(g, { color: sysColor }) + "</div></section>";
+      var rq = reqOfFlow(p, f);
+      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, rq, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + (rq ? "" : '<span class="hint">요구사항과 연결되지 않은 플로우라 보기만 할 수 있습니다</span>') + '</div><div class="box flow-box">' + Flow.svg(g, { color: sysColor }) + "</div></section>";
     }).join("") || '<div class="box empty">이 시스템이 들어간 플로우가 없습니다.</div>';
     var genBar = '<div class="ai-bar"><span class="hint">AI 생성·조정</span>' + p.rtm.rows.filter(function (r) { return p.gens["flow:" + r.requirementId]; }).map(function (r) { return genBtn("flow:" + r.requirementId, r.requirementId + " " + r.title); }).join("") + "</div>";
-    var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + "</div>"; }).join("") + "</div>";
+    var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + (!flowOfReq(p, r.requirementId) && (canEdit() || !SRV) ? flowEditBtn(p, r.requirementId, "캔버스에서 그리기") : "") + "</div>"; }).join("") + "</div>";
     return '<section class="section">' + genBar + fwork + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
   }
 
@@ -1850,7 +1898,7 @@
       var removed = Object.keys(before).filter(function (id) { return !nodes.some(function (n) { return n.id === id; }); });
       return '<p class="hint">추가 ' + Object.keys(added).length + " · 삭제 " + removed.length + (removed.length ? " (" + removed.map(esc).join(", ") + ")" : "") + "</p>" + iaTree(nodes, statusByScreen(p), { added: added });
     }
-    if (g.kind === "flow") return '<div class="flow-box">' + Flow.svg(out, { color: sysColor, suffix: "-gen" }) + "</div>";
+    if (g.kind === "flow") return (SRV && canEdit() ? '<div class="flow-tools"><button class="btn-sm fe-open" data-flowedit-gen="1">▣ 이 결과를 캔버스에서 다듬기 · 전체보기</button><span class="hint">캔버스에서 고친 뒤 저장하면 바로 반영됩니다</span></div>' : "") + '<div class="flow-box">' + Flow.svg(out, { color: sysColor, suffix: "-gen" }) + "</div>";
     if (g.kind === "dsc") {
       var cl = (Array.isArray(out.concepts) ? out.concepts : Array.isArray(out.proposals) ? out.proposals : []).slice(0, 3);
       return '<p class="hint">AI가 제안한 컨셉 ' + cl.length + '개입니다. 적용하면 디자인 시스템 페이지의 컨셉 카드가 되고, 그 자리에서 로그인·목록·상세 화면 미리보기로 비교해 고를 수 있습니다. 빠진 값은 기준 컨셉으로 채우고, 글자 대비가 4.5:1에 못 미치면 자동으로 보정합니다.</p><div class="concepts">' + cl.map(function (c, i) {
@@ -3114,6 +3162,11 @@
         if (lb.hasAttribute("data-gapply")) { genApply(true); return; }
         if (lb.hasAttribute("data-gunapply")) { genApply(false); return; }
         if (lb.hasAttribute("data-gjson")) { var dj = overlayOf(layer.key); copyText(JSON.stringify(dj.versions[layer.sel].output, null, 2), lb); return; }
+        if (lb.hasAttribute("data-flowedit-gen")) {
+          var gdoc = overlayOf(layer.key), gver = gdoc && gdoc.versions[layer.sel], gg = P().gens[layer.key];
+          if (gver) openFlowEditor(gg.target, gver.output, function () { closeLayer(); });
+          return;
+        }
         if (lb.hasAttribute("data-gcopy")) { captureSpecs(); copyText(fillSpecs(P().gens[layer.key].prompt, P().gens[layer.key]), lb); return; }
         if (lb.hasAttribute("data-specedit")) { layer.specEdit = true; renderLayer(); return; }
         if (lb.hasAttribute("data-specclose")) { layer.specEdit = false; renderLayer(); return; }
@@ -3150,6 +3203,8 @@
         .then(function (r) { setProject(r.project); rebuild(); render(); toast("번호 위치를 기본으로 되돌렸습니다"); }, function (e) { toast(e.message, "err"); render(); });
       return;
     }
+    var feb = target.closest && target.closest("[data-flowedit]");
+    if (feb) { openFlowEditor(feb.getAttribute("data-flowedit")); return; }
     var wkb = target.closest && target.closest("[data-work]");
     if (wkb) {
       wkb.disabled = true;
