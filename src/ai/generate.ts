@@ -59,6 +59,7 @@ export function buildGenPrompts(m: Model, chunks: Chunk[], opts: PromptOptions =
   for (const s of m.systems.filter((x) => x.hasScreens)) out[`ia:${s.code}`] = iaGen(c, s.code);
   for (const n of m.ia.nodes.filter((x) => x.kind !== "MENU")) out[`sb:${n.id}`] = sbGen(c, n.id);
   for (const sb of m.storyboard.screens) if (c.node(sb.screenId)) out[`desc:${sb.screenId}`] = descGen(c, sb.screenId);
+  for (const n of m.ia.nodes.filter((x) => x.kind !== "MENU")) out[`qa:${n.id}`] = qaGen(c, n.id);
   for (const r of c.rtm.rows) if (r.status !== "EXCLUDED" && r.tasks.length) out[`flow:${r.requirementId}`] = flowGen(c, r.requirementId);
   for (const d of m.design.systems) if (d.status === "SELECTED") out[`ds:${d.systemCode}`] = dsGen(c, d.systemCode);
   for (const s of m.systems.filter((x) => x.hasScreens)) out[`dsc:${s.code}`] = dscGen(c, s.code);
@@ -161,6 +162,46 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
 }
 
 /** 설명(디스크립션)만 다시 쓰기 — 항목·와이어프레임은 그대로 두고 planner·customer·options·validation을 채운다. 대상 항목은 요청할 때 채운다 */
+/** 정보구조도 화면 기반 테스트 케이스 (화면설계서·Task·지원 채널을 근거로) */
+function qaGen(c: Ctx, screenId: string): GenPrompt {
+  const node = c.node(screenId)!;
+  const sb = c.m.storyboard.screens.find((x) => x.screenId === screenId);
+  const tasks = c.tasksOfScreen(screenId);
+  const ch = c.m.ia.channels;
+  const devices = node.devices?.length ? node.devices : ch.map((x) => x.id);
+  const prompt = finish([
+    head(`${screenId} ${node.name} 테스트 케이스`, "이 화면의 테스트 케이스(테스트 시나리오)를 만들어 주세요."),
+    section(
+      "대상",
+      [
+        projectLine(c),
+        `- 화면: ${screenId} ${node.name} · ${KIND[node.kind]} · Location: ${c.path(screenId).join(" > ")}${node.loginRequired ? " · 로그인 필요" : ""}`,
+        node.func ? `- 화면기능: ${node.func}` : "",
+        `- 지원 채널: ${devices.map((d) => `${d}(${ch.find((x) => x.id === d)?.label ?? d})`).join(", ")}`,
+        ...tasks.map(({ r, t }) => `- Task: ${t.taskId} ${t.actor ? `${t.actor}: ` : ""}${t.action} (${r.requirementId} ${r.title})`),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    ),
+    section("화면설계서", sb ? componentLines(sb) : "- (아직 없음 — 화면 이름·Task로 작성)"),
+    section(
+      "작성 규칙",
+      [
+        "- 정상 흐름(기능), 화면 요소(UI), 입력 검증·오류 메시지(예외), 권한·로그인(권한), 다른 화면·시스템 이동(연계)을 고루 넣는다",
+        "- 화면설계서의 필수 입력·길이·형식·메시지·선택지·이동 링크는 빠짐없이 케이스로 만든다. componentNo에 설명 번호를 적는다",
+        "- 채널마다 다르게 확인할 것(모바일 레이아웃, 터치, 화면 회전 등)이 있으면 devices에 그 채널만 적은 케이스를 따로 만든다. 모든 채널 공통이면 devices를 비운다",
+        "- steps는 1. 2. 3. 번호로, expected는 확인할 수 있는 결과로 쓴다. 근거 없는 수치·문구는 지어내지 않는다",
+        "- 10~25개",
+      ].join("\n"),
+    ),
+    section(
+      "출력 형식",
+      '{"cases":[{"title":"…","type":"기능|UI|예외|권한|연계","pre":"사전 조건","steps":"1. …\\n2. …","expected":"…","taskIds":["…"],"componentNo":1,"devices":[]}]}',
+    ),
+  ]);
+  return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 테스트 케이스`, prompt, requiresInstruction: false };
+}
+
 export const DESC_SLOT = "{{COMPONENTS}}";
 function descGen(c: Ctx, screenId: string): GenPrompt {
   const node = c.node(screenId)!;

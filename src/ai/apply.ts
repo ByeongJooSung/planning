@@ -99,17 +99,29 @@ function applyKind(m: Model, kind: GenKind, target: string, output: unknown, c: 
   }
 }
 
+/** 정보구조도 표 관리 항목 (AI가 구조를 고쳐도 유지) */
+export const SHEET_FIELDS = ["devices", "func", "boardType", "pages", "track", "devNeeded", "note", "decision"] as const;
+
 export function applyIa(m: Model, systemCode: string, output: unknown): ApplyResult {
   const out = IaOutput.parse(output);
   if (!m.systems.some((s) => s.code === systemCode && s.hasScreens)) throw new Error(`화면이 있는 시스템이 아닙니다: ${systemCode}`);
   const work = structuredClone(m);
   const before = work.ia.nodes.filter((n) => n.systemCode === systemCode);
-  const after = out.nodes.map((n) => IANode.parse({ ...n, systemCode }));
+  // 표(엑셀)에서 관리하던 항목은 AI 결과에 없으면 그대로 둔다
+  const prevById = new Map(before.map((n) => [n.id, n]));
+  const after = out.nodes.map((n) => {
+    const prev = prevById.get(n.id);
+    const keep: Partial<IANode> = {};
+    if (prev) for (const k of SHEET_FIELDS) if ((n as Record<string, unknown>)[k] === undefined && prev[k] !== undefined) (keep as Record<string, unknown>)[k] = prev[k];
+    return IANode.parse({ ...keep, ...n, systemCode });
+  });
   const ids = new Set(after.map((n) => n.id));
   const removed = before.filter((n) => !ids.has(n.id));
   const beforeIds = new Set(before.map((n) => n.id));
   work.ia.nodes = [...work.ia.nodes.filter((n) => n.systemCode !== systemCode), ...after];
   for (const n of removed) if (n.kind !== "MENU" && !work.ia.retiredIds.includes(n.id)) work.ia.retiredIds.push(n.id);
+  const gone = new Set(removed.map((n) => n.id));
+  work.ia.tests = work.ia.tests.filter((t) => !gone.has(t.screenId));
   commit(m, work);
   const added = after.filter((n) => !beforeIds.has(n.id)).map((n) => n.id);
   return {

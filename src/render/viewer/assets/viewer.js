@@ -44,6 +44,7 @@
     design: ["디자인 시스템", "시스템 영역마다 컨셉 3종을 제안받아 하나를 고르면 디자인 시스템이 만들어집니다. 화면설계서와 프로토타입은 이 디자인으로 그립니다."],
     ia: ["정보구조도", "Task별로 만든 화면이 통합된 시스템별 메뉴·화면 구조"],
     sb: ["화면설계서", "시스템별 모든 화면의 화면설계서 — Task 연결과 상관없이 작성하고, 화면과 Task를 직접 연결합니다"],
+    qa: ["테스트", "정보구조도 화면 기준 테스트 케이스와 채널별(웹·모바일·태블릿 …) 결과 — 화면설계서로 초안을 만들거나 AI로 작성합니다"],
     proto: ["프로토타입 통합본", "시스템 구분별로 모든 화면을 메뉴 순서대로 이어 붙인 클릭 가능한 프로토타입과 설계 진행 순서"],
     rtm: ["요구사항 추적표", "요구사항 → 시스템별 Task → 산출물 연결과 충족 상태"],
     flow: ["시스템별 프로세스 플로우", "Task별 흐름을 통합한 프로세스를 시스템 영역별로 나눠 봅니다"],
@@ -59,6 +60,7 @@
     if (saved.route && (saved.route.view === "home" || (typeof saved.route.p === "number" && saved.route.p < DATA.projects.length))) state.route = saved.route;
     if (saved.rtmView) state.rtmView = saved.rtmView;
   } catch (e) { /* 저장소 없음 */ }
+  try { state.iaView = localStorage.getItem("planning-ia-view") || "tree"; } catch (e) { state.iaView = "tree"; }
   var hash = (location.hash || "").slice(1);
   if (!SRV) DATA.projects.forEach(function (p, i) { if (p.model.project.code === hash) state.route = { view: "project", p: i, page: "dash" }; });
 
@@ -189,7 +191,7 @@
       html += '<div class="proj-id"><span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><b>' + esc(pr.name) + "</b></div>";
       var groups = [
         ["프로젝트", [["dash", null], ["kb", p.model.sources.length], ["req", p.rtm.rows.length], ["design", sel + "/" + ds.length]]],
-        ["통합 산출물", [["ia", null], ["sb", p.model.storyboard.screens.length + "/" + p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).length], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
+        ["통합 산출물", [["ia", null], ["sb", p.model.storyboard.screens.length + "/" + p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).length], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["qa", (p.model.ia.tests || []).length || null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
         ["이력", [["ver", p.snapshots.length]]]
       ];
       if (SRV) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
@@ -245,6 +247,7 @@
       case "flow": return renderFlows();
       case "proto": return renderProtoPage();
       case "sb": return renderSb();
+      case "qa": return renderQa();
       case "ver": return renderVer();
       case "members": return SRV ? renderMembers() : renderDash();
       case "aiset": return SRV ? renderAiSettings() : renderDash();
@@ -532,6 +535,7 @@
       select: select,
       editable: SRV ? canEdit() : false,
       tasks: allTasks(p).map(function (t) { return { id: t.taskId, label: (t.actor ? t.actor + ": " : "") + t.action, systemCode: t.systemCode }; }),
+      channels: channels(p),
       status: function (id) { var w = workOf(P(), "sb:" + id); return { status: w.status, label: WORK_LABEL[w.status] || w.status }; },
       hasSb: hasSb,
       project: p.model.project.name,
@@ -1382,9 +1386,335 @@
     }).join("");
     var aiBar = '<div class="ai-bar"><span class="hint">AI 요청(프롬프트 복사)</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
     done = screens.filter(function (n) { return workOf(p, "sb:" + n.id).status === "DONE"; }).length;
-    return '<section class="section">' + aiBar + '<div class="toolbar"><p class="hint" style="margin:0">화면 ' + screens.length + "개 중 화면설계서 완료 " + done + "개. 화면 옆 상태는 그 화면 화면설계서의 작업 상태(미진행·진행중·완료·재검토 필요)입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
+    var seg = '<div class="seg" role="group" aria-label="보기"><button data-iaview="tree" aria-pressed="' + (state.iaView !== "sheet") + '">트리</button><button data-iaview="sheet" aria-pressed="' + (state.iaView === "sheet") + '">표(엑셀)</button></div>';
+    if (state.iaView === "sheet") return '<section class="section"><div class="toolbar">' + seg + sysFilters() + "</div>" + renderIaSheet(p) + "</section>";
+    return '<section class="section">' + aiBar + '<div class="toolbar">' + seg + '<p class="hint" style="margin:0">화면 ' + screens.length + "개 중 화면설계서 완료 " + done + "개. 화면 옆 상태는 그 화면 화면설계서의 작업 상태(미진행·진행중·완료·재검토 필요)입니다. Task ID를 누르면 Task 상세로 갑니다.</p>" + sysFilters() + "</div>" +
       (m.project.stages.S2 === "SKIPPED" ? '<p class="hint">기존 메뉴 수정(MODIFY) 프로젝트라 정보구조도 단계는 패스했습니다. 영향받는 기존 화면만 표시합니다.</p>' : "") +
       '<div class="ia-cols">' + cols + "</div></section>";
+  }
+
+  // ── 정보구조도 표(엑셀) · 채널 · 테스트 ─────────────
+  var TRACK = { NOT_STARTED: "미진행", IN_PROGRESS: "진행중", DONE: "완료", NA: "해당없음" };
+  var QA_ST = { PASS: "통과", FAIL: "실패", BLOCKED: "보류", NA: "해당없음" };
+  var QA_TYPES = ["기능", "UI", "예외", "권한", "연계"];
+  var BOARD_TYPES = ["목록형", "갤러리형", "웹진형", "FAQ형", "Q&A형", "달력형"];
+  var DEV_NEEDED = ["신규", "기능개선", "유지", "해당없음"];
+  function channels(p) { return (p.model.ia.channels && p.model.ia.channels.length) ? p.model.ia.channels : [{ id: "WEB", label: "웹(PC)" }, { id: "MOBILE", label: "모바일" }, { id: "TABLET", label: "태블릿" }]; }
+  /** 정보구조도 순서(깊이 우선)로 한 시스템의 노드와 깊이·경로 */
+  function iaRows(p, code) {
+    var nodes = p.model.ia.nodes.filter(function (n) { return n.systemCode === code; }), ids = {}, out = [];
+    nodes.forEach(function (n) { ids[n.id] = true; });
+    (function walk(pid, d, path) {
+      nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; }).forEach(function (n) {
+        var pp = path.concat([n.name]);
+        out.push({ n: n, d: d, path: pp });
+        walk(n.id, d + 1, pp);
+      });
+    })(null, 0, []);
+    return out;
+  }
+  function testsOf(p, sid) { return (p.model.ia.tests || []).filter(function (t) { return t.screenId === sid; }); }
+  function caseDevs(p, t) {
+    if (t.devices && t.devices.length) return t.devices;
+    var n = p.model.ia.nodes.find(function (x) { return x.id === t.screenId; });
+    return n && n.devices && n.devices.length ? n.devices : channels(p).map(function (c) { return c.id; });
+  }
+  /** 채널 하나의 테스트 집계 (cases: 케이스 목록) */
+  function qaStat(p, cases, dev) {
+    var s = { total: 0, pass: 0, fail: 0, blocked: 0, na: 0 };
+    cases.forEach(function (t) {
+      if (caseDevs(p, t).indexOf(dev) < 0) return;
+      s.total++;
+      var r = t.results && t.results[dev];
+      if (r) s[r.status === "PASS" ? "pass" : r.status === "FAIL" ? "fail" : r.status === "BLOCKED" ? "blocked" : "na"]++;
+    });
+    s.done = s.pass + s.fail + s.blocked + s.na;
+    return s;
+  }
+  function qaMini(s) {
+    if (!s.total) return '<span class="qa-mini none">—</span>';
+    var cls = s.fail ? "fail" : s.done === s.total ? "ok" : s.done ? "run" : "todo";
+    return '<span class="qa-mini ' + cls + '" title="통과 ' + s.pass + " · 실패 " + s.fail + " · 보류 " + s.blocked + " · 해당없음 " + s.na + " · 미실행 " + (s.total - s.done) + '">' + s.pass + "/" + s.total + (s.fail ? " ✕" + s.fail : "") + "</span>";
+  }
+  function maxDepth(rows) { return rows.reduce(function (m, r) { return Math.max(m, r.d + 1); }, 3); }
+
+  /** 채널·테스트 칸을 표 오른쪽에 고정 — 칸마다 오른쪽 끝에서의 거리 */
+  var CH_W = 62, CHT_W = 78;
+  function chPin(ch, i, test) {
+    var right = 0;
+    for (var j = i; j < ch.length; j++) right += (j > i || !test ? CHT_W : 0) + (j > i ? CH_W : 0);
+    if (!test) right += 0;
+    return ' style="right:' + right + "px;min-width:" + (test ? CHT_W : CH_W) + "px;max-width:" + (test ? CHT_W : CH_W) + 'px"';
+  }
+  function renderIaSheet(p) {
+    var ed = SRV && canEdit(), ch = channels(p);
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens && sysOn(s.code); });
+    var tools = '<div class="ia-sheet-tools">' + (ed ? '<button class="btn-sm" data-act="ia-channels">채널 관리 · ' + esc(ch.map(function (c) { return c.label; }).join(" · ")) + "</button>" : "") +
+      '<button class="btn-sm" data-iaxlsx="1">⬇ 엑셀(.xlsx) 내려받기</button><span class="hint">칸을 바로 고치면 저장됩니다. 기획은 화면설계서 작업 상태로 채워지고, 오른쪽 채널 칸에서 지원 여부와 채널별 테스트 결과(통과/전체)를 봅니다.</span></div>';
+    var body = systems.map(function (s) {
+      var rows = iaRows(p, s.code), D = maxDepth(rows);
+      var head1 = '<tr><th colspan="' + (D + 6) + '" class="g">메뉴 구성</th><th colspan="5" class="g">진행 현황</th><th colspan="2" class="g">비고</th><th colspan="' + (ch.length * 2) + '" class="g ch pin" style="right:0;min-width:' + ch.length * (CH_W + CHT_W) + 'px">채널 · 테스트 (지원 여부 · 통과/전체)</th></tr>';
+      var head2 = "<tr>" + Array.apply(null, Array(D)).map(function (_, i) { return "<th>" + (i + 1) + "Depth</th>"; }).join("") +
+        "<th>화면기능</th><th>구분</th><th>메뉴/화면 ID</th><th>게시판 유형</th><th>로그인</th><th>페이지<br>본수</th><th>기획</th><th>디자인</th><th>퍼블리싱</th><th>개발</th><th>개발 필요</th><th>비고</th><th>의사결정 사항</th>" +
+        ch.map(function (c, i) { return '<th class="ch pin"' + chPin(ch, i, false) + ">" + esc(c.label) + '</th><th class="ch t pin"' + chPin(ch, i, true) + ">테스트</th>"; }).join("") + "</tr>";
+      var trs = rows.map(function (r) {
+        var n = r.n, menu = n.kind === "MENU", key = function (f) { return ' data-cell="' + esc(n.id + "|" + f) + '"'; };
+        var inp = function (f, v, ph, list) { return ed ? '<input class="cell"' + key(f) + ' value="' + esc(v == null ? "" : v) + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + (list ? ' list="' + list + '"' : "") + ">" : esc(v == null ? "" : v); };
+        var sel = function (f, v, opts) { return ed ? '<select class="cell"' + key(f) + ">" + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(v || "") ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select>" : esc((opts.find(function (o) { return String(o[0]) === String(v || ""); }) || ["", ""])[1]); };
+        var tr = function (k) { var v = n.track && n.track[k]; return menu ? "" : sel("track." + k, v || "NOT_STARTED", [["NOT_STARTED", "미진행"], ["IN_PROGRESS", "진행중"], ["DONE", "완료"], ["NA", "해당없음"]]); };
+        var depth = Array.apply(null, Array(D)).map(function (_, i) {
+          if (i < r.d) return '<td class="anc">' + esc(r.path[i]) + "</td>";
+          if (i > r.d) return "<td></td>";
+          return '<td class="nm' + (menu ? " menu" : "") + '">' + inp("name", n.name) + "</td>";
+        }).join("");
+        var plan = menu ? "" : (function () { var w = workOf(p, "sb:" + n.id).status; return '<span class="pill ' + (WORK_CLS[w] || "") + '">' + esc(WORK_LABEL[w] || w) + "</span>"; })();
+        var cases = menu ? [] : testsOf(p, n.id);
+        var chCells = ch.map(function (c, ci) {
+          if (menu) return '<td class="ch pin"' + chPin(ch, ci, false) + '></td><td class="ch t pin"' + chPin(ch, ci, true) + "></td>";
+          var on = (n.devices || []).indexOf(c.id) >= 0;
+          return '<td class="ch pin"' + chPin(ch, ci, false) + ">" + (ed ? '<input type="checkbox"' + key("dev:" + c.id) + (on ? " checked" : "") + ' aria-label="' + esc(n.name + " " + c.label + " 지원") + '">' : on ? "✓" : "") + '</td><td class="ch t pin"' + chPin(ch, ci, true) + '><button class="lnk" data-qago="' + esc(n.id) + '">' + qaMini(qaStat(p, cases, c.id)) + "</button></td>";
+        }).join("");
+        return '<tr class="' + (menu ? "menu" : "scr") + '">' + depth +
+          "<td>" + (menu ? "" : inp("func", n.func)) + '</td><td class="k">' + esc(KIND[n.kind] || n.kind) + '</td><td class="mono">' + (menu ? "-" : esc(n.id)) + "</td>" +
+          "<td>" + (menu ? "" : inp("boardType", n.boardType, "", "dl-board")) + '</td><td class="c">' + (menu ? "" : ed ? '<input type="checkbox"' + key("loginRequired") + (n.loginRequired ? " checked" : "") + ">" : n.loginRequired ? "Y" : "") + '</td><td class="c">' + (menu ? "" : ed ? '<input class="cell num" type="number" min="0"' + key("pages") + ' value="' + esc(n.pages == null ? "" : n.pages) + '">' : esc(n.pages == null ? "" : n.pages)) + "</td>" +
+          '<td class="c">' + plan + '</td><td class="c">' + tr("design") + '</td><td class="c">' + tr("publish") + '</td><td class="c">' + tr("dev") + "</td><td>" + (menu ? "" : inp("devNeeded", n.devNeeded, "", "dl-devneed")) + "</td>" +
+          "<td>" + inp("note", n.note) + "</td><td>" + inp("decision", n.decision) + "</td>" + chCells + "</tr>";
+      }).join("") || '<tr><td colspan="' + (D + 13 + ch.length * 2) + '" class="empty">등록된 메뉴·화면이 없습니다.</td></tr>';
+      var scr = rows.filter(function (r) { return r.n.kind !== "MENU"; });
+      var sum = ch.map(function (c) { var k = scr.filter(function (r) { return (r.n.devices || []).indexOf(c.id) >= 0; }).length; return esc(c.label) + " " + k; }).join(" · ");
+      return '<section class="section"><h2><i class="sq" style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + " <small>화면 " + scr.length + " · 채널 지원 " + sum + '</small></h2><div class="ia-sheet-wrap" data-sheetsys="' + esc(s.code) + '"><table class="ia-sheet">' + "<thead>" + head1 + head2 + "</thead><tbody>" + trs + "</tbody></table></div></section>";
+    }).join("");
+    return tools + '<datalist id="dl-board">' + BOARD_TYPES.map(function (x) { return '<option value="' + x + '">'; }).join("") + '</datalist><datalist id="dl-devneed">' + DEV_NEEDED.map(function (x) { return '<option value="' + x + '">'; }).join("") + "</datalist>" + (body || '<div class="box empty">화면이 있는 시스템이 없습니다.</div>');
+  }
+
+  // 표 칸 저장 — 순서대로 보내고, 다시 그린 뒤 스크롤·포커스를 되돌린다
+  var cellQ = Promise.resolve();
+  function quietCmd(c) {
+    var code = P().model.project.code;
+    cellQ = cellQ.then(function () {
+      return api("POST", "/api/projects/" + enc(code) + "/commands", { cmd: c }).then(function (r) {
+        var keep = {}, wy = window.scrollY;
+        document.querySelectorAll("[data-sheetsys],[data-qawrap]").forEach(function (w) { keep[w.getAttribute("data-sheetsys") || w.getAttribute("data-qawrap")] = [w.scrollLeft, w.scrollTop]; });
+        setProject(r.project);
+        rebuild();
+        render();
+        document.querySelectorAll("[data-sheetsys],[data-qawrap]").forEach(function (w) { var k = keep[w.getAttribute("data-sheetsys") || w.getAttribute("data-qawrap")]; if (k) { w.scrollLeft = k[0]; w.scrollTop = k[1]; } });
+        window.scrollTo(window.scrollX, wy);
+        if (state.cellFocus) { var el = document.querySelector('[data-cell="' + (window.CSS && CSS.escape ? CSS.escape(state.cellFocus) : state.cellFocus) + '"]'); if (el && document.activeElement === document.body) el.focus(); }
+        return r;
+      }, function (e) { toast(e.message, "err"); render(); });
+    });
+    return cellQ;
+  }
+  function cellSave(el) {
+    var k = el.getAttribute("data-cell"), i = k.indexOf("|"), id = k.slice(0, i), f = k.slice(i + 1);
+    if (f.indexOf("dev:") === 0) {
+      var devs = Array.prototype.filter.call(document.querySelectorAll("[data-cell]"), function (x) { var a = x.getAttribute("data-cell"); return a.indexOf(id + "|dev:") === 0 && x.checked; }).map(function (x) { return x.getAttribute("data-cell").slice(id.length + 5); });
+      return quietCmd({ op: "ia.cell", id: id, field: "devices", value: devs });
+    }
+    var v = el.type === "checkbox" ? el.checked : el.value;
+    return quietCmd({ op: "ia.cell", id: id, field: f, value: v });
+  }
+  ACTIONS_LATE["ia-channels"] = function () {
+    var p = P();
+    openForm({
+      eyebrow: "정보구조도", title: "채널 관리", submit: "저장",
+      intro: "한 줄에 채널 하나씩 <code>ID | 이름</code>으로 적습니다. ID는 영문 대문자로 시작(예: WEB, MOBILE, TABLET, APP_IOS). 지운 채널은 화면·테스트 케이스의 채널 지정에서도 빠집니다(테스트 결과 기록은 남습니다).",
+      fields: [{ name: "lines", label: "채널", type: "textarea", rows: 6, value: channels(p).map(function (c) { return c.id + " | " + c.label; }).join("\n"), required: true }],
+      onSubmit: function (v) {
+        var list = v.lines.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (l, i) {
+          var a = l.split("|"), id = a.length > 1 ? a[0].trim().toUpperCase() : "", label = (a.length > 1 ? a.slice(1).join("|") : a[0]).trim();
+          if (!id) id = { "웹": "WEB", "모바일": "MOBILE", "태블릿": "TABLET", "앱": "APP" }[label] || "CH" + (i + 1);
+          return { id: id.replace(/[^A-Z0-9_]/g, "_"), label: label || id };
+        });
+        return cmd({ op: "ia.channels", channels: list });
+      }
+    });
+  };
+
+  // ── 테스트 (정보구조도 화면 기준) ──────────────────
+  function renderQa() {
+    var p = P(), ed = SRV && canEdit(), ch = channels(p);
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens; });
+    if (!systems.length) return '<div class="box empty">화면이 있는 시스템이 없습니다.</div>';
+    var code = protoSys(p), rows = iaRows(p, code), screens = rows.filter(function (r) { return r.n.kind !== "MENU"; });
+    var all = (p.model.ia.tests || []).filter(function (t) { return screens.some(function (r) { return r.n.id === t.screenId; }); });
+    var chips = '<div class="filters">' + systems.map(function (s) {
+      var ids = {}; systemScreens(p, s.code).forEach(function (n) { ids[n.id] = true; });
+      var k = (p.model.ia.tests || []).filter(function (t) { return ids[t.screenId]; }).length;
+      return '<button class="fchip" data-dsys="' + esc(s.code) + '" aria-pressed="' + (s.code === code) + '"><i style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + "<em>" + k + "</em></button>";
+    }).join("") + "</div>";
+    var sel = state.qaSel && state.qaSel[code];
+    if (!screens.some(function (r) { return r.n.id === sel; })) sel = screens.length ? screens[0].n.id : null;
+    var board = '<div class="qa-board">' + ch.map(function (c) {
+      var s = qaStat(p, all, c.id), pct = s.total ? Math.round(s.pass / s.total * 100) : 0;
+      return '<div class="box qa-card"><b>' + esc(c.label) + '</b><div class="qa-bar"><i class="p" style="width:' + (s.total ? s.pass / s.total * 100 : 0) + '%"></i><i class="f" style="width:' + (s.total ? s.fail / s.total * 100 : 0) + '%"></i><i class="b" style="width:' + (s.total ? (s.blocked + s.na) / s.total * 100 : 0) + '%"></i></div><span class="hint">통과 ' + s.pass + " · 실패 " + s.fail + " · 보류 " + s.blocked + " · 미실행 " + (s.total - s.done) + " / " + s.total + "건 (" + pct + "%)</span></div>";
+    }).join("") + "</div>";
+    var list = rows.map(function (r) {
+      var n = r.n;
+      if (n.kind === "MENU") return '<div class="qa-menu" style="padding-left:' + (8 + r.d * 14) + 'px">▸ ' + esc(n.name) + "</div>";
+      var cs = testsOf(p, n.id);
+      return '<button class="sb-row qa-row' + (n.id === sel ? " on" : "") + '" data-qasel="' + esc(n.id) + '" style="padding-left:' + (10 + r.d * 14) + 'px"><span class="mono">' + esc(n.id) + "</span><b>" + esc(n.name) + '</b><span class="qa-devs">' + ch.map(function (c) {
+        var sup = (n.devices || []).indexOf(c.id) >= 0;
+        return '<span class="qa-dev' + (sup ? "" : " off") + '" title="' + esc(c.label) + (sup ? " 지원" : " 미지정") + '">' + esc(c.label.replace(/\(.*?\)/g, "").slice(0, 3)) + " " + qaMini(qaStat(p, cs, c.id)) + "</span>";
+      }).join("") + "</span></button>";
+    }).join("");
+    var tools = '<div class="toolbar">' + chips + '<span class="sp"></span><button class="btn-sm" data-qaxlsx="' + esc(code) + '">⬇ 테스트 시트(.xlsx)</button>' + (ed ? '<button class="btn-sm" data-page="ia" data-iaview="sheet">채널 지정 (정보구조도 표)</button>' : "") + "</div>";
+    return '<section class="section">' + tools + board +
+      '<div class="sb-page qa-page"><nav class="sb-list" aria-label="' + esc(code) + ' 정보구조도">' + (list || '<div class="empty">정보구조도에 화면이 없습니다.</div>') + "</nav>" +
+      '<div class="sb-main">' + (sel ? qaSheet(p, sel) : '<div class="box empty">화면을 고르세요.</div>') + "</div></div></section>";
+  }
+  function qaSheet(p, sid) {
+    var ed = SRV && canEdit(), ch = channels(p), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {};
+    var cs = testsOf(p, sid), sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; }), g = p.gens["qa:" + sid];
+    var devs = (n.devices || []).map(function (d) { var c = ch.find(function (x) { return x.id === d; }); return c ? c.label : d; });
+    var head = '<div class="sheet-bar"><b>' + esc(n.name || sid) + '</b><span class="hint mono">' + esc(sid) + '</span><span class="hint">지원 채널: ' + (devs.length ? esc(devs.join(" · ")) : "미지정 (모든 채널로 테스트)") + '</span><span class="sp"></span>' +
+      (ed ? actBtn("qa-add", "+ 케이스 추가", sid) + '<button class="btn-sm" data-qadraft="' + esc(sid) + '" title="화면설계서의 필수 입력·길이·형식·메시지·선택지·이동과 연결 Task로 케이스를 만듭니다">화면설계서로 초안</button>' + (g ? '<button class="btn-sm ai" data-qaai="' + esc(sid) + '">✦ AI로 케이스 만들기</button>' : "") : "") + "</div>";
+    if (!cs.length) return '<article class="box sheet">' + head + '<div class="empty">아직 테스트 케이스가 없습니다.' + (ed ? (sb ? " ‘화면설계서로 초안’을 누르면 화면설계서 설명 번호와 Task로 케이스를 만듭니다." : " 화면설계서가 아직 없어 초안은 화면 진입·Task 위주로 만들어집니다.") : "") + "</div></article>";
+    var rows = cs.map(function (t, i) {
+      var ds = caseDevs(p, t);
+      var res = ch.map(function (c, ci) {
+        var pin = ' style="right:' + (ch.length - 1 - ci) * 104 + 'px"';
+        if (ds.indexOf(c.id) < 0) return '<td class="qa-r na"' + pin + ' title="이 케이스의 테스트 채널이 아닙니다">·</td>';
+        var r = t.results && t.results[c.id], v = r ? r.status : "";
+        var cell = ed ? '<select class="qa-sel ' + (v || "none") + '" data-qares="' + esc(t.id + "|" + c.id) + '" aria-label="' + esc(t.title + " " + c.label + " 결과") + '"><option value="">미실행</option>' + Object.keys(QA_ST).map(function (k) { return '<option value="' + k + '"' + (k === v ? " selected" : "") + ">" + QA_ST[k] + "</option>"; }).join("") + "</select>" : '<span class="qa-st ' + (v || "none") + '">' + (v ? QA_ST[v] : "미실행") + "</span>";
+        return '<td class="qa-r"' + pin + ">" + cell + (r ? '<span class="hint" title="' + esc((r.note || "") + " " + fmtDate(r.at)) + '">' + esc(r.by || "") + "</span>" : "") + "</td>";
+      }).join("");
+      return "<tr><td class=\"mono\">" + esc(t.id.replace("TC-" + sid + "-", "")) + '</td><td class="ty"><span class="tag">' + esc(t.type) + "</span>" + (t.source !== "MANUAL" ? '<br><span class="hint">' + (t.source === "AI" ? "AI" : "초안") + "</span>" : "") + "</td><td><b>" + esc(t.title) + "</b>" + (t.componentNo ? ' <span class="no sm">' + t.componentNo + "</span>" : "") + (t.taskIds.length ? '<br><span class="hint mono">' + esc(t.taskIds.join(", ")) + "</span>" : "") +
+        (ed ? '<div class="row-tools">' + actBtn("qa-edit", "편집", t.id) + actBtn("qa-rm", "삭제", t.id) + "</div>" : "") + "</td><td class=\"pre pc\">" + esc(t.pre) + '</td><td class="pre st">' + esc(t.steps) + '</td><td class="pre ex">' + esc(t.expected) + "</td>" + res + "</tr>";
+    }).join("");
+    return '<article class="box sheet">' + head + '<div class="qa-wrap" data-qawrap="' + esc(sid) + '"><table class="qa-table"><thead><tr><th>No</th><th>유형</th><th>테스트 항목</th><th>사전 조건</th><th>절차</th><th>기대 결과</th>' + ch.map(function (c, ci) { return '<th class="qa-r" style="right:' + (ch.length - 1 - ci) * 104 + 'px">' + esc(c.label) + "</th>"; }).join("") + "</tr></thead><tbody>" + rows + "</tbody></table></div></article>";
+  }
+  function qaForm(sid, t) {
+    var p = P(), ch = channels(p), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {};
+    var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; });
+    openForm({
+      eyebrow: sid + " · " + (n.name || ""), title: t ? "테스트 케이스 편집" : "테스트 케이스 추가", submit: "저장",
+      fields: [
+        { name: "title", label: "테스트 항목", required: true, value: t ? t.title : "", placeholder: "예: 필수 항목 미입력 시 안내" },
+        { name: "type", label: "유형", type: "select", options: QA_TYPES.map(function (x) { return [x, x]; }), value: t ? t.type : "기능" },
+        { name: "pre", label: "사전 조건", value: t ? t.pre : "", placeholder: n.loginRequired ? "로그인한 상태" : "" },
+        { name: "steps", label: "절차", type: "textarea", rows: 4, value: t ? t.steps : "", placeholder: "1. …\n2. …" },
+        { name: "expected", label: "기대 결과", type: "textarea", rows: 3, value: t ? t.expected : "" },
+        { name: "componentNo", label: "화면설계서 설명 번호", type: "select", options: [["", "(없음)"]].concat((sb ? sb.components : []).map(function (c) { return [String(c.no), c.no + ". " + c.label]; })), value: t && t.componentNo ? String(t.componentNo) : "" },
+        { name: "taskIds", label: "Task (쉼표로 구분)", value: t ? t.taskIds.join(", ") : (n.taskIds || []).join(", ") },
+        { type: "html", html: '<div class="fm-row"><label>테스트 채널 <span class="hint">아무것도 고르지 않으면 화면의 지원 채널 전부</span></label><div class="chk-row">' + ch.map(function (c) { return '<label class="fm-check"><input type="checkbox" data-qadev="' + esc(c.id) + '"' + (t && t.devices.indexOf(c.id) >= 0 ? " checked" : "") + "> " + esc(c.label) + "</label>"; }).join("") + "</div></div>" }
+      ],
+      onSubmit: function (v) {
+        return cmd({ op: "qa.case", case: { id: t ? t.id : undefined, screenId: sid, title: v.title, type: v.type, pre: v.pre, steps: v.steps, expected: v.expected, componentNo: v.componentNo ? Number(v.componentNo) : undefined, taskIds: v.taskIds.split(",").map(function (x) { return x.trim(); }).filter(Boolean), devices: picked("qadev") } });
+      }
+    });
+  }
+  ACTIONS_LATE["qa-add"] = function (sid) { qaForm(sid, null); };
+  ACTIONS_LATE["qa-edit"] = function (id) { var t = (P().model.ia.tests || []).find(function (x) { return x.id === id; }); if (t) qaForm(t.screenId, t); };
+  ACTIONS_LATE["qa-rm"] = function (id) { if (window.confirm(id + " 테스트 케이스를 지울까요? 결과 기록도 함께 지워집니다.")) cmd({ op: "qa.rm", id: id }).catch(function (e) { toast(e.message, "err"); }); };
+  function qaAi(sid, btn) {
+    var p = P(), g = p.gens["qa:" + sid];
+    if (!g) return;
+    if (!AI.sample || !p.ai) { toast("AI 설정이 없습니다. AI 설정에서 연결을 등록하세요", "err"); return; }
+    if (btn) { btn.disabled = true; btn.textContent = "AI가 만드는 중…"; }
+    AI.sample.json(g.prompt, { cache: false }).then(function (out) {
+      return cmd({ op: "qa.ai", screenId: sid, output: out });
+    }).catch(function (e) { toast("AI 케이스를 만들지 못했습니다: " + (e && e.message || e), "err"); render(); });
+  }
+
+  // ── 엑셀(.xlsx) — 셀 서식(머리글·테두리·줄바꿈)과 열 너비를 넣은 최소 구성 ──
+  function xmlEsc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ""); }
+  function colName(i) { var s = ""; i++; while (i) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+  /** sheets: [{name, title, head:[[…]], rows:[[…]], widths:[…], merges:["A1:C1"]}] */
+  function xlsx(sheets) {
+    var files = [], wbSheets = "", rels = "", ct = "";
+    sheets.forEach(function (sh, si) {
+      var r = 1, xml = "", all = [];
+      if (sh.title) all.push({ cells: [sh.title], s: 3 });
+      (sh.head || []).forEach(function (h) { all.push({ cells: h, s: 1 }); });
+      sh.rows.forEach(function (row) { all.push({ cells: row, s: 2 }); });
+      all.forEach(function (row) {
+        xml += '<row r="' + r + '">' + row.cells.map(function (v, ci) {
+          var ref = colName(ci) + r, st = row.s === 2 && row.cells._menu ? 4 : row.s;
+          if (v == null || v === "") return '<c r="' + ref + '" s="' + st + '"/>';
+          if (typeof v === "number") return '<c r="' + ref + '" s="' + st + '"><v>' + v + "</v></c>";
+          return '<c r="' + ref + '" s="' + st + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(v) + "</t></is></c>";
+        }).join("") + "</row>";
+        r++;
+      });
+      var hr = (sh.title ? 1 : 0) + (sh.head || []).length;
+      var cols = (sh.widths || []).map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join("");
+      var merges = sh.merges && sh.merges.length ? '<mergeCells count="' + sh.merges.length + '">' + sh.merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join("") + "</mergeCells>" : "";
+      var last = colName(Math.max(1, (sh.widths || [1]).length) - 1);
+      files.push({ name: "xl/worksheets/sheet" + (si + 1) + ".xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="' + hr + '" topLeftCell="A' + (hr + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' + (cols ? "<cols>" + cols + "</cols>" : "") + "<sheetData>" + xml + "</sheetData>" + (sh.head && sh.head.length && r > hr + 1 ? '<autoFilter ref="A' + hr + ":" + last + (r - 1) + '"/>' : "") + merges + "</worksheet>" });
+      var nm = String(sh.name).replace(/[\[\]:*?\/\\]/g, "_").slice(0, 31) || "Sheet" + (si + 1);
+      wbSheets += '<sheet name="' + xmlEsc(nm) + '" sheetId="' + (si + 1) + '" r:id="rId' + (si + 1) + '"/>';
+      rels += '<Relationship Id="rId' + (si + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (si + 1) + '.xml"/>';
+      ct += '<Override PartName="/xl/worksheets/sheet' + (si + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    });
+    var n = sheets.length;
+    var styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="3"><font><sz val="10"/><name val="맑은 고딕"/></font><font><b/><sz val="10"/><name val="맑은 고딕"/></font><font><b/><sz val="14"/><name val="맑은 고딕"/></font></fonts>' +
+      '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F1"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    files.unshift(
+      { name: "[Content_Types].xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ct + "</Types>" },
+      { name: "_rels/.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: "xl/workbook.xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + wbSheets + "</sheets></workbook>" },
+      { name: "xl/_rels/workbook.xml.rels", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '<Relationship Id="rId' + (n + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+      { name: "xl/styles.xml", data: styles }
+    );
+    return FlowExport.zip(files);
+  }
+  function saveXlsx(bytes, name) { FlowExport.download(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name.replace(/[\\/:*?"<>|\s]+/g, "_") + ".xlsx"); }
+  function iaXlsx() {
+    var p = P(), ch = channels(p), pr = p.model.project;
+    var sheets = p.model.systems.filter(function (s) { return s.hasScreens; }).map(function (s) {
+      var rows = iaRows(p, s.code), D = maxDepth(rows);
+      var h2 = [].concat(Array.apply(null, Array(D)).map(function (_, i) { return (i + 1) + "Depth"; }), ["화면기능", "구분", "메뉴/화면 ID", "게시판 유형", "로그인 시 이용", "페이지 본수", "기획 완료 여부", "디자인 완료 여부", "퍼블 완료 여부", "개발 완료 여부", "기능개선/신규 필요여부", "연결 Task", "비고", "의사결정 사항"], ch.map(function (c) { return c.label; }), ch.map(function (c) { return c.label + " 테스트"; }));
+      var fixed = D + 14;
+      var h1 = h2.map(function (_, i) { return i < D + 6 ? "메뉴 구성" : i < D + 11 ? "진행 현황" : i < fixed ? "비고" : i < fixed + ch.length ? "지원 채널" : "테스트 (통과/전체)"; });
+      var body = rows.map(function (r) {
+        var n = r.n, menu = n.kind === "MENU", cs = menu ? [] : testsOf(p, n.id);
+        var tk = function (k) { return menu ? "" : TRACK[(n.track && n.track[k]) || "NOT_STARTED"]; };
+        var row = [].concat(Array.apply(null, Array(D)).map(function (_, i) { return i === r.d ? n.name : ""; }),
+          [n.func || "", KIND[n.kind] || n.kind, menu ? "-" : n.id, n.boardType || "", menu ? "" : n.loginRequired ? "Y" : "N", n.pages == null ? "" : n.pages, menu ? "" : WORK_LABEL[workOf(p, "sb:" + n.id).status], tk("design"), tk("publish"), tk("dev"), n.devNeeded || "", (n.taskIds || []).join(", "), n.note || "", n.decision || ""],
+          ch.map(function (c) { return menu ? "" : (n.devices || []).indexOf(c.id) >= 0 ? "O" : ""; }),
+          ch.map(function (c) { if (menu) return ""; var st = qaStat(p, cs, c.id); return st.total ? st.pass + "/" + st.total + (st.fail ? " (실패 " + st.fail + ")" : "") : ""; }));
+        row._menu = menu;
+        return row;
+      });
+      var merges = [], i0 = 0;
+      h1.forEach(function (v, i) { if (i === h1.length - 1 || h1[i + 1] !== v) { if (i > i0) merges.push(colName(i0) + "2:" + colName(i) + "2"); i0 = i + 1; } });
+      merges.push("A1:" + colName(Math.min(h2.length - 1, 9)) + "1");
+      return { name: s.name + "(" + s.code + ")", title: pr.name + " - 메뉴구성도 / " + s.name, head: [h1, h2], rows: body, merges: merges,
+        widths: [].concat(Array.apply(null, Array(D)).map(function () { return 16; }), [30, 8, 22, 12, 9, 8, 10, 10, 10, 10, 12, 20, 24, 24], ch.map(function () { return 8; }), ch.map(function () { return 12; })) };
+    });
+    saveXlsx(xlsx(sheets), pr.code + "_정보구조도_" + new Date().toISOString().slice(0, 10));
+  }
+  function qaXlsx(code) {
+    var p = P(), ch = channels(p), pr = p.model.project;
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens && (!code || s.code === code); });
+    var sheets = systems.map(function (s) {
+      var rows = [];
+      iaRows(p, s.code).forEach(function (r) {
+        if (r.n.kind === "MENU") return;
+        testsOf(p, r.n.id).forEach(function (t) {
+          var ds = caseDevs(p, t);
+          rows.push([r.n.id, r.n.name, r.path.slice(0, -1).join(" > "), t.id, t.type, t.title, t.pre, t.steps, t.expected, t.taskIds.join(", "), t.componentNo || ""].concat(ch.map(function (c) {
+            if (ds.indexOf(c.id) < 0) return "-";
+            var x = t.results && t.results[c.id];
+            return x ? QA_ST[x.status] + (x.by ? " (" + x.by + " " + String(x.at).slice(0, 10) + ")" : "") + (x.note ? "\n" + x.note : "") : "미실행";
+          })));
+        });
+      });
+      return { name: s.name + " 테스트", title: pr.name + " - 테스트 케이스 / " + s.name, head: [["화면 ID", "화면명", "메뉴 위치", "케이스 ID", "유형", "테스트 항목", "사전 조건", "절차", "기대 결과", "Task", "설명 번호"].concat(ch.map(function (c) { return c.label + " 결과"; }))], rows: rows,
+        widths: [20, 18, 22, 22, 8, 28, 18, 36, 30, 16, 8].concat(ch.map(function () { return 16; })), merges: ["A1:F1"] };
+    });
+    saveXlsx(xlsx(sheets), pr.code + "_테스트_" + (code || "전체") + "_" + new Date().toISOString().slice(0, 10));
   }
 
   // ── 통합: 시스템별 프로세스 플로우 ─────────────
@@ -2440,7 +2770,7 @@
       if (r.view === "task") want = "/p/" + enc(code) + "/task/" + enc(r.taskId) + "/" + (r.tab || "flow");
       else {
         want = "/p/" + enc(code) + "/" + (r.page || "dash");
-        if ((r.page === "design" || r.page === "proto" || r.page === "sb") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
+        if ((r.page === "design" || r.page === "proto" || r.page === "sb" || r.page === "qa") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
       }
     } else if (r.view === "account") want = "/account";
     else if (r.view === "admin") want = "/admin";
@@ -3389,6 +3719,17 @@
     if (cgb) { commentGen(cgb.dataset.cmtgen); return; }
     var udb = target.closest && target.closest("[data-dsundo]");
     if (udb) { dsUndo(udb.dataset.dsundo); return; }
+    var qb = target.closest && target.closest("[data-iaxlsx],[data-qaxlsx],[data-qago],[data-qadraft],[data-qaai],[data-iaview]");
+    if (qb) {
+      var qd = qb.dataset;
+      if (qd.iaxlsx) iaXlsx();
+      else if (qd.qaxlsx) qaXlsx(qd.qaxlsx);
+      else if (qd.qago) { var qn = P().model.ia.nodes.find(function (x) { return x.id === qd.qago; }); if (qn) { state.dsSys[P().model.project.code] = qn.systemCode; state.qaSel = state.qaSel || {}; state.qaSel[qn.systemCode] = qn.id; } go({ view: "project", p: state.route.p, page: "qa" }); }
+      else if (qd.qadraft) { qb.disabled = true; cmd({ op: "qa.draft", screenId: qd.qadraft }).catch(function (e) { toast(e.message, "err"); render(); }); }
+      else if (qd.qaai) qaAi(qd.qaai, qb);
+      else if (qd.iaview) { state.iaView = qd.iaview; try { localStorage.setItem("planning-ia-view", qd.iaview); } catch (e) { /* 무시 */ } if (qd.page) go({ view: "project", p: state.route.p, page: qd.page }); else render(); }
+      return;
+    }
     var gb = target.closest && target.closest("[data-gen]");
     if (gb) { openLayer({ kind: "gen", key: gb.dataset.gen, sel: null }); return; }
     var tb = target.closest && target.closest("[data-dstune]");
@@ -3426,6 +3767,7 @@
     else if (d.sys) { var key = P().model.project.code + ":" + d.sys; state.off[key] = !state.off[key]; render(); }
     else if (d.fsys) { state.flowSys = d.fsys; render(); }
     else if (d.dsys) { state.dsSys[P().model.project.code] = d.dsys; render(); }
+    else if (d.qasel) { state.qaSel = state.qaSel || {}; state.qaSel[protoSys(P())] = d.qasel; render(); }
     else if (d.sbsel) { state.sbSel = state.sbSel || {}; state.sbSel[protoSys(P())] = d.sbsel; render(); }
     else if (d.pscreen) { state.proto[protoCtx().key] = d.pscreen; renderProto(); }
     else if (d.pstep) { var pcx = protoCtx(), ix = pcx.list.indexOf(state.proto[pcx.key]) + Number(d.pstep); if (pcx.list[ix]) { state.proto[pcx.key] = pcx.list[ix]; renderProto(); } }
@@ -3450,8 +3792,17 @@
     if (ev.target.getAttribute("id") === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
     else if (ev.target.id === "auth-form") { ev.preventDefault(); submitAuth(ev.target); }
   });
+  document.addEventListener("focusin", function (ev) { var k = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-cell"); if (k) state.cellFocus = k; });
+  document.addEventListener("keydown", function (ev) { var t = ev.target; if (ev.key === "Enter" && t && t.classList && t.classList.contains("cell") && t.tagName === "INPUT") { ev.preventDefault(); t.blur(); } });
   document.addEventListener("change", function (ev) {
     var tg = ev.target;
+    if (tg.hasAttribute && tg.hasAttribute("data-cell")) { cellSave(tg); return; }
+    if (tg.hasAttribute && tg.hasAttribute("data-qares")) {
+      var qa = tg.getAttribute("data-qares").split("|");
+      tg.className = "qa-sel " + (tg.value || "none");
+      quietCmd({ op: "qa.result", id: qa[0], device: qa[1], status: tg.value || null });
+      return;
+    }
     if (tg.dataset && tg.dataset.memrole) {
       api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(tg.dataset.memrole), { role: tg.value }).then(function () { toast("권한을 바꿨습니다"); renderMembersAsync(); }, function (e) { toast(e.message, "err"); renderMembersAsync(); });
       return;

@@ -205,6 +205,8 @@ export const Plan = z.object({
 
 // ── S2 정보구조도 ───────────────────────────────────────────────────────
 
+export const TrackStatus = z.enum(["NOT_STARTED", "IN_PROGRESS", "DONE", "NA"]);
+
 export const IANode = z.object({
   /** 메뉴 노드는 M-로 시작하는 내부 ID, 화면 노드는 화면 ID */
   id: z.string(),
@@ -217,12 +219,64 @@ export const IANode = z.object({
   taskIds: z.array(z.string()).default([]),
   change: ChangeMark.default("NEW"),
   changeReason: z.string().optional(),
+  // ── 정보구조도 표(엑셀) 관리 항목 ──
+  /** 지원 채널 (ia.channels의 id: 웹·모바일·태블릿 …). 없거나 비어 있으면 미지정 */
+  devices: z.array(z.string()).optional(),
+  /** 화면기능 (한 줄 설명) */
+  func: z.string().optional(),
+  /** 게시판 유형 (목록형·갤러리형·FAQ형 …) */
+  boardType: z.string().optional(),
+  /** 페이지 본수 */
+  pages: z.number().int().min(0).optional(),
+  /** 진행 현황 — 기획은 화면설계서 작업 상태로 계산, 나머지는 직접 관리 */
+  track: z.object({ design: TrackStatus.optional(), publish: TrackStatus.optional(), dev: TrackStatus.optional() }).optional(),
+  /** 기능개선/신규 필요 여부 */
+  devNeeded: z.string().optional(),
+  note: z.string().optional(),
+  /** 의사결정 사항 */
+  decision: z.string().optional(),
+});
+
+/** 정보구조도 채널 (웹·모바일·태블릿 …) — 프로젝트마다 늘리고 줄일 수 있다 */
+export const IaChannel = z.object({ id: z.string().regex(/^[A-Z][A-Z0-9_]{0,15}$/), label: z.string().min(1) });
+export const DEFAULT_CHANNELS = [
+  { id: "WEB", label: "웹(PC)" },
+  { id: "MOBILE", label: "모바일" },
+  { id: "TABLET", label: "태블릿" },
+];
+
+/** 테스트 결과 (채널별) */
+export const TestResult = z.object({
+  status: z.enum(["PASS", "FAIL", "BLOCKED", "NA"]),
+  at: z.string(),
+  by: z.string().default(""),
+  note: z.string().default(""),
+});
+/** 정보구조도 화면 기반 테스트 케이스 */
+export const TestCase = z.object({
+  id: z.string(),
+  screenId: z.string(),
+  title: z.string().min(1),
+  /** 기능 · UI · 예외 · 권한 · 연계 */
+  type: z.string().default("기능"),
+  pre: z.string().default(""),
+  steps: z.string().default(""),
+  expected: z.string().default(""),
+  taskIds: z.array(z.string()).default([]),
+  /** 테스트할 채널. 비어 있으면 화면의 지원 채널 전부 */
+  devices: z.array(z.string()).default([]),
+  /** 화면설계서 설명 번호 */
+  componentNo: z.number().int().optional(),
+  source: z.enum(["MANUAL", "DRAFT", "AI"]).default("MANUAL"),
+  results: z.record(z.string(), TestResult).default({}),
 });
 
 export const IA = z.object({
   nodes: z.array(IANode).default([]),
   /** 한 번 부여된 뒤 삭제된 화면 ID. 재사용 금지 */
   retiredIds: z.array(z.string()).default([]),
+  channels: z.array(IaChannel).default(DEFAULT_CHANNELS),
+  tests: z.array(TestCase).default([]),
 });
 
 // ── S3 다이어그램 ───────────────────────────────────────────────────────
@@ -504,6 +558,8 @@ export type Task = z.infer<typeof Task>;
 export type Policies = z.infer<typeof Policies>;
 export type Plan = z.infer<typeof Plan>;
 export type IANode = z.infer<typeof IANode>;
+export type TestCase = z.infer<typeof TestCase>;
+export type IaChannel = z.infer<typeof IaChannel>;
 export type IA = z.infer<typeof IA>;
 export type Flow = z.infer<typeof Flow>;
 export type StoryboardScreen = z.infer<typeof StoryboardScreen>;

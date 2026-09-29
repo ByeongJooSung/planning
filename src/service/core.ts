@@ -11,6 +11,7 @@ import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec } from "../model/schema.js";
 import { applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
 import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
+import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, upsertCase } from "../project/qa-ops.js";
 
 const applyGenerated0 = (m: Model, reqId: string, flow: unknown) => applyFlow(m, reqId, flow, { keepPos: true });
 import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
@@ -91,6 +92,15 @@ export type Command =
   /** 화면 ↔ Task 연결 (수동) */
   | { op: "screen.tasks"; screenId: string; taskIds: string[] }
   | { op: "task.screens"; taskId: string; screenIds: string[] }
+  /** 정보구조도 표(엑셀) 칸 하나 고치기 · 채널(웹·모바일·태블릿) 목록 */
+  | { op: "ia.cell"; id: string; field: string; value: unknown }
+  | { op: "ia.channels"; channels: unknown }
+  /** 정보구조도 화면 기반 테스트 케이스 — 추가·수정 · 삭제 · 채널별 결과 · 규칙 초안 · AI 결과 넣기 */
+  | { op: "qa.case"; case: unknown }
+  | { op: "qa.rm"; id: string }
+  | { op: "qa.result"; id: string; device: string; status: string | null; note?: string; by?: string }
+  | { op: "qa.draft"; screenId: string }
+  | { op: "qa.ai"; screenId: string; output: unknown }
   /** 빈 화면설계서 만들기 · 항목 순서 바꾸기 · 화면설계서 지우기 */
   | { op: "sb.create"; screenId: string; template?: string }
   | { op: "sb.reorder"; screenId: string; order: number[] }
@@ -312,6 +322,38 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       setTaskScreens(m, cmd.taskId, cmd.screenIds ?? []);
       message = `${cmd.taskId} 연결 화면 ${(cmd.screenIds ?? []).length}개`;
       break;
+    case "ia.cell":
+      setIaCell(m, cmd.id, cmd.field, cmd.value);
+      message = `${cmd.id} 저장`;
+      break;
+    case "ia.channels":
+      setChannels(m, cmd.channels);
+      message = `채널 ${m.ia.channels.map((c) => c.label).join(" · ")}`;
+      break;
+    case "qa.case": {
+      const t = upsertCase(m, cmd.case);
+      message = `${t.id} 저장`;
+      detail = { id: t.id };
+      break;
+    }
+    case "qa.rm":
+      removeCase(m, cmd.id);
+      message = `${cmd.id} 삭제`;
+      break;
+    case "qa.result":
+      setResult(m, cmd.id, cmd.device, cmd.status, (cmd.by ?? "").slice(0, 60), now, (cmd.note ?? "").slice(0, 500));
+      message = `${cmd.id} 결과 기록`;
+      break;
+    case "qa.draft": {
+      const r = draftCases(m, cmd.screenId);
+      message = `${cmd.screenId} 테스트 초안 — 새 케이스 ${r.added}개`;
+      break;
+    }
+    case "qa.ai": {
+      const k = applyAiCases(m, cmd.screenId, cmd.output);
+      message = `${cmd.screenId} AI 테스트 케이스 ${k}개`;
+      break;
+    }
     case "sb.create": {
       const node = m.ia.nodes.find((n) => n.id === cmd.screenId);
       if (!node || node.kind === "MENU") throw new Error(`정보구조도에 없는 화면입니다: ${cmd.screenId}`);

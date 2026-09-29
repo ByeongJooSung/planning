@@ -32,6 +32,8 @@
         loginRequired: !!n.loginRequired, roles: Array.isArray(n.roles) ? n.roles.map(String) : [], taskIds: Array.isArray(n.taskIds) ? n.taskIds.map(String) : [],
         change: ["NEW", "CHANGED", "DELETED", "KEPT"].indexOf(n.change) >= 0 ? n.change : "NEW" };
       if (n.changeReason) o.changeReason = String(n.changeReason);
+      // 정보구조도 표(엑셀)에서 관리하는 항목은 그대로 넘긴다
+      ["devices", "func", "boardType", "pages", "track", "devNeeded", "note", "decision"].forEach(function (k) { if (n[k] != null) o[k] = JSON.parse(JSON.stringify(n[k])); });
       if (o.kind === "MENU") o.taskIds = [];
       return o;
     });
@@ -334,6 +336,7 @@
         '<label>변경 사유·메모<input data-ie-field="changeReason" value="' + esc(n.changeReason || "") + '" placeholder="선택"' + dis + "></label>" +
         (ed ? '<div class="fe-row2"><button class="fe-b" data-ie-act="up"' + (si > 0 ? "" : " disabled") + '>▲ 위로</button><button class="fe-b" data-ie-act="down"' + (si < sibs.length - 1 ? "" : " disabled") + ">▼ 아래로</button></div>" +
           '<label>상위 항목<select data-ie-field="parentId">' + opt("", "(최상위)", n.parentId || "") + S.nodes.filter(function (x) { return x.id !== n.id && !isDesc(x.id, n.id); }).map(function (x) { return opt(x.id, (x.kind === "MENU" ? "▦ " : "▢ ") + x.name + (x.kind === "MENU" || /^new:/.test(x.id) ? "" : " · " + x.id), n.parentId); }).join("") + "</select></label>" : "") +
+        (menu || !(o.channels || []).length ? "" : '<div class="ie-devs"><b>지원 채널</b><div class="chk-row">' + o.channels.map(function (c) { return '<label class="fe-chk"><input type="checkbox" data-ie-dev="' + esc(c.id) + '"' + ((n.devices || []).indexOf(c.id) >= 0 ? " checked" : "") + dis + "> " + esc(c.label) + "</label>"; }).join("") + "</div></div>") +
         (menu ? "" : taskBox(n, ed)) +
         (!menu && !isNew && o.openScreen ? '<button class="fe-b wide" data-ie-act="open-sb">화면설계서 열기 →</button>' : "") +
         (!menu && isNew ? '<p class="fe-note">새 화면은 저장한 뒤 화면설계서를 만들 수 있습니다.</p>' : "") +
@@ -513,7 +516,12 @@
   function onChange(ev) {
     var t = ev.target, n = byId(S.sel);
     if (!n) return;
-    var task = t.getAttribute("data-ie-task"), f = t.getAttribute("data-ie-field");
+    var task = t.getAttribute("data-ie-task"), f = t.getAttribute("data-ie-field"), dev = t.getAttribute("data-ie-dev");
+    if (dev) {
+      mut(function () { var cur = (n.devices || []).filter(function (x) { return x !== dev; }); if (t.checked) cur.push(dev); var order = S.o.channels.map(function (c) { return c.id; }); n.devices = order.filter(function (x) { return cur.indexOf(x) >= 0; }); if (!n.devices.length) delete n.devices; });
+      S.forceSide = true; render();
+      return;
+    }
     if (task) {
       mut(function () { n.taskIds = t.checked ? n.taskIds.concat(n.taskIds.indexOf(task) >= 0 ? [] : [task]) : n.taskIds.filter(function (x) { return x !== task; }); });
       S.forceSide = true; render();
