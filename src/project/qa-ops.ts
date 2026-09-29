@@ -70,6 +70,30 @@ export function setIaCell(m: Model, id: string, field: string, value: unknown) {
   throw new Error(`고칠 수 없는 칸입니다: ${field}`);
 }
 
+/** 기기 구분 없이 테스트할 때 결과를 두는 칸 */
+export const ALL_DEVICES = "ALL";
+
+/** 이 시스템에서 테스트할 채널 — 빈 배열이면 기기 구분 없음 */
+export function systemChannels(m: Model, systemCode: string): string[] {
+  const all = m.ia.channels.map((c) => c.id);
+  const set = m.ia.systemChannels[systemCode];
+  return set ? all.filter((c) => set.includes(c)) : all;
+}
+
+/** 시스템별 테스트 기기 정하기. null이면 모든 채널(기본), 빈 배열이면 기기 구분 없이 */
+export function setSystemChannels(m: Model, systemCode: string, list: string[] | null) {
+  const sys = m.systems.find((s) => s.code === systemCode);
+  if (!sys?.hasScreens) throw new Error(`화면이 있는 시스템이 아닙니다: ${systemCode}`);
+  if (list === null) {
+    delete m.ia.systemChannels[systemCode];
+    return;
+  }
+  const known = new Set(m.ia.channels.map((c) => c.id));
+  const bad = list.filter((x) => !known.has(x));
+  if (bad.length) throw new Error(`없는 채널입니다: ${bad.join(", ")}`);
+  m.ia.systemChannels[systemCode] = m.ia.channels.map((c) => c.id).filter((c) => list.includes(c));
+}
+
 /** 채널 목록 바꾸기 — 지운 채널은 화면·테스트 케이스에서도 뗀다 (결과 기록은 남긴다) */
 export function setChannels(m: Model, raw: unknown) {
   const list = z.array(IaChannel).min(1, "채널은 하나 이상 있어야 합니다").parse(raw);
@@ -83,6 +107,7 @@ export function setChannels(m: Model, raw: unknown) {
     if (!n.devices.length) delete n.devices;
   }
   for (const t of m.ia.tests) t.devices = t.devices.filter((d) => keep.has(d));
+  for (const k of Object.keys(m.ia.systemChannels)) m.ia.systemChannels[k] = m.ia.systemChannels[k]!.filter((d) => keep.has(d));
 }
 
 function nextCaseId(m: Model, screenId: string, taken = new Set(m.ia.tests.map((t) => t.id))) {
@@ -126,7 +151,7 @@ export function removeCase(m: Model, id: string) {
 export function setResult(m: Model, id: string, device: string, status: string | null, by: string, now: Date, note = "") {
   const t = m.ia.tests.find((x) => x.id === id);
   if (!t) throw new Error(`없는 테스트 케이스입니다: ${id}`);
-  if (!m.ia.channels.some((c) => c.id === device)) throw new Error(`없는 채널입니다: ${device}`);
+  if (device !== ALL_DEVICES && !m.ia.channels.some((c) => c.id === device)) throw new Error(`없는 채널입니다: ${device}`);
   if (!status) {
     delete t.results[device];
     return;
@@ -136,9 +161,12 @@ export function setResult(m: Model, id: string, device: string, status: string |
 
 /** 케이스가 실제로 돌려야 할 채널 */
 export function caseDevices(m: Model, t: TestCaseT): string[] {
-  if (t.devices.length) return t.devices;
   const n = m.ia.nodes.find((x) => x.id === t.screenId);
-  return n?.devices?.length ? n.devices : m.ia.channels.map((c) => c.id);
+  const allowed = n ? systemChannels(m, n.systemCode) : m.ia.channels.map((c) => c.id);
+  if (!allowed.length) return [ALL_DEVICES];
+  const pick = t.devices.length ? t.devices : n?.devices?.length ? n.devices : allowed;
+  const out = pick.filter((d) => allowed.includes(d));
+  return out.length ? out : allowed;
 }
 
 /**

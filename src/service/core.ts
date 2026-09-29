@@ -11,7 +11,7 @@ import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec } from "../model/schema.js";
 import { applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
 import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
-import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, upsertCase } from "../project/qa-ops.js";
+import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, setSystemChannels, systemChannels, upsertCase } from "../project/qa-ops.js";
 
 const applyGenerated0 = (m: Model, reqId: string, flow: unknown) => applyFlow(m, reqId, flow, { keepPos: true });
 import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
@@ -32,11 +32,14 @@ import {
   addSystem,
   addTask,
   autoCreateTasks,
+  editRequirement,
+  editTask,
   excludeRequirement,
   recordReview,
   removeTask,
   type AddRequirementInput,
   type AddTaskInput,
+  type EditTaskInput,
 } from "../project/ops.js";
 import { buildRtm, type Rtm } from "../trace/rtm.js";
 import { diffModels, type ModelDiff } from "../version/diff.js";
@@ -95,6 +98,8 @@ export type Command =
   /** 정보구조도 표(엑셀) 칸 하나 고치기 · 채널(웹·모바일·태블릿) 목록 */
   | { op: "ia.cell"; id: string; field: string; value: unknown }
   | { op: "ia.channels"; channels: unknown }
+  /** 시스템별 테스트 기기 — null이면 모든 채널, []이면 기기 구분 없이 */
+  | { op: "ia.sysChannels"; systemCode: string; channels: string[] | null }
   /** 정보구조도 화면 기반 테스트 케이스 — 추가·수정 · 삭제 · 채널별 결과 · 규칙 초안 · AI 결과 넣기 */
   | { op: "qa.case"; case: unknown }
   | { op: "qa.rm"; id: string }
@@ -112,6 +117,9 @@ export type Command =
   | { op: "task.add"; requirementId: string; input: AddTaskInput }
   | { op: "task.auto"; requirementId: string }
   | { op: "task.rm"; taskId: string }
+  /** Task 고치기 (행위자·처리 내용·시스템·선행·상태·화면 없는 사유) · 요구사항 제목·설명 고치기 */
+  | { op: "task.edit"; taskId: string; input: EditTaskInput }
+  | { op: "req.edit"; id: string; input: { title?: string; description?: string; type?: string; priority?: string } }
   | { op: "task.review"; taskId: string; reviewer: string; note?: string }
   | { op: "link.add"; link: unknown }
   | { op: "link.rm"; url: string }
@@ -330,6 +338,12 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       setChannels(m, cmd.channels);
       message = `채널 ${m.ia.channels.map((c) => c.label).join(" · ")}`;
       break;
+    case "ia.sysChannels": {
+      setSystemChannels(m, cmd.systemCode, cmd.channels === null ? null : Array.isArray(cmd.channels) ? cmd.channels.map(String) : []);
+      const list = systemChannels(m, cmd.systemCode);
+      message = `${cmd.systemCode} 테스트 기기: ${list.length ? m.ia.channels.filter((c) => list.includes(c.id)).map((c) => c.label).join(" · ") : "구분 없음"}`;
+      break;
+    }
     case "qa.case": {
       const t = upsertCase(m, cmd.case);
       message = `${t.id} 저장`;
@@ -401,6 +415,16 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
         c.marker = { x: Math.round(Math.max(-200, Math.min(2120, x))), y: Math.round(Math.max(-200, Math.min(20000, y))) };
       } else delete c.marker;
       message = cmd.pos ? `${cmd.screenId} ${cmd.no}번 설명 위치를 옮겼습니다` : `${cmd.screenId} ${cmd.no}번 설명 위치를 기본으로 되돌렸습니다`;
+      break;
+    }
+    case "task.edit": {
+      const t = editTask(m, cmd.taskId, cmd.input ?? {}, { now });
+      message = `${t.id} 수정`;
+      break;
+    }
+    case "req.edit": {
+      const r = editRequirement(m, cmd.id, cmd.input ?? {}, { now });
+      message = `${r.id} 수정`;
       break;
     }
     case "task.add": {

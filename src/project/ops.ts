@@ -3,7 +3,7 @@
  * 모든 연산은 모델을 제자리에서 바꾸고, 저장은 호출자가 한다.
  */
 import { nextRequirementId, nextTaskId, resolveTaskRef } from "../model/ids.js";
-import { Requirement, System, Task, type Model } from "../model/schema.js";
+import { Priority, Requirement, RequirementType, System, Task, type Model } from "../model/schema.js";
 import { resolveSuggestionOrder, suggestTasks } from "./suggest.js";
 
 type Ctx = { now?: Date; crId?: string };
@@ -76,6 +76,91 @@ export function addTask(m: Model, requirementId: string, input: AddTaskInput, c:
     detail: `${task.id} ${task.origin === "AUTO" ? "자동 생성" : "추가"} [${task.systemCode}] ${task.action}`,
   });
   return task;
+}
+
+/** Task 고치기 — AI가 만든 Task의 행위자·처리 내용·시스템이 요구사항과 어긋날 때 직접 바로잡는다 (ID는 그대로) */
+export interface EditTaskInput {
+  systemCode?: string;
+  actor?: string;
+  action?: string;
+  after?: string[];
+  /** 처리 후 자료 상태. 빈 문자열이면 지운다 */
+  to?: string;
+  /** 화면이 없는 사유. 빈 문자열이면 지운다 */
+  noScreenReason?: string;
+}
+export function editTask(m: Model, taskId: string, input: EditTaskInput, c: Ctx = {}): Task {
+  const req = m.requirements.find((r) => r.tasks.some((t) => t.id === taskId));
+  if (!req) throw new Error(`Task가 없습니다: ${taskId}`);
+  const t = req.tasks.find((x) => x.id === taskId)!;
+  const before = `[${t.systemCode}] ${t.actor ? t.actor + ": " : ""}${t.action}`;
+  if (input.systemCode !== undefined) {
+    if (!m.systems.some((s) => s.code === input.systemCode)) throw new Error(`등록되지 않은 시스템입니다: ${input.systemCode}`);
+    t.systemCode = input.systemCode;
+  }
+  if (input.actor !== undefined) t.actor = String(input.actor).trim();
+  if (input.action !== undefined) {
+    const a = String(input.action).trim();
+    if (!a) throw new Error("처리 내용을 입력하세요");
+    t.action = a;
+  }
+  if (input.after !== undefined) {
+    const after = input.after.filter(Boolean).map((a) => resolveTaskRef(req, a));
+    if (after.includes(taskId)) throw new Error("자기 자신을 선행 Task로 둘 수 없습니다");
+    // 순환 막기: 새 선행을 따라가다 이 Task로 돌아오면 안 된다
+    const byId = new Map(req.tasks.map((x) => [x.id, x]));
+    const seen = new Set<string>();
+    const stack = [...after];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (id === taskId) throw new Error("선행 Task가 순환합니다");
+      if (seen.has(id)) continue;
+      seen.add(id);
+      stack.push(...(byId.get(id)?.after ?? []));
+    }
+    t.after = after;
+  }
+  if (input.to !== undefined) {
+    const to = String(input.to).trim();
+    if (to) t.transition = { ...(t.transition ?? {}), to };
+    else delete t.transition;
+  }
+  if (input.noScreenReason !== undefined) {
+    const r = String(input.noScreenReason).trim();
+    if (r) t.noScreenReason = r;
+    else delete t.noScreenReason;
+  }
+  // 직접 고친 Task는 자동 제안 근거가 더는 맞지 않을 수 있다
+  if (t.origin === "AUTO") t.suggestReason = t.suggestReason ? `${t.suggestReason} (직접 수정됨)` : "직접 수정됨";
+  const after = `[${t.systemCode}] ${t.actor ? t.actor + ": " : ""}${t.action}`;
+  if (after !== before) m.rtmRecords.history.push({ requirementId: req.id, at: ts(c), crId: c.crId, kind: "TASKS_CHANGED", detail: `${taskId} 수정: ${before} → ${after}` });
+  return t;
+}
+
+/** 요구사항 제목·설명·유형·우선순위 고치기 */
+export function editRequirement(m: Model, id: string, input: { title?: string; description?: string; type?: string; priority?: string }, c: Ctx = {}) {
+  const req = findRequirement(m, id);
+  const changed: string[] = [];
+  if (input.title !== undefined) {
+    const v = String(input.title).trim();
+    if (!v) throw new Error("요구사항 제목을 입력하세요");
+    if (v !== req.title) changed.push(`제목: ${req.title} → ${v}`);
+    req.title = v;
+  }
+  if (input.description !== undefined && input.description !== req.description) {
+    req.description = String(input.description);
+    changed.push("설명");
+  }
+  if (input.type !== undefined && input.type !== req.type) {
+    req.type = RequirementType.parse(input.type);
+    changed.push(`유형 ${req.type}`);
+  }
+  if (input.priority !== undefined && input.priority !== req.priority) {
+    req.priority = Priority.parse(input.priority);
+    changed.push(`우선순위 ${req.priority}`);
+  }
+  if (changed.length) m.rtmRecords.history.push({ requirementId: req.id, at: ts(c), crId: c.crId, kind: "CHANGED", detail: changed.join(" · ") });
+  return req;
 }
 
 export function removeTask(m: Model, taskId: string, c: Ctx = {}): void {

@@ -70,4 +70,42 @@ describe("정보구조도 기반 테스트", () => {
     s = execute(s, { op: "ia.save", systemCode: "CVL", nodes, dropStoryboards: true }, now).state;
     expect(s.model.ia.tests.some((x) => x.screenId === "CVL_INF_STS_010")).toBe(false);
   });
+
+  it("시스템별 테스트 기기: 관리자는 웹만, 기기 구분 없이면 결과 한 칸(ALL)", async () => {
+    const { caseDevices } = await import("../src/project/qa-ops.js");
+    let s = execute(base, { op: "qa.draft", screenId: "ADM_INF_REV_010" }, now).state;
+    s = execute(s, { op: "qa.draft", screenId: "CVL_INF_REG_010" }, now).state;
+    s = execute(s, { op: "ia.sysChannels", systemCode: "ADM", channels: ["WEB"] }, now).state;
+    const adm = s.model.ia.tests.find((t) => t.screenId === "ADM_INF_REV_010")!;
+    const cvl = s.model.ia.tests.find((t) => t.screenId === "CVL_INF_REG_010")!;
+    expect(caseDevices(s.model, adm)).toEqual(["WEB"]);
+    expect(caseDevices(s.model, cvl)).toEqual(["WEB", "MOBILE", "TABLET"]);
+    s = execute(s, { op: "ia.sysChannels", systemCode: "CVL", channels: [] }, now).state;
+    expect(caseDevices(s.model, cvl)).toEqual(["ALL"]);
+    s = execute(s, { op: "qa.result", id: cvl.id, device: "ALL", status: "PASS" }, now).state;
+    expect(s.model.ia.tests.find((t) => t.id === cvl.id)!.results.ALL?.status).toBe("PASS");
+    expect(deriveProject(s, now).gens["qa:CVL_INF_REG_010"]?.prompt).toMatch(/기기 구분 없이/);
+    s = execute(s, { op: "ia.sysChannels", systemCode: "CVL", channels: null }, now).state;
+    expect(caseDevices(s.model, cvl)).toEqual(["WEB", "MOBILE", "TABLET"]);
+    expect(() => execute(s, { op: "ia.sysChannels", systemCode: "EXT", channels: ["WEB"] }, now)).toThrow(/화면이 있는/);
+  });
+});
+
+describe("Task·요구사항 고치기", () => {
+  it("Task 행위자·처리 내용·시스템·선행을 고치고, ID와 화면 연결은 그대로 둔다", () => {
+    const req = base.model.requirements.find((r) => r.id === "SFR-002")!;
+    const t = req.tasks[1]!;
+    const screens = base.model.ia.nodes.filter((n) => n.taskIds.includes(t.id)).map((n) => n.id);
+    let s = execute(base, { op: "task.edit", taskId: t.id, input: { actor: "심사 담당자", action: "자료 검토 후 승인 또는 반려", to: "" } }, now).state;
+    const t2 = s.model.requirements.find((r) => r.id === "SFR-002")!.tasks[1]!;
+    expect([t2.id, t2.actor, t2.action, t2.transition]).toEqual([t.id, "심사 담당자", "자료 검토 후 승인 또는 반려", undefined]);
+    expect(s.model.ia.nodes.filter((n) => n.taskIds.includes(t.id)).map((n) => n.id)).toEqual(screens);
+    expect(s.model.rtmRecords.history.at(-1)?.detail).toMatch(/수정/);
+    expect(() => execute(s, { op: "task.edit", taskId: t.id, input: { action: " " } }, now)).toThrow(/처리 내용/);
+    expect(() => execute(s, { op: "task.edit", taskId: t.id, input: { systemCode: "NOPE" } }, now)).toThrow(/등록되지 않은/);
+    expect(() => execute(s, { op: "task.edit", taskId: req.tasks[0]!.id, input: { after: [t.id] } }, now)).toThrow(/순환/);
+    s = execute(s, { op: "req.edit", id: "SFR-002", input: { title: "대국민 정보공개 신청·심사" } }, now).state;
+    expect(s.model.requirements.find((r) => r.id === "SFR-002")!.title).toBe("대국민 정보공개 신청·심사");
+    expect(() => execute(s, { op: "req.edit", id: "SFR-002", input: { title: "" } }, now)).toThrow(/제목/);
+  });
 });

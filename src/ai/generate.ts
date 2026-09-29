@@ -168,7 +168,9 @@ function qaGen(c: Ctx, screenId: string): GenPrompt {
   const sb = c.m.storyboard.screens.find((x) => x.screenId === screenId);
   const tasks = c.tasksOfScreen(screenId);
   const ch = c.m.ia.channels;
-  const devices = node.devices?.length ? node.devices : ch.map((x) => x.id);
+  const set = c.m.ia.systemChannels[node.systemCode];
+  const allowed = set ? ch.map((x) => x.id).filter((x) => set.includes(x)) : ch.map((x) => x.id);
+  const devices = (node.devices?.length ? node.devices : allowed).filter((d) => allowed.includes(d));
   const prompt = finish([
     head(`${screenId} ${node.name} 테스트 케이스`, "이 화면의 테스트 케이스(테스트 시나리오)를 만들어 주세요."),
     section(
@@ -177,7 +179,7 @@ function qaGen(c: Ctx, screenId: string): GenPrompt {
         projectLine(c),
         `- 화면: ${screenId} ${node.name} · ${KIND[node.kind]} · Location: ${c.path(screenId).join(" > ")}${node.loginRequired ? " · 로그인 필요" : ""}`,
         node.func ? `- 화면기능: ${node.func}` : "",
-        `- 지원 채널: ${devices.map((d) => `${d}(${ch.find((x) => x.id === d)?.label ?? d})`).join(", ")}`,
+        allowed.length ? `- 지원 채널: ${(devices.length ? devices : allowed).map((d) => `${d}(${ch.find((x) => x.id === d)?.label ?? d})`).join(", ")}` : "- 지원 채널: 기기 구분 없이 테스트 (devices는 비운다)",
         ...tasks.map(({ r, t }) => `- Task: ${t.taskId} ${t.actor ? `${t.actor}: ` : ""}${t.action} (${r.requirementId} ${r.title})`),
       ]
         .filter(Boolean)

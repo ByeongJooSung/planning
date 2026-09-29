@@ -276,6 +276,11 @@ export const IA = z.object({
   /** 한 번 부여된 뒤 삭제된 화면 ID. 재사용 금지 */
   retiredIds: z.array(z.string()).default([]),
   channels: z.array(IaChannel).default(DEFAULT_CHANNELS),
+  /**
+   * 시스템별 테스트 기기(채널) — 없으면 모든 채널, 빈 배열이면 기기 구분 없이 테스트(결과 한 칸: ALL).
+   * 예: 대국민 포털은 웹·모바일·태블릿, 관리자 시스템은 웹만
+   */
+  systemChannels: z.record(z.string(), z.array(z.string())).default({}),
   tests: z.array(TestCase).default([]),
 });
 

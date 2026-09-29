@@ -1131,3 +1131,10 @@ html.fe-open, html.fe-open body { overflow: hidden; }
 .qa-table th, .qa-table td { border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .qa-table thead th { border-top: 1px solid var(--line); }
 .qa-table tr > :first-child { border-left: 1px solid var(--line); }
+.sysdev { display: flex; flex-direction: column; gap: 10px; }
+.sysdev-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.sysdev-row .sd-none { margin-left: auto; color: var(--ink-2); }
+.step-wrap { position: relative; }
+.step-wrap .step { padding-right: 44px; }
+.step-ed { position: absolute; right: 26px; top: 6px; width: 26px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--ink-3); cursor: pointer; font-size: 14px; }
+.step-wrap:hover .step-ed, .step-ed:focus-visible { border-color: var(--line); background: var(--surface); color: var(--accent); }

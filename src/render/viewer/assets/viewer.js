@@ -411,10 +411,12 @@
         var tr = raw.transition ? "<code>" + esc(raw.transition.from || "") + "</code> → <code>" + esc(raw.transition.to) + "</code>" : "";
         var after = raw.after && raw.after.length ? "선행 " + raw.after.map(function (a) { return shortTask(a, row.requirementId); }).join(", ") : "";
         var sub = [tr, after, t.screenless ? "화면 없음" : (t.screens.length ? t.screens.join(", ") : '<span class="warn-t">화면 미연결</span>')].filter(Boolean).join(" · ");
-        return '<button class="step" data-task="' + esc(t.taskId) + '" style="--sys:' + sysColor(t.systemCode) + '"><span class="tid">' + esc(shortTask(t.taskId, row.requirementId)) + "</span>" +
+        var html = '<button class="step" data-task="' + esc(t.taskId) + '" style="--sys:' + sysColor(t.systemCode) + '"><span class="tid">' + esc(shortTask(t.taskId, row.requirementId)) + "</span>" +
           sysChip(t.systemCode) + '<span class="act"><span class="who">' + esc(t.actor) + "</span><b>" + esc(t.action) + "</b>" +
           (raw.origin === "AUTO" ? '<span class="auto" title="' + esc(raw.suggestReason || "") + '">자동</span>' : "") +
           '<span class="tr">' + sub + "</span></span>" + pill(t.status) + '<span class="go">›</span></button>';
+        if (SRV && canEdit() && row.status !== "EXCLUDED") html = '<div class="step-wrap">' + html + '<button class="step-ed" data-act="task-edit" data-arg="' + esc(t.taskId) + '" title="Task 고치기 (행위자·처리 내용·시스템)" aria-label="' + esc(t.taskId) + ' 고치기">✎</button></div>';
+        return html;
       }).join("");
       var sub = [];
       if (row.originalId && row.originalId !== row.requirementId) sub.push("원본 " + esc(row.originalId));
@@ -426,7 +428,7 @@
         (req.description ? '<p class="req-desc">' + esc(req.description) + "</p>" : "") + specLine(p, row.requirementId) +
         (row.status === "EXCLUDED" ? '<div class="hint">제외 사유: ' + esc(row.excludeReason) + "</div>" :
           steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다.' + (SRV ? "" : copyBox("planning -p " + m.project.code + " task auto " + row.requirementId)) + "</div>") +
-        (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + '<span class="sp"></span>' + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
+        (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + '<span class="sp"></span>' + actBtn("req-edit", "요구사항 수정", row.requirementId) + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
         "</article>";
     }).join("");
     return '<section class="section"><div class="note row"><div><b>요구사항 등록과 Task 생성</b><p class="hint">' + (SRV ? "등록할 때 ‘시스템별 Task 자동 생성’을 켜면" : "등록할 때 <code>--auto-tasks</code>를 붙이면") + ' 업무 동사(신청·심사·공개·알림·연계)를 시스템 성격에 맞춰 Task를 자동으로 만듭니다. <span class="auto">자동</span> 표시에 마우스를 올리면 근거가 보입니다. ' + (SRV ? "직접 만들려면 요구사항 아래 ‘Task 직접 추가’를 누릅니다." : "직접 만들려면 <code>task add</code>를 씁니다.") + '</p></div>' +
@@ -464,7 +466,7 @@
     return overlayBanner() + '<header class="page-head"><nav class="crumbs"><button data-page="req">요구사항·Task</button><span>›</span><span>' + esc(row.requirementId) + " " + esc(row.title) + "</span></nav>" +
       '<h1><span class="mono">' + esc(shortTask(t.taskId, row.requirementId)) + "</span> " + esc(t.action) + "</h1>" +
       '<div class="meta">' + sysChip(t.systemCode) + '<span class="tag">' + esc((sysOf(p, t.systemCode) || {}).name || "") + "</span>" + (t.actor ? '<span class="tag">행위자 ' + esc(t.actor) + "</span>" : "") + pill(t.status) + '<span class="tag mono">' + esc(t.taskId) + "</span></div></header>" +
-      (canEdit() ? '<div class="row-actions">' + actBtn("task-review", t.reviewer ? "검토 다시 기록" : "검토 완료 기록", t.taskId) + actBtn("task-rm", "Task 삭제", t.taskId) + "</div>" : "") +
+      (canEdit() ? '<div class="row-actions">' + actBtn("task-edit", "Task 수정", t.taskId) + actBtn("task-review", t.reviewer ? "검토 다시 기록" : "검토 완료 기록", t.taskId) + actBtn("task-rm", "Task 삭제", t.taskId) + "</div>" : "") +
       '<dl class="box info">' + info.map(function (i) { return "<div><dt>" + i[0] + "</dt><dd>" + i[1] + "</dd></div>"; }).join("") + "</dl>" +
       '<nav class="tabs" role="tablist">' + tabs.map(function (x) { return '<button class="tab" role="tab" data-ttab="' + x[0] + '" aria-selected="' + (tab === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</nav>" +
       '<div class="panel">' + body + "</div>";
@@ -1414,10 +1416,20 @@
     return out;
   }
   function testsOf(p, sid) { return (p.model.ia.tests || []).filter(function (t) { return t.screenId === sid; }); }
+  /** 시스템에서 테스트할 채널 (설정 없으면 전부, 빈 배열이면 기기 구분 없음) */
+  function sysChans(p, code) {
+    var set = (p.model.ia.systemChannels || {})[code];
+    return channels(p).filter(function (c) { return !set || set.indexOf(c.id) >= 0; });
+  }
+  /** 테스트 결과 칸 — 기기 구분이 없으면 ‘결과’ 한 칸(ALL) */
+  function testChs(p, code) { var l = sysChans(p, code); return l.length ? l : [{ id: "ALL", label: "결과", all: true }]; }
   function caseDevs(p, t) {
-    if (t.devices && t.devices.length) return t.devices;
     var n = p.model.ia.nodes.find(function (x) { return x.id === t.screenId; });
-    return n && n.devices && n.devices.length ? n.devices : channels(p).map(function (c) { return c.id; });
+    var allowed = sysChans(p, n ? n.systemCode : "").map(function (c) { return c.id; });
+    if (!allowed.length) return ["ALL"];
+    var pick = t.devices && t.devices.length ? t.devices : n && n.devices && n.devices.length ? n.devices : allowed;
+    var out = pick.filter(function (d) { return allowed.indexOf(d) >= 0; });
+    return out.length ? out : allowed;
   }
   /** 채널 하나의 테스트 집계 (cases: 케이스 목록) */
   function qaStat(p, cases, dev) {
@@ -1450,9 +1462,9 @@
     var ed = SRV && canEdit(), ch = channels(p);
     var systems = p.model.systems.filter(function (s) { return s.hasScreens && sysOn(s.code); });
     var tools = '<div class="ia-sheet-tools">' + (ed ? '<button class="btn-sm" data-act="ia-channels">채널 관리 · ' + esc(ch.map(function (c) { return c.label; }).join(" · ")) + "</button>" : "") +
-      '<button class="btn-sm" data-iaxlsx="1">⬇ 엑셀(.xlsx) 내려받기</button><span class="hint">칸을 바로 고치면 저장됩니다. 기획은 화면설계서 작업 상태로 채워지고, 오른쪽 채널 칸에서 지원 여부와 채널별 테스트 결과(통과/전체)를 봅니다.</span></div>';
+      (ed ? actBtn("qa-sysdev", "시스템별 테스트 기기") : "") + '<button class="btn-sm" data-iaxlsx="1">⬇ 엑셀(.xlsx) 내려받기</button><span class="hint">칸을 바로 고치면 저장됩니다. 기획은 화면설계서 작업 상태로 채워지고, 오른쪽 채널 칸에서 지원 여부와 채널별 테스트 결과(통과/전체)를 봅니다.</span></div>';
     var body = systems.map(function (s) {
-      var rows = iaRows(p, s.code), D = maxDepth(rows);
+      var rows = iaRows(p, s.code), D = maxDepth(rows), ch = testChs(p, s.code);
       var head1 = '<tr><th colspan="' + (D + 6) + '" class="g">메뉴 구성</th><th colspan="5" class="g">진행 현황</th><th colspan="2" class="g">비고</th><th colspan="' + (ch.length * 2) + '" class="g ch pin" style="right:0;min-width:' + ch.length * (CH_W + CHT_W) + 'px">채널 · 테스트 (지원 여부 · 통과/전체)</th></tr>';
       var head2 = "<tr>" + Array.apply(null, Array(D)).map(function (_, i) { return "<th>" + (i + 1) + "Depth</th>"; }).join("") +
         "<th>화면기능</th><th>구분</th><th>메뉴/화면 ID</th><th>게시판 유형</th><th>로그인</th><th>페이지<br>본수</th><th>기획</th><th>디자인</th><th>퍼블리싱</th><th>개발</th><th>개발 필요</th><th>비고</th><th>의사결정 사항</th>" +
@@ -1472,6 +1484,7 @@
         var chCells = ch.map(function (c, ci) {
           if (menu) return '<td class="ch pin"' + chPin(ch, ci, false) + '></td><td class="ch t pin"' + chPin(ch, ci, true) + "></td>";
           var on = (n.devices || []).indexOf(c.id) >= 0;
+          if (c.all) return '<td class="ch pin"' + chPin(ch, ci, false) + ' title="기기 구분 없이 테스트하는 시스템">—</td><td class="ch t pin"' + chPin(ch, ci, true) + '><button class="lnk" data-qago="' + esc(n.id) + '">' + qaMini(qaStat(p, cases, c.id)) + "</button></td>";
           return '<td class="ch pin"' + chPin(ch, ci, false) + ">" + (ed ? '<input type="checkbox"' + key("dev:" + c.id) + (on ? " checked" : "") + ' aria-label="' + esc(n.name + " " + c.label + " 지원") + '">' : on ? "✓" : "") + '</td><td class="ch t pin"' + chPin(ch, ci, true) + '><button class="lnk" data-qago="' + esc(n.id) + '">' + qaMini(qaStat(p, cases, c.id)) + "</button></td>";
         }).join("");
         return '<tr class="' + (menu ? "menu" : "scr") + '">' + depth +
@@ -1481,8 +1494,8 @@
           "<td>" + inp("note", n.note) + "</td><td>" + inp("decision", n.decision) + "</td>" + chCells + "</tr>";
       }).join("") || '<tr><td colspan="' + (D + 13 + ch.length * 2) + '" class="empty">등록된 메뉴·화면이 없습니다.</td></tr>';
       var scr = rows.filter(function (r) { return r.n.kind !== "MENU"; });
-      var sum = ch.map(function (c) { var k = scr.filter(function (r) { return (r.n.devices || []).indexOf(c.id) >= 0; }).length; return esc(c.label) + " " + k; }).join(" · ");
-      return '<section class="section"><h2><i class="sq" style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + " <small>화면 " + scr.length + " · 채널 지원 " + sum + '</small></h2><div class="ia-sheet-wrap" data-sheetsys="' + esc(s.code) + '"><table class="ia-sheet">' + "<thead>" + head1 + head2 + "</thead><tbody>" + trs + "</tbody></table></div></section>";
+      var sum = ch[0].all ? "테스트 기기 구분 없음" : "채널 지원 " + ch.map(function (c) { var k = scr.filter(function (r) { return (r.n.devices || []).indexOf(c.id) >= 0; }).length; return esc(c.label) + " " + k; }).join(" · ");
+      return '<section class="section"><h2><i class="sq" style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + " <small>화면 " + scr.length + " · " + sum + '</small></h2><div class="ia-sheet-wrap" data-sheetsys="' + esc(s.code) + '"><table class="ia-sheet">' + "<thead>" + head1 + head2 + "</thead><tbody>" + trs + "</tbody></table></div></section>";
     }).join("");
     return tools + '<datalist id="dl-board">' + BOARD_TYPES.map(function (x) { return '<option value="' + x + '">'; }).join("") + '</datalist><datalist id="dl-devneed">' + DEV_NEEDED.map(function (x) { return '<option value="' + x + '">'; }).join("") + "</datalist>" + (body || '<div class="box empty">화면이 있는 시스템이 없습니다.</div>');
   }
@@ -1534,10 +1547,10 @@
 
   // ── 테스트 (정보구조도 화면 기준) ──────────────────
   function renderQa() {
-    var p = P(), ed = SRV && canEdit(), ch = channels(p);
+    var p = P(), ed = SRV && canEdit();
     var systems = p.model.systems.filter(function (s) { return s.hasScreens; });
     if (!systems.length) return '<div class="box empty">화면이 있는 시스템이 없습니다.</div>';
-    var code = protoSys(p), rows = iaRows(p, code), screens = rows.filter(function (r) { return r.n.kind !== "MENU"; });
+    var code = protoSys(p), ch = testChs(p, code), rows = iaRows(p, code), screens = rows.filter(function (r) { return r.n.kind !== "MENU"; });
     var all = (p.model.ia.tests || []).filter(function (t) { return screens.some(function (r) { return r.n.id === t.screenId; }); });
     var chips = '<div class="filters">' + systems.map(function (s) {
       var ids = {}; systemScreens(p, s.code).forEach(function (n) { ids[n.id] = true; });
@@ -1555,20 +1568,20 @@
       if (n.kind === "MENU") return '<div class="qa-menu" style="padding-left:' + (8 + r.d * 14) + 'px">▸ ' + esc(n.name) + "</div>";
       var cs = testsOf(p, n.id);
       return '<button class="sb-row qa-row' + (n.id === sel ? " on" : "") + '" data-qasel="' + esc(n.id) + '" style="padding-left:' + (10 + r.d * 14) + 'px"><span class="mono">' + esc(n.id) + "</span><b>" + esc(n.name) + '</b><span class="qa-devs">' + ch.map(function (c) {
-        var sup = (n.devices || []).indexOf(c.id) >= 0;
+        var sup = c.all || (n.devices || []).indexOf(c.id) >= 0;
         return '<span class="qa-dev' + (sup ? "" : " off") + '" title="' + esc(c.label) + (sup ? " 지원" : " 미지정") + '">' + esc(c.label.replace(/\(.*?\)/g, "").slice(0, 3)) + " " + qaMini(qaStat(p, cs, c.id)) + "</span>";
       }).join("") + "</span></button>";
     }).join("");
-    var tools = '<div class="toolbar">' + chips + '<span class="sp"></span><button class="btn-sm" data-qaxlsx="' + esc(code) + '">⬇ 테스트 시트(.xlsx)</button>' + (ed ? '<button class="btn-sm" data-page="ia" data-iaview="sheet">채널 지정 (정보구조도 표)</button>' : "") + "</div>";
+    var tools = '<div class="toolbar">' + chips + '<span class="sp"></span><button class="btn-sm" data-qaxlsx="' + esc(code) + '">⬇ 테스트 시트(.xlsx)</button>' + (ed ? actBtn("qa-sysdev", "테스트 기기 설정 · " + (ch[0].all ? "구분 없음" : esc(ch.map(function (c) { return c.label; }).join("·")))) + '<button class="btn-sm" data-page="ia" data-iaview="sheet">화면별 채널 지정 (정보구조도 표)</button>' : "") + "</div>";
     return '<section class="section">' + tools + board +
       '<div class="sb-page qa-page"><nav class="sb-list" aria-label="' + esc(code) + ' 정보구조도">' + (list || '<div class="empty">정보구조도에 화면이 없습니다.</div>') + "</nav>" +
       '<div class="sb-main">' + (sel ? qaSheet(p, sel) : '<div class="box empty">화면을 고르세요.</div>') + "</div></div></section>";
   }
   function qaSheet(p, sid) {
-    var ed = SRV && canEdit(), ch = channels(p), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {};
+    var ed = SRV && canEdit(), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {}, ch = testChs(p, n.systemCode);
     var cs = testsOf(p, sid), sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; }), g = p.gens["qa:" + sid];
     var devs = (n.devices || []).map(function (d) { var c = ch.find(function (x) { return x.id === d; }); return c ? c.label : d; });
-    var head = '<div class="sheet-bar"><b>' + esc(n.name || sid) + '</b><span class="hint mono">' + esc(sid) + '</span><span class="hint">지원 채널: ' + (devs.length ? esc(devs.join(" · ")) : "미지정 (모든 채널로 테스트)") + '</span><span class="sp"></span>' +
+    var head = '<div class="sheet-bar"><b>' + esc(n.name || sid) + '</b><span class="hint mono">' + esc(sid) + '</span><span class="hint">' + (ch[0].all ? "기기 구분 없이 테스트" : "지원 채널: " + (devs.length ? esc(devs.join(" · ")) : "미지정 (시스템 테스트 기기 전부)")) + '</span><span class="sp"></span>' +
       (ed ? actBtn("qa-add", "+ 케이스 추가", sid) + '<button class="btn-sm" data-qadraft="' + esc(sid) + '" title="화면설계서의 필수 입력·길이·형식·메시지·선택지·이동과 연결 Task로 케이스를 만듭니다">화면설계서로 초안</button>' + (g ? '<button class="btn-sm ai" data-qaai="' + esc(sid) + '">✦ AI로 케이스 만들기</button>' : "") : "") + "</div>";
     if (!cs.length) return '<article class="box sheet">' + head + '<div class="empty">아직 테스트 케이스가 없습니다.' + (ed ? (sb ? " ‘화면설계서로 초안’을 누르면 화면설계서 설명 번호와 Task로 케이스를 만듭니다." : " 화면설계서가 아직 없어 초안은 화면 진입·Task 위주로 만들어집니다.") : "") + "</div></article>";
     var rows = cs.map(function (t, i) {
@@ -1586,7 +1599,7 @@
     return '<article class="box sheet">' + head + '<div class="qa-wrap" data-qawrap="' + esc(sid) + '"><table class="qa-table"><thead><tr><th>No</th><th>유형</th><th>테스트 항목</th><th>사전 조건</th><th>절차</th><th>기대 결과</th>' + ch.map(function (c, ci) { return '<th class="qa-r" style="right:' + (ch.length - 1 - ci) * 104 + 'px">' + esc(c.label) + "</th>"; }).join("") + "</tr></thead><tbody>" + rows + "</tbody></table></div></article>";
   }
   function qaForm(sid, t) {
-    var p = P(), ch = channels(p), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {};
+    var p = P(), n = p.model.ia.nodes.find(function (x) { return x.id === sid; }) || {}, ch = sysChans(p, n.systemCode);
     var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; });
     openForm({
       eyebrow: sid + " · " + (n.name || ""), title: t ? "테스트 케이스 편집" : "테스트 케이스 추가", submit: "저장",
@@ -1598,7 +1611,7 @@
         { name: "expected", label: "기대 결과", type: "textarea", rows: 3, value: t ? t.expected : "" },
         { name: "componentNo", label: "화면설계서 설명 번호", type: "select", options: [["", "(없음)"]].concat((sb ? sb.components : []).map(function (c) { return [String(c.no), c.no + ". " + c.label]; })), value: t && t.componentNo ? String(t.componentNo) : "" },
         { name: "taskIds", label: "Task (쉼표로 구분)", value: t ? t.taskIds.join(", ") : (n.taskIds || []).join(", ") },
-        { type: "html", html: '<div class="fm-row"><label>테스트 채널 <span class="hint">아무것도 고르지 않으면 화면의 지원 채널 전부</span></label><div class="chk-row">' + ch.map(function (c) { return '<label class="fm-check"><input type="checkbox" data-qadev="' + esc(c.id) + '"' + (t && t.devices.indexOf(c.id) >= 0 ? " checked" : "") + "> " + esc(c.label) + "</label>"; }).join("") + "</div></div>" }
+        ch.length ? { type: "html", html: '<div class="fm-row"><label>테스트 채널 <span class="hint">아무것도 고르지 않으면 화면의 지원 채널 전부</span></label><div class="chk-row">' + ch.map(function (c) { return '<label class="fm-check"><input type="checkbox" data-qadev="' + esc(c.id) + '"' + (t && t.devices.indexOf(c.id) >= 0 ? " checked" : "") + "> " + esc(c.label) + "</label>"; }).join("") + "</div></div>" } : { type: "html", html: '<p class="hint">이 시스템은 기기 구분 없이 테스트합니다 (결과 한 칸).</p>' }
       ],
       onSubmit: function (v) {
         return cmd({ op: "qa.case", case: { id: t ? t.id : undefined, screenId: sid, title: v.title, type: v.type, pre: v.pre, steps: v.steps, expected: v.expected, componentNo: v.componentNo ? Number(v.componentNo) : undefined, taskIds: v.taskIds.split(",").map(function (x) { return x.trim(); }).filter(Boolean), devices: picked("qadev") } });
@@ -1606,6 +1619,34 @@
     });
   }
   ACTIONS_LATE["qa-add"] = function (sid) { qaForm(sid, null); };
+  // 시스템별 테스트 기기 — 대국민은 웹·모바일·태블릿, 관리자는 웹만, 또는 기기 구분 없이
+  ACTIONS_LATE["qa-sysdev"] = function () {
+    var p = P(), ch = channels(p), sm = p.model.ia.systemChannels || {};
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens; });
+    var html = '<div class="sysdev">' + systems.map(function (s) {
+      var set = sm[s.code], none = !!set && !set.length;
+      return '<div class="sysdev-row" data-sysdev="' + esc(s.code) + '"><b>' + sysChip(s.code) + " " + esc(s.name) + '</b><div class="chk-row">' + ch.map(function (c) {
+        return '<label class="fm-check"><input type="checkbox" data-sdch="' + esc(c.id) + '"' + (!set || set.indexOf(c.id) >= 0 ? " checked" : "") + (none ? " disabled" : "") + "> " + esc(c.label) + "</label>";
+      }).join("") + '<label class="fm-check sd-none"><input type="checkbox" data-sdnone' + (none ? " checked" : "") + "> 기기 구분 없이 테스트</label></div></div>";
+    }).join("") + "</div>";
+    openForm({
+      eyebrow: "테스트", title: "시스템별 테스트 기기", submit: "저장",
+      intro: "시스템마다 테스트할 기기(채널)를 고릅니다. 고른 기기마다 결과 칸이 생기고, ‘기기 구분 없이’를 고르면 결과를 한 칸으로 기록합니다. 채널 목록 자체는 정보구조도 표의 ‘채널 관리’에서 바꿉니다.",
+      fields: [{ type: "html", html: html }],
+      onSubmit: function () {
+        var jobs = [];
+        document.querySelectorAll("[data-sysdev]").forEach(function (row) {
+          var code = row.getAttribute("data-sysdev"), none = row.querySelector("[data-sdnone]").checked;
+          var list = Array.prototype.filter.call(row.querySelectorAll("[data-sdch]"), function (x) { return x.checked; }).map(function (x) { return x.getAttribute("data-sdch"); });
+          var want = none || !list.length ? [] : list.length === ch.length ? null : list;
+          var cur = sm[code] === undefined ? null : sm[code];
+          if (JSON.stringify(cur) !== JSON.stringify(want)) jobs.push({ op: "ia.sysChannels", systemCode: code, channels: want });
+        });
+        return jobs.reduce(function (pr, c) { return pr.then(function () { return cmd(c); }); }, Promise.resolve());
+      }
+    });
+    document.querySelectorAll("[data-sdnone]").forEach(function (x) { x.addEventListener("change", function () { x.closest("[data-sysdev]").querySelectorAll("[data-sdch]").forEach(function (y) { y.disabled = x.checked; }); }); });
+  };
   ACTIONS_LATE["qa-edit"] = function (id) { var t = (P().model.ia.tests || []).find(function (x) { return x.id === id; }); if (t) qaForm(t.screenId, t); };
   ACTIONS_LATE["qa-rm"] = function (id) { if (window.confirm(id + " 테스트 케이스를 지울까요? 결과 기록도 함께 지워집니다.")) cmd({ op: "qa.rm", id: id }).catch(function (e) { toast(e.message, "err"); }); };
   function qaAi(sid, btn) {
@@ -1671,9 +1712,9 @@
   }
   function saveXlsx(bytes, name) { FlowExport.download(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name.replace(/[\\/:*?"<>|\s]+/g, "_") + ".xlsx"); }
   function iaXlsx() {
-    var p = P(), ch = channels(p), pr = p.model.project;
+    var p = P(), pr = p.model.project;
     var sheets = p.model.systems.filter(function (s) { return s.hasScreens; }).map(function (s) {
-      var rows = iaRows(p, s.code), D = maxDepth(rows);
+      var rows = iaRows(p, s.code), D = maxDepth(rows), ch = testChs(p, s.code);
       var h2 = [].concat(Array.apply(null, Array(D)).map(function (_, i) { return (i + 1) + "Depth"; }), ["화면기능", "구분", "메뉴/화면 ID", "게시판 유형", "로그인 시 이용", "페이지 본수", "기획 완료 여부", "디자인 완료 여부", "퍼블 완료 여부", "개발 완료 여부", "기능개선/신규 필요여부", "연결 Task", "비고", "의사결정 사항"], ch.map(function (c) { return c.label; }), ch.map(function (c) { return c.label + " 테스트"; }));
       var fixed = D + 14;
       var h1 = h2.map(function (_, i) { return i < D + 6 ? "메뉴 구성" : i < D + 11 ? "진행 현황" : i < fixed ? "비고" : i < fixed + ch.length ? "지원 채널" : "테스트 (통과/전체)"; });
@@ -1682,7 +1723,7 @@
         var tk = function (k) { return menu ? "" : TRACK[(n.track && n.track[k]) || "NOT_STARTED"]; };
         var row = [].concat(Array.apply(null, Array(D)).map(function (_, i) { return i === r.d ? n.name : ""; }),
           [n.func || "", KIND[n.kind] || n.kind, menu ? "-" : n.id, n.boardType || "", menu ? "" : n.loginRequired ? "Y" : "N", n.pages == null ? "" : n.pages, menu ? "" : WORK_LABEL[workOf(p, "sb:" + n.id).status], tk("design"), tk("publish"), tk("dev"), n.devNeeded || "", (n.taskIds || []).join(", "), n.note || "", n.decision || ""],
-          ch.map(function (c) { return menu ? "" : (n.devices || []).indexOf(c.id) >= 0 ? "O" : ""; }),
+          ch.map(function (c) { return menu || c.all ? "" : (n.devices || []).indexOf(c.id) >= 0 ? "O" : ""; }),
           ch.map(function (c) { if (menu) return ""; var st = qaStat(p, cs, c.id); return st.total ? st.pass + "/" + st.total + (st.fail ? " (실패 " + st.fail + ")" : "") : ""; }));
         row._menu = menu;
         return row;
@@ -1696,10 +1737,10 @@
     saveXlsx(xlsx(sheets), pr.code + "_정보구조도_" + new Date().toISOString().slice(0, 10));
   }
   function qaXlsx(code) {
-    var p = P(), ch = channels(p), pr = p.model.project;
+    var p = P(), pr = p.model.project;
     var systems = p.model.systems.filter(function (s) { return s.hasScreens && (!code || s.code === code); });
     var sheets = systems.map(function (s) {
-      var rows = [];
+      var rows = [], ch = testChs(p, s.code);
       iaRows(p, s.code).forEach(function (r) {
         if (r.n.kind === "MENU") return;
         testsOf(p, r.n.id).forEach(function (t) {
@@ -1997,6 +2038,7 @@
         p.base.storyboard.screens.forEach(function (sbx) { if (sbx.systemCode === target && !ids[sbx.screenId]) warns.push("화면설계서가 있는 " + sbx.screenId + "가 빠졌습니다"); });
       }
     } else if (kind === "sb") {
+      if (!Array.isArray(out.components) && findComps(out, 0)) out.components = findComps(out, 0);
       if (!Array.isArray(out.components) || !out.components.length) errs.push("components 배열이 없습니다");
       else {
         var node = p.model.ia.nodes.find(function (n) { return n.id === target; }) || {};
@@ -2204,6 +2246,49 @@
       return AI.sample.json(msgs, { signal: ctl.signal, cache: false, onText: onText }).then(function (out2) { return { out: out2, retried: true, reason: why }; });
     });
   }
+  /**
+   * 화면설계서 AI 결과 모양 맞추기 — 모델마다 다르게 주는 모양을 components 배열로 모은다.
+   *  배열만 · {screen:{components}} 처럼 한 겹 싸인 것 · 항목 하나만 · 바뀐 항목만(미세조정) → 이전 버전에 번호로 합친다
+   */
+  function looksComp(c) { return c && typeof c === "object" && !Array.isArray(c) && (c.no != null || c.label != null || c.ui != null || c.planner != null); }
+  function findComps(o, depth) {
+    if (Array.isArray(o)) return o.length && o.some(looksComp) ? o.filter(function (x) { return x && typeof x === "object"; }) : null;
+    if (!o || typeof o !== "object" || depth > 4) return null;
+    var keys = ["components", "items", "updated", "changes", "changed", "patch", "modified", "storyboard", "screen", "sheet", "result", "data", "output"];
+    for (var i = 0; i < keys.length; i++) { var r = o[keys[i]] != null ? findComps(o[keys[i]], depth + 1) : null; if (r) return r; }
+    for (var k in o) if (keys.indexOf(k) < 0 && o[k] && typeof o[k] === "object") { var r2 = findComps(o[k], depth + 1); if (r2) return r2; }
+    return null;
+  }
+  function normSbOut(out, prev) {
+    var comps = findComps(out, 0);
+    if (!comps && looksComp(out) && out.no != null) comps = [out];
+    if (!comps) return { out: out, note: "" };
+    var tpl = out && (out.template || (out.screen && out.screen.template) || (out.storyboard && out.storyboard.template)) || (prev && prev.template);
+    var pcs = prev && Array.isArray(prev.components) ? prev.components : null, note = "";
+    // 바뀐 항목만 온 경우: 번호가 모두 이전 버전에 있고 개수가 적으면 이전 버전에 합친다
+    if (pcs && comps.length < pcs.length && comps.every(function (c) { return c.no != null && pcs.some(function (x) { return String(x.no) === String(c.no); }); })) {
+      var by = {};
+      comps.forEach(function (c) { by[String(c.no)] = c; });
+      comps = pcs.map(function (x) { var c = by[String(x.no)]; return c ? Object.assign({}, x, c) : x; });
+      note = "AI가 바뀐 항목(" + Object.keys(by).join(", ") + "번)만 보내 와 나머지 항목은 이전 버전 그대로 합쳤습니다";
+    }
+    var o2 = { components: comps };
+    if (tpl) o2.template = tpl;
+    return { out: o2, note: note };
+  }
+  function sbAsk(input, prev, ctl, onText) {
+    return AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (out) {
+      var r = normSbOut(out, prev);
+      if (Array.isArray(r.out.components) && r.out.components.length) return { out: r.out, note: r.note };
+      var msgs = typeof input === "string" ? [{ role: "user", content: input }] : input.slice();
+      msgs = msgs.concat([{ role: "assistant", content: JSON.stringify(out).slice(0, 4000) }, { role: "user", content: "방금 답에는 components 배열이 없어 화면설계서를 그릴 수 없습니다. 바뀌지 않은 항목까지 모두 넣어 {\"template\":\"…\",\"components\":[{\"no\":1,\"label\":\"…\",\"kind\":\"…\",\"planner\":\"…\",\"customer\":\"…\",\"ui\":{\"component\":\"…\",\"props\":{}}}]} 형식의 JSON 전체만 다시 답하세요." }]);
+      return AI.sample.json(msgs, { signal: ctl.signal, cache: false, onText: onText }).then(function (out2) {
+        var r2 = normSbOut(out2, prev);
+        if (!Array.isArray(r2.out.components) || !r2.out.components.length) { var e = new Error("AI가 두 번 모두 components 배열 없이 답했습니다. 다른 모델로 바꾸거나 요청을 더 구체적으로 적어 다시 시도하세요"); e.code = "server"; throw e; }
+        return { out: r2.out, note: r2.note, retried: true };
+      });
+    });
+  }
   function genRun(instruction) {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
     var base = layer.sel != null && !layer.fresh ? doc.versions[layer.sel] : null;
@@ -2224,11 +2309,16 @@
     saveSpecs(g).then(function () {
       if (ctl.signal.aborted) { var ab = new Error("cancelled"); ab.code = "cancelled"; throw ab; }
       var onText = function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; };
+      if (g.kind === "sb") {
+        // 바뀐 항목만 합치기는 미세조정(이전 버전이 있을 때)에만
+        return sbAsk(input, base && !/삭제|제거|빼|없애|지워/.test(instruction || "") ? base.output : null, ctl, onText);
+      }
       return g.kind === "ds" && selectedDesign(p, g.target) ? dsAsk(input, p, g, scope, ctl, onText) : AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (o) { return { out: o }; });
     }, function (e) { if (!e.code) e.code = "server"; throw e; })
       .then(function (res) {
         var out = res.out;
-        if (res.retried) toast("처음 답은 반영될 것이 없어 이유를 알려 주고 다시 받았습니다");
+        if (res.retried) toast(g.kind === "sb" ? "처음 답에 components 배열이 없어 다시 받았습니다" : "처음 답은 반영될 것이 없어 이유를 알려 주고 다시 받았습니다");
+        if (res.note) toast(res.note);
         if (g.kind === "ds") out = normDsPatch(out, selectedDesign(p, g.target));
         var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
         var v = { n: n, scope: scope, scopeLabel: scopeInfo(scope).label, commentIds: cids, instruction: instruction || (cids.length ? "댓글 " + cids.length + "개 반영" : "(1차 생성)"), from: base ? base.n : null, root: g.requiresInstruction ? rootText : null, output: out, at: new Date().toISOString() };
@@ -2989,6 +3079,41 @@
         eyebrow: tid, title: "검토 완료 기록", submit: "기록", intro: "요구사항 추적표의 검토완료 상태는 사람이 확인해야 합니다.",
         fields: [{ name: "reviewer", label: "검토자", required: true, value: ME ? ME.name : "" }, { name: "note", label: "메모", type: "textarea" }],
         onSubmit: function (v) { return cmd({ op: "task.review", taskId: tid, reviewer: v.reviewer, note: v.note }); }
+      });
+    },
+    "task-edit": function (tid) {
+      var p = P(), req = p.model.requirements.find(function (r) { return r.tasks.some(function (x) { return x.id === tid; }); });
+      if (!req) return;
+      var t = req.tasks.find(function (x) { return x.id === tid; });
+      openForm({
+        eyebrow: req.id + " " + req.title, title: tid + " Task 수정", submit: "저장",
+        intro: "AI·자동 생성된 Task의 내용이 요구사항 제목과 맞지 않으면 여기서 바로잡습니다. Task ID와 화면·플로우 연결은 그대로 유지됩니다." + (req.description ? '<br><span class="hint">요구사항 설명: ' + esc(req.description.slice(0, 200)) + (req.description.length > 200 ? "…" : "") + "</span>" : ""),
+        fields: [
+          { name: "systemCode", label: "시스템", type: "select", options: systemOptions(p), value: t.systemCode, required: true },
+          { name: "actor", label: "행위자", value: t.actor, placeholder: "예: 심사자" },
+          { name: "action", label: "처리 내용", required: true, value: t.action, placeholder: "예: 검토 후 승인·반려" },
+          { name: "after", label: "선행 Task", type: "select", options: [["", "없음"]].concat(req.tasks.filter(function (x) { return x.id !== tid; }).map(function (x) { return [x.id, shortTask(x.id, req.id) + " [" + x.systemCode + "] " + x.action]; })), value: (t.after || [])[0] || "" },
+          { name: "to", label: "처리 후 자료 상태", value: t.transition ? t.transition.to : "", placeholder: "예: 공개 (비우면 없음)" },
+          { name: "noScreenReason", label: "화면이 없다면 사유", value: t.noScreenReason || "", placeholder: "비우면 화면이 있는 Task" }
+        ],
+        onSubmit: function (v) {
+          return cmd({ op: "task.edit", taskId: tid, input: { systemCode: v.systemCode, actor: v.actor, action: v.action, after: v.after ? [v.after].concat((t.after || []).slice(1)) : [], to: v.to, noScreenReason: v.noScreenReason } });
+        }
+      });
+    },
+    "req-edit": function (rid) {
+      var p = P(), req = p.model.requirements.find(function (r) { return r.id === rid; });
+      if (!req) return;
+      openForm({
+        eyebrow: rid, title: "요구사항 수정", submit: "저장",
+        intro: "제목과 설명이 Task 내용과 어긋나면 고칩니다. 설명을 고친 뒤 ‘Task 자동 생성’을 다시 누르면 새 설명으로 Task를 제안합니다(기존 Task는 그대로).",
+        fields: [
+          { name: "title", label: "요구사항", required: true, value: req.title },
+          { name: "description", label: "설명", type: "textarea", rows: 5, value: req.description || "" },
+          { name: "type", label: "유형", type: "select", options: [["FUNCTIONAL", "기능"], ["NON_FUNCTIONAL", "비기능"], ["POLICY", "정책"], ["CONTENT", "콘텐츠"], ["CONSTRAINT", "제약"]], value: req.type },
+          { name: "priority", label: "우선순위", type: "select", options: [["MUST", "필수 (MUST)"], ["SHOULD", "권장 (SHOULD)"], ["COULD", "선택 (COULD)"]], value: req.priority }
+        ],
+        onSubmit: function (v) { return cmd({ op: "req.edit", id: rid, input: { title: v.title, description: v.description, type: v.type, priority: v.priority } }); }
       });
     },
     "task-rm": function (tid) {
