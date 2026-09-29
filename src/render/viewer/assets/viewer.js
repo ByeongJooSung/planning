@@ -2579,10 +2579,12 @@
     lmstudio: { label: "LM Studio", provider: "openai-compatible", baseUrl: "http://localhost:1234/v1", key: "보통 비움", hint: "LM Studio → Developer(개발자) 탭 → Start Server. 이 서비스가 인터넷(Vercel)에 있으면 localhost 로는 닿지 않습니다. 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널 등)를 넣으세요." },
     ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
     gemini: { label: "Gemini", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "AIza… (필수)", hint: "Google AI Studio(aistudio.google.com/apikey)에서 API 키를 발급받아 넣으세요. 무료 사용량이 있는 키도 발급됩니다. 구글 계정 로그인(OAuth)이나 Gemini 구독으로는 API를 호출할 수 없어 키 방식만 지원합니다." },
+    "gemini-oauth": { label: "Gemini · Google OAuth", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", oauth: true, key: "", hint: "내 Google Cloud 프로젝트의 OAuth 클라이언트로 Google 계정에 로그인해 Gemini API를 호출합니다. 사용량과 요금은 그 Google Cloud 프로젝트 기준입니다(Gemini 구독 아님). 아래 준비 단계를 따라 하세요." },
     anthropic: { label: "Anthropic", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API. 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude 구독(Pro·Max) 로그인은 Anthropic 정책상 다른 서비스에서 쓸 수 없어 지원하지 않습니다." },
     custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
   };
-  var PRESET_ORDER = ["nvidia", "gemini", "lmstudio", "ollama", "anthropic", "custom"];
+  var PRESET_ORDER = ["nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "anthropic", "custom"];
+  var GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
   function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
   function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
   function afterAiChange(scope) {
@@ -2622,7 +2624,7 @@
         return '<li class="' + (isDef ? "on" : "") + '"><span class="mono">' + esc(m) + "</span>" + (isDef ? '<span class="pill DESIGNED">기본</span>' : manage ? actBtn("ai-default", "기본으로", key) : "") + (canTest ? actBtn("ai-test", "확인", key) : "") + "</li>";
       }).join("");
       return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : "OpenAI 호환") + "</span>" +
-        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">키 ' + (c.hasKey ? "저장됨" : "없음") + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
+        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">' + (c.oauth ? (c.oauth.connected ? "Google 연결됨" + (c.oauth.email ? " · " + esc(c.oauth.email) : "") : '<b class="warn-t">Google 연결 필요</b>') : "키 " + (c.hasKey ? "저장됨" : "없음")) + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
         '<ul class="models">' + models + "</ul>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-edit", "편집 · 모델 추가", scope + "|" + c.id) + actBtn("ai-conn-del", "삭제", scope + "|" + c.id, "btn-sm danger") + "</div>" : "") + "</article>";
     }).join("") + "</div>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-add", "+ 연결 추가", scope) + "</div>" : "");
   }
@@ -2658,7 +2660,8 @@
     openLayer({ kind: "aiconn", ac: {
       scope: scope, id: conn ? conn.id : null, preset: preset, hasKey: conn ? conn.hasKey : false,
       label: conn ? conn.label : ps.label, baseUrl: conn ? conn.baseUrl || "" : ps.baseUrl, apiKey: "", clearKey: false, maxTokens: conn && conn.maxTokens ? String(conn.maxTokens) : "",
-      models: conn ? conn.models.slice() : [], fetched: [], filter: "", busy: false, err: ""
+      models: conn ? conn.models.slice() : ps.oauth ? [GEMINI_DEFAULT_MODEL] : [], fetched: [], filter: "", busy: false, err: "",
+      oauth: conn && conn.oauth ? conn.oauth : null, cid: conn && conn.oauth && conn.oauth.clientId || "", csec: "", pid: conn && conn.oauth && conn.oauth.projectId || ""
     } });
   }
   function acSync() {
@@ -2669,6 +2672,9 @@
     if (v("ac-url") != null) ac.baseUrl = v("ac-url").trim();
     if (v("ac-key") != null) ac.apiKey = v("ac-key");
     if (v("ac-max") != null) ac.maxTokens = v("ac-max").trim();
+    if (v("ac-cid") != null) ac.cid = v("ac-cid").trim();
+    if (v("ac-csec") != null) ac.csec = v("ac-csec").trim();
+    if (v("ac-pid") != null) ac.pid = v("ac-pid").trim();
     var ck = document.getElementById("ac-clear");
     if (ck) ac.clearKey = ck.checked;
   }
@@ -2701,9 +2707,10 @@
     return '<header class="layer-h"><div><span class="eyebrow">' + (ac.scope === "project" ? "프로젝트 AI 연결 · 운영자" : "내 AI 연결") + '</span><h2 id="layer-t">' + (ac.id ? "연결 편집" : "연결 추가") + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" +
       '<div class="ac-grid"><div class="fm-row"><label for="ac-label">연결 이름</label><input id="ac-label" type="text" value="' + esc(ac.label) + '" maxlength="60"></div>' +
-      '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>' +
-      '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>" +
+      (ps.oauth ? "" : '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>' +
+      '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>") +
       '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 8192)</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="8192"></div></div>' +
+      (ps.oauth ? oauthBlock(ac) : "") +
       '<div class="ac-models"><div class="ac-mh"><b>모델</b><span class="hint">여러 개 골라 저장해 두면 드롭다운으로 바로 바꿀 수 있습니다</span><span class="sp"></span><button class="btn-sm" data-acfetch' + (ac.busy ? " disabled" : "") + ">" + (ac.busy ? "불러오는 중…" : "모델 불러오기") + "</button></div>" +
       acProbeBox() + '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
       (ac.fetched.length ? '<input id="ac-filter" type="search" placeholder="모델 검색 (예: llama, qwen, 70b)" value="' + esc(ac.filter) + '" autocomplete="off">' : "") + '<div id="ac-list" class="ac-list">' + acList() + "</div>" +
@@ -2712,8 +2719,53 @@
       '<p class="hint">키는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다.' + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
       '<footer class="layer-f"><span class="hint" id="ac-count">고른 모델 ' + ac.models.length + '개</span><span class="sp"></span><button class="btn-sm" data-close-layer>취소</button><button class="btn-primary" data-acsave' + (ac.busy ? " disabled" : "") + ">저장</button></footer>";
   }
+  /** Google Cloud OAuth: 준비 단계 안내, 클라이언트 정보 입력, 연결 상태 */
+  function oauthBlock(ac) {
+    var redirect = location.origin + "/api/oauth/google/callback", o = ac.oauth;
+    var steps = "<ol class=\"ac-steps\"><li><a href=\"https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com\" target=\"_blank\" rel=\"noopener\">Google Cloud 콘솔</a>에서 프로젝트를 고르고 <b>Generative Language API</b>를 사용 설정합니다(결제 계정 연결 필요할 수 있음).</li>" +
+      "<li><b>API 및 서비스 → OAuth 동의 화면</b>을 만들고, 게시 상태가 ‘테스트’면 내 Google 계정을 <b>테스트 사용자</b>로 추가합니다(테스트 상태의 연결은 7일 뒤 만료 → 게시하면 유지).</li>" +
+      "<li><b>사용자 인증 정보 → OAuth 클라이언트 ID 만들기 → 웹 애플리케이션</b>. <b>승인된 리디렉션 URI</b>에 아래 주소를 그대로 추가합니다.</li>" +
+      "<li>발급된 <b>클라이언트 ID·시크릿</b>과 <b>프로젝트 ID</b>를 아래에 넣고 저장 → <b>Google 계정 연결</b>.</li></ol>";
+    var status = !ac.id ? '<span class="hint">먼저 저장하면 Google 계정 연결 버튼이 나타납니다.</span>' :
+      o && o.connected ? '<span class="pill DESIGNED">✓ 연결됨</span> <span>' + esc(o.email || "Google 계정") + '</span> <span class="hint">' + (o.connectedAt ? esc(fmtDate(o.connectedAt)) : "") + '</span><button class="btn-sm" data-acgconnect>다시 연결</button><button class="btn-sm danger" data-acgdisc>연결 해제</button>' :
+      '<span class="pill IN_DESIGN">연결 필요</span> <button class="btn-primary" data-acgconnect>Google 계정 연결</button>';
+    return '<div class="ac-oauth"><b>Google Cloud 준비</b>' + steps +
+      '<div class="fm-row"><label>승인된 리디렉션 URI <span class="hint">(콘솔에 그대로 추가)</span></label><div class="ac-uri"><code class="mono">' + esc(redirect) + '</code><button class="btn-sm" data-accopy="' + esc(redirect) + '">복사</button></div></div>' +
+      '<div class="ac-grid"><div class="fm-row"><label for="ac-cid">OAuth 클라이언트 ID</label><input id="ac-cid" type="text" value="' + esc(ac.cid) + '" placeholder="123456789-xxxx.apps.googleusercontent.com" autocomplete="off"></div>' +
+      '<div class="fm-row"><label for="ac-csec">클라이언트 시크릿</label><input id="ac-csec" type="password" autocomplete="new-password" value="' + esc(ac.csec) + '" placeholder="' + esc(o && o.hasSecret ? "저장됨 — 바꿀 때만 입력" : "GOCSPX-…") + '"></div>' +
+      '<div class="fm-row"><label for="ac-pid">Google Cloud 프로젝트 ID</label><input id="ac-pid" type="text" value="' + esc(ac.pid) + '" placeholder="my-gemini-project-123" autocomplete="off"><span class="hint">이름이 아니라 ID (콘솔 상단 프로젝트 선택창에서 확인)</span></div></div>' +
+      '<div class="ac-status" role="status">' + status + "</div></div>";
+  }
+  /** 입력 저장 → 성공하면 (새 연결이면) 방금 만든 연결의 ID를 알려 준다 */
+  function acSave(ac) {
+    var ps = AI_PRESETS[ac.preset], before = aiSetOf(ac.scope).conns.map(function (c) { return c.id; });
+    var body = { id: ac.id, label: ac.label, provider: ps.provider, preset: ac.preset, baseUrl: ps.oauth ? "" : ac.baseUrl, apiKey: ac.apiKey, clearKey: ac.clearKey, models: ac.models, maxTokens: ac.maxTokens || null };
+    if (ps.oauth) body.oauth = { clientId: ac.cid, clientSecret: ac.csec, projectId: ac.pid };
+    return api("PUT", aiBase(ac.scope) + "/conns", body).then(function (r) {
+      var set = ac.scope === "project" ? r.project : r.ai;
+      var conn = ac.id ? set.conns.find(function (c) { return c.id === ac.id; }) : set.conns.find(function (c) { return before.indexOf(c.id) < 0; }) || set.conns[set.conns.length - 1];
+      return { set: set, conn: conn };
+    });
+  }
   function connClick(b) {
     var ac = layer.ac;
+    if (b.dataset.accopy) { copyText(b.dataset.accopy, b); return true; }
+    if (b.hasAttribute("data-acgconnect")) {
+      acSync();
+      ac.busy = true; ac.err = ""; renderLayer();
+      acSave(ac).then(function (r) {
+        ac.id = r.conn.id;
+        return api("POST", "/api/oauth/google/start", { scope: ac.scope, project: ac.scope === "project" ? P().model.project.code : undefined, conn: ac.id });
+      }).then(function (r) { location.href = r.url; }, function (e) { ac.busy = false; ac.err = e.message; if (layer && layer.ac === ac) renderLayer(); });
+      return true;
+    }
+    if (b.hasAttribute("data-acgdisc")) {
+      api("POST", aiBase(ac.scope) + "/conns/" + enc(ac.id) + "/oauth/disconnect").then(function (r) {
+        var set = ac.scope === "project" ? r.project : r.ai, c = set.conns.find(function (x) { return x.id === ac.id; });
+        ac.oauth = c && c.oauth; toast("Google 연결을 해제했습니다"); renderLayer(); return afterAiChange(ac.scope);
+      }, function (e) { ac.err = e.message; renderLayer(); });
+      return true;
+    }
     if (b.dataset.acpreset) {
       acSync();
       var old = AI_PRESETS[ac.preset], ps = AI_PRESETS[b.dataset.acpreset];
@@ -2721,13 +2773,15 @@
       if (!ac.baseUrl || ac.baseUrl === old.baseUrl) ac.baseUrl = ps.baseUrl;
       if (old.provider !== ps.provider) { ac.hasKey = false; ac.fetched = []; }
       ac.preset = b.dataset.acpreset; ac.err = "";
+      if (ps.oauth && !ac.models.length) ac.models = [GEMINI_DEFAULT_MODEL];
       renderLayer(); return true;
     }
     if (b.hasAttribute("data-acfetch")) {
       acSync();
       var ps2 = AI_PRESETS[ac.preset];
+      if (ps2.oauth && !(ac.oauth && ac.oauth.connected)) { ac.probe = { ok: false, error: "Google 계정을 아직 연결하지 않았습니다", hint: "위에서 저장 → ‘Google 계정 연결’을 마친 뒤 모델을 불러올 수 있습니다. 그 전에는 모델 이름을 직접 입력해도 됩니다.", url: "" }; renderLayer(); return true; }
       ac.busy = true; ac.err = ""; ac.probe = null; renderLayer();
-      api("POST", aiBase(ac.scope) + "/models", { connId: ac.id, provider: ps2.provider, baseUrl: ac.baseUrl, apiKey: ac.apiKey }).then(function (r) {
+      api("POST", aiBase(ac.scope) + "/models", { connId: ac.id, provider: ps2.provider, baseUrl: ps2.oauth ? AI_PRESETS["gemini-oauth"].baseUrl : ac.baseUrl, apiKey: ac.apiKey }).then(function (r) {
         ac.probe = r;
         if (r.ok) { ac.fetched = r.models || []; toast("모델 불러오기 성공 · " + ac.fetched.length + "개"); }
         else toast("모델 불러오기 실패 · " + r.error, "err");
@@ -2749,9 +2803,11 @@
       var ps3 = AI_PRESETS[ac.preset];
       if (!ac.models.length) { ac.err = "모델을 하나 이상 고르거나 직접 입력하세요"; renderLayer(); return true; }
       ac.busy = true; ac.err = ""; renderLayer();
-      api("PUT", aiBase(ac.scope) + "/conns", { id: ac.id, label: ac.label, provider: ps3.provider, preset: ac.preset, baseUrl: ac.baseUrl, apiKey: ac.apiKey, clearKey: ac.clearKey, models: ac.models, maxTokens: ac.maxTokens || null }).then(function () {
+      acSave(ac).then(function (r) {
         toast("연결을 저장했습니다: " + ac.label + " · 모델 " + ac.models.length + "개");
         var scope = ac.scope;
+        // Google OAuth 연결은 저장 뒤에 계정 연결이 남아 있으므로 창을 닫지 않고 연결 버튼을 보여 준다
+        if (ps3.oauth && !(r.conn.oauth && r.conn.oauth.connected)) { ac.id = r.conn.id; ac.oauth = r.conn.oauth; ac.csec = ""; ac.busy = false; renderLayer(); return afterAiChange(scope); }
         closeLayer();
         return afterAiChange(scope);
       }, function (e) { ac.busy = false; ac.err = e.message; if (layer && layer.ac === ac) renderLayer(); });
@@ -2972,7 +3028,19 @@
       return enterApp();
     }, function (e) { btn.disabled = false; err.textContent = e.message; err.hidden = false; });
   }
+  /** Google 로그인에서 돌아온 결과(?oauth=ok|error&msg=…)를 한 번 알려 준다 */
+  function oauthReturn() {
+    var q = new URLSearchParams(location.search), r = q.get("oauth");
+    return r ? { ok: r === "ok", msg: q.get("msg") || "" } : null;
+  }
   function enterApp() {
+    var ret = oauthReturn();
+    return enterApp0().then(function (x) {
+      if (ret) { toast(ret.ok ? "Google 계정을 연결했습니다. 연결 편집에서 모델 불러오기를 하세요" : "Google 연결 실패: " + ret.msg, ret.ok ? "" : "err"); history.replaceState(null, "", location.pathname); }
+      return x;
+    });
+  }
+  function enterApp0() {
     return api("GET", "/api/config").then(function (c) { CFG = c; }).then(refreshMe).then(function () {
       if (authState.token) {
         var tk = authState.token;

@@ -49,6 +49,17 @@ const AiConn = z.object({
   models: z.array(z.string()).default([]),
   /** 최대 출력 토큰 (비우면 8192, 서버가 거부하면 빼고 다시 보냄) */
   maxTokens: z.number().int().positive().optional(),
+  /** Google Cloud OAuth (Gemini) — 클라이언트 시크릿·리프레시 토큰은 암호화해 저장 */
+  oauth: z
+    .object({
+      clientId: z.string(),
+      secretEnc: z.string(),
+      projectId: z.string(),
+      refreshEnc: z.string().optional(),
+      email: z.string().optional(),
+      connectedAt: z.string().optional(),
+    })
+    .optional(),
   updatedAt: z.string(),
   updatedBy: z.string(),
 });
@@ -113,6 +124,8 @@ export interface AiConnPublic {
   hasKey: boolean;
   models: string[];
   maxTokens?: number;
+  /** Google OAuth 연결 상태 (클라이언트 ID·프로젝트는 설정 주인에게만, 시크릿·토큰은 절대 내보내지 않는다) */
+  oauth?: { hasSecret: boolean; connected: boolean; email?: string; connectedAt?: string; clientId?: string; projectId?: string };
   updatedAt: string;
 }
 export interface AiSetPublic {
@@ -132,6 +145,16 @@ export interface AiResolved {
   /** 연결 이름·ID (서버 기본이면 없음) */
   label?: string;
   conn?: string;
+  /** Google OAuth 연결 (액세스 토큰은 호출할 때 리프레시 토큰으로 받는다) */
+  oauth?: OAuthCreds;
+  /** Google 연결을 아직 안 한 연결 — 호출하면 안내 오류 */
+  needsOauth?: boolean;
+}
+export interface OAuthCreds {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  projectId: string;
 }
 export interface AiConnInput {
   id?: string;
@@ -143,12 +166,15 @@ export interface AiConnInput {
   clearKey?: boolean;
   models?: string[];
   maxTokens?: number | string | null;
+  /** Google Cloud OAuth: 클라이언트 ID·시크릿(비우면 기존 유지)·프로젝트 ID */
+  oauth?: { clientId?: string; clientSecret?: string; projectId?: string };
 }
 /** 모델 목록 불러오기용 — 저장 전 입력값 또는 저장된 연결(키 재사용) */
 export interface AiProbe {
   provider: AiProvider;
   baseUrl?: string;
   apiKey?: string;
+  oauth?: OAuthCreds;
 }
 
 const SESSION_DAYS = 30;
@@ -471,17 +497,35 @@ export class Accounts {
     if (!AI_PROVIDERS.includes(provider)) throw new HttpError(400, "호출 방법이 올바르지 않습니다");
     const label = String(input.label ?? "").trim().slice(0, 60);
     if (!label) throw new HttpError(400, "연결 이름을 입력하세요");
-    const baseUrl = normUrl(input.baseUrl);
+    const baseUrl = input.preset === GOOGLE_PRESET ? normUrl(input.baseUrl) ?? GEMINI_BASE : normUrl(input.baseUrl);
+    // 액세스 토큰이 엉뚱한 주소로 가지 않도록 Google OAuth 연결은 Gemini 주소만 쓴다 (테스트용 예외: 환경변수)
+    if (input.preset === GOOGLE_PRESET && new URL(baseUrl!).host !== "generativelanguage.googleapis.com" && !process.env.PLANNING_ALLOW_ANY_OAUTH_BASE) throw new HttpError(400, "Google OAuth 연결의 API 주소는 generativelanguage.googleapis.com 이어야 합니다");
     if (provider === "openai-compatible" && !baseUrl) throw new HttpError(400, "API 주소를 입력하세요 (예: https://integrate.api.nvidia.com/v1)");
-    let keyEnc = prev && prev.provider === provider ? prev.keyEnc : undefined;
+    const isG = input.preset === GOOGLE_PRESET;
+    if (isG && provider !== "openai-compatible") throw new HttpError(400, "Google OAuth 연결은 Gemini(OpenAI 호환) 방식입니다");
+    let oauth: AiConn["oauth"];
+    if (isG) {
+      const o = input.oauth ?? {};
+      const clientId = String(o.clientId ?? prev?.oauth?.clientId ?? "").trim();
+      const projectId = String(o.projectId ?? prev?.oauth?.projectId ?? "").trim();
+      if (!/^[0-9]+-[\w.-]+\.apps\.googleusercontent\.com$/.test(clientId) && !/^[\w.-]{10,}$/.test(clientId)) throw new HttpError(400, "OAuth 클라이언트 ID를 입력하세요 (…apps.googleusercontent.com)");
+      if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(projectId)) throw new HttpError(400, "Google Cloud 프로젝트 ID를 입력하세요 (예: my-gemini-project-123, 이름이 아니라 ID)");
+      const secret = String(o.clientSecret ?? "").trim();
+      const secretEnc = secret ? encrypt(this.key, secret) : prev?.oauth?.secretEnc;
+      if (!secretEnc) throw new HttpError(400, "OAuth 클라이언트 시크릿을 입력하세요");
+      const sameClient = prev?.oauth?.clientId === clientId && !secret;
+      // 클라이언트가 바뀌면 이전 토큰은 쓸 수 없으므로 다시 연결하게 한다
+      oauth = { clientId, secretEnc, projectId, ...(sameClient && prev?.oauth ? { refreshEnc: prev.oauth.refreshEnc, email: prev.oauth.email, connectedAt: prev.oauth.connectedAt } : {}) };
+    }
+    let keyEnc = !isG && prev && prev.provider === provider ? prev.keyEnc : undefined;
     if (input.clearKey) keyEnc = undefined;
-    if (input.apiKey && String(input.apiKey).trim()) keyEnc = encrypt(this.key, String(input.apiKey).trim());
+    if (!isG && input.apiKey && String(input.apiKey).trim()) keyEnc = encrypt(this.key, String(input.apiKey).trim());
     if (provider === "anthropic" && !keyEnc) throw new HttpError(400, "Anthropic은 API 키가 필요합니다");
     const models = [...new Set((input.models ?? []).map((m) => String(m).trim()).filter(Boolean))].slice(0, 50).map((m) => m.slice(0, 200));
     if (!models.length) throw new HttpError(400, "모델을 하나 이상 고르거나 입력하세요");
     const mt = input.maxTokens === null || input.maxTokens === "" || input.maxTokens === undefined ? undefined : Number(input.maxTokens);
     if (mt !== undefined && (!Number.isInteger(mt) || mt < 256 || mt > 200000)) throw new HttpError(400, "최대 출력 토큰은 256~200000 사이 정수입니다");
-    const conn: AiConn = { id: prev?.id ?? newId("c"), label, provider, preset: input.preset ? String(input.preset).slice(0, 20) : undefined, baseUrl, keyEnc, models, maxTokens: mt, updatedAt: this.iso(), updatedBy: by };
+    const conn: AiConn = { id: prev?.id ?? newId("c"), label, provider, preset: input.preset ? String(input.preset).slice(0, 20) : undefined, baseUrl, keyEnc, models, maxTokens: mt, ...(oauth ? { oauth } : {}), updatedAt: this.iso(), updatedBy: by };
     set.conns = prev ? set.conns.map((c) => (c.id === conn.id ? conn : c)) : [...set.conns, conn];
     if (!set.active || !set.conns.some((c) => c.id === set.active!.conn)) set.active = { conn: conn.id, model: models[0]! };
     else if (set.active.conn === conn.id && !models.includes(set.active.model)) set.active = { conn: conn.id, model: models[0]! };
@@ -520,21 +564,51 @@ export class Accounts {
   /** full=false면 주소를 숨긴다 (프로젝트 연결을 보는 운영자 아닌 멤버) */
   aiSetPublic(set: AiSet, full: boolean): AiSetPublic {
     return {
-      conns: set.conns.map((c) => ({ id: c.id, label: c.label, provider: c.provider, preset: c.preset, ...(full && c.baseUrl ? { baseUrl: c.baseUrl } : {}), hasKey: !!c.keyEnc, models: c.models, maxTokens: c.maxTokens, updatedAt: c.updatedAt })),
+      conns: set.conns.map((c) => ({ id: c.id, label: c.label, provider: c.provider, preset: c.preset, ...(full && c.baseUrl ? { baseUrl: c.baseUrl } : {}), hasKey: !!c.keyEnc, models: c.models, maxTokens: c.maxTokens, ...(c.oauth ? { oauth: { hasSecret: true, connected: !!c.oauth.refreshEnc, email: c.oauth.email, connectedAt: c.oauth.connectedAt, ...(full ? { clientId: c.oauth.clientId, projectId: c.oauth.projectId } : {}) } } : {}), updatedAt: c.updatedAt })),
       active: set.active ?? null,
     };
   }
   /** 모델 목록을 부를 때 쓸 주소·키 — 저장된 연결이면 키를 다시 쓴다 */
   async probeFor(scope: AiScope, owner: string, input: AiProbe & { connId?: string }): Promise<AiProbe> {
-    const baseUrl = normUrl(input.baseUrl);
+    let baseUrl = normUrl(input.baseUrl);
     let apiKey = input.apiKey && String(input.apiKey).trim() ? String(input.apiKey).trim() : undefined;
-    if (!apiKey && input.connId) {
+    let oauth: OAuthCreds | undefined;
+    if (input.connId) {
       const conn = (await this.aiSet(scope, owner)).conns.find((c) => c.id === input.connId);
-      if (conn?.keyEnc && conn.provider === input.provider) apiKey = decrypt(this.key, conn.keyEnc);
+      // OAuth 연결은 저장된 주소로만 부른다 (화면에서 보낸 주소로 액세스 토큰이 가지 않게)
+      if (conn?.oauth) baseUrl = conn.baseUrl;
+      if (!apiKey && conn?.keyEnc && conn.provider === input.provider) apiKey = decrypt(this.key, conn.keyEnc);
+      if (conn?.oauth && !conn.oauth.refreshEnc) throw new HttpError(409, "먼저 ‘Google 계정 연결’을 완료하세요. 연결한 뒤에 모델 목록을 불러올 수 있습니다.");
+      if (conn?.oauth?.refreshEnc) oauth = this.oauthOf(conn.oauth);
     }
     if (!AI_PROVIDERS.includes(input.provider)) throw new HttpError(400, "호출 방법이 올바르지 않습니다");
     if (input.provider === "openai-compatible" && !baseUrl) throw new HttpError(400, "API 주소를 입력하세요");
-    return { provider: input.provider, baseUrl, apiKey };
+    return { provider: input.provider, baseUrl, apiKey, ...(oauth ? { oauth } : {}) };
+  }
+  private oauthOf(o: NonNullable<AiConn["oauth"]>): OAuthCreds {
+    return { clientId: o.clientId, clientSecret: decrypt(this.key, o.secretEnc), refreshToken: decrypt(this.key, o.refreshEnc!), projectId: o.projectId };
+  }
+  /** OAuth 시작·콜백용: 클라이언트 정보 (리프레시 토큰 없이) */
+  async oauthClient(scope: AiScope, owner: string, connId: string): Promise<{ clientId: string; clientSecret: string; projectId: string; label: string }> {
+    const conn = (await this.aiSet(scope, owner)).conns.find((c) => c.id === connId);
+    if (!conn?.oauth) throw new HttpError(404, "Google OAuth 연결이 아닙니다");
+    return { clientId: conn.oauth.clientId, clientSecret: decrypt(this.key, conn.oauth.secretEnc), projectId: conn.oauth.projectId, label: conn.label };
+  }
+  /** 로그인을 마친 뒤 리프레시 토큰 저장 */
+  async saveOauthToken(scope: AiScope, owner: string, connId: string, token: { refreshToken: string; email?: string }) {
+    const set = await this.aiSet(scope, owner);
+    const conn = set.conns.find((c) => c.id === connId);
+    if (!conn?.oauth) throw new HttpError(404, "Google OAuth 연결이 아닙니다");
+    conn.oauth = { ...conn.oauth, refreshEnc: encrypt(this.key, token.refreshToken), email: token.email, connectedAt: this.iso() };
+    conn.updatedAt = this.iso();
+    await this.putSet(scope, owner, set);
+  }
+  async disconnectOauth(scope: AiScope, owner: string, connId: string) {
+    const set = await this.aiSet(scope, owner);
+    const conn = set.conns.find((c) => c.id === connId);
+    if (!conn?.oauth) throw new HttpError(404, "Google OAuth 연결이 아닙니다");
+    conn.oauth = { clientId: conn.oauth.clientId, secretEnc: conn.oauth.secretEnc, projectId: conn.oauth.projectId };
+    await this.putSet(scope, owner, set);
   }
   hasServerAi() {
     return !!this.opts.serverAi;
@@ -552,7 +626,7 @@ export class Accounts {
     const use = (set: AiSet, pick: AiPick | undefined, source: "project" | "personal"): AiResolved | null => {
       const c = pick && set.conns.find((x) => x.id === pick.conn);
       if (!c || !pick) return null;
-      return { source, provider: c.provider, model: pick.model, baseUrl: c.baseUrl, apiKey: c.keyEnc ? decrypt(this.key, c.keyEnc) : undefined, maxTokens: c.maxTokens, label: c.label, conn: c.id };
+      return { source, provider: c.provider, model: pick.model, baseUrl: c.baseUrl, apiKey: c.keyEnc ? decrypt(this.key, c.keyEnc) : undefined, maxTokens: c.maxTokens, label: c.label, conn: c.id, ...(c.oauth ? (c.oauth.refreshEnc ? { oauth: this.oauthOf(c.oauth) } : { needsOauth: true }) : {}) };
     };
     const choice = override ?? m?.aiChoice;
     if (choice) {
@@ -572,6 +646,9 @@ export class Accounts {
     return r ? { source: r.source, provider: r.provider, model: r.model, label: r.label ?? "", conn: r.conn ?? null } : null;
   }
 }
+
+export const GOOGLE_PRESET = "gemini-oauth";
+export const GEMINI_BASE = process.env.PLANNING_GEMINI_BASE ?? "https://generativelanguage.googleapis.com/v1beta/openai";
 
 function normUrl(raw: unknown): string | undefined {
   const v = String(raw ?? "").trim();

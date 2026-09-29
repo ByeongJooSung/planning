@@ -8,7 +8,7 @@
  *
  * 실행 형태: createLocalApp → planning serve (파일 저장소), src/server/vercel.ts → Vercel 함수 (Upstash Redis)
  */
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -20,7 +20,7 @@ import { SYSTEM_PRESETS } from "../project/presets.js";
 import { ASSET_DIR, renderViewer } from "../render/viewer/index.js";
 import { deriveProject, execute, type Command, type ProjectState } from "../service/core.js";
 import { Accounts, atLeast, HttpError, ROLES, type AiResolved, type Role, type User } from "./accounts.js";
-import { AiParseError, callAi, DEFAULT_ANTHROPIC_MODEL, probeModels, type AiInputMessages } from "./ai.js";
+import { AiParseError, callAi, DEFAULT_ANTHROPIC_MODEL, googleAuthLink, googleExchangeCode, probeModels, type AiInputMessages } from "./ai.js";
 import { newToken } from "./crypto.js";
 import { FileKv, type Kv } from "./kv.js";
 import { FsRepo, type ProjectRepo } from "./repo.js";
@@ -447,6 +447,65 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   on("POST", "/api/projects/:code/ai/models", async (c, p) => (await need(c, p.code!, "OWNER"), models(await acc.probeFor("project", p.code!, c.body ?? {}))));
   on("POST", "/api/projects/:code/ai/test", async (c, p) => (await need(c, p.code!, "EDITOR"), testAi(c, p.code!)));
 
+  // ── Google Cloud OAuth (Gemini) ──
+  // start(POST, 로그인 필요) → Google 동의 화면 → callback(GET) → 리프레시 토큰 저장 → 화면으로 돌아감
+  // state: 사용자·범위·연결·만료를 HMAC으로 서명해 담는다 (다른 사람이 만든 링크로 내 연결에 토큰을 넣을 수 없게)
+  const stateKey = createHash("sha256").update(`oauth-state\n${opts.secret}`).digest();
+  const signState = (payload: object) => {
+    const body = Buffer.from(JSON.stringify({ ...payload, n: randomBytes(6).toString("hex"), exp: Date.now() + 10 * 60_000 })).toString("base64url");
+    return `${body}.${createHmac("sha256", stateKey).update(body).digest("base64url")}`;
+  };
+  const readState = (raw: string): { u: string; scope: "project" | "personal"; owner: string; conn: string; exp: number; back: string } => {
+    const [body, sig] = raw.split(".");
+    const want = createHmac("sha256", stateKey).update(body ?? "").digest();
+    const got = Buffer.from(sig ?? "", "base64url");
+    if (!body || got.length !== want.length || !timingSafeEqual(got, want)) throw new HttpError(400, "잘못된 로그인 요청입니다. AI 설정에서 다시 시작하세요");
+    const st = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!st.exp || st.exp < Date.now()) throw new HttpError(400, "로그인 시간이 지났습니다. AI 설정에서 다시 시작하세요");
+    return st;
+  };
+  const redirectUri = (c: Ctx) => `${origin(c)}/api/oauth/google/callback`;
+  on("POST", "/api/oauth/google/start", async (c) => {
+    const b = c.body ?? {};
+    const scope = b.scope === "project" ? "project" : "personal";
+    const owner = scope === "project" ? String(b.project ?? "") : c.user!.id;
+    if (scope === "project") await need(c, owner, "OWNER");
+    const cl = await acc.oauthClient(scope, owner, String(b.conn ?? ""));
+    const back = scope === "project" ? `/p/${encodeURIComponent(owner)}/aiset` : "/account";
+    const url = googleAuthLink({ clientId: cl.clientId, redirectUri: redirectUri(c), state: signState({ u: c.user!.id, scope, owner, conn: String(b.conn), back }), loginHint: c.user!.email });
+    return { url, redirectUri: redirectUri(c) };
+  });
+  on(
+    "GET",
+    "/api/oauth/google/callback",
+    async (c) => {
+      const q = c.url.searchParams;
+      let back = "/account";
+      const done = (ok: boolean, msg = "") => {
+        c.res.writeHead(302, { Location: `${back}?oauth=${ok ? "ok" : "error"}${msg ? `&msg=${encodeURIComponent(msg.slice(0, 300))}` : ""}`, "cache-control": "no-store" });
+        c.res.end();
+        return {};
+      };
+      try {
+        const st = readState(q.get("state") ?? "");
+        back = st.back.startsWith("/") ? st.back : "/account";
+        if (q.get("error")) return done(false, q.get("error") === "access_denied" ? "Google 로그인을 취소했습니다" : `Google 오류: ${q.get("error")}`);
+        const me = await acc.sessionUser(parseCookie(c.req.headers.cookie)[COOKIE]);
+        if (!me || me.id !== st.u) return done(false, "로그인한 계정이 시작한 계정과 다릅니다. 다시 로그인한 뒤 시도하세요");
+        if (st.scope === "project") await need({ ...c, user: me }, st.owner, "OWNER");
+        const cl = await acc.oauthClient(st.scope, st.owner, st.conn);
+        const tok = await googleExchangeCode({ clientId: cl.clientId, clientSecret: cl.clientSecret, code: q.get("code") ?? "", redirectUri: redirectUri(c) });
+        await acc.saveOauthToken(st.scope, st.owner, st.conn, tok);
+        return done(true);
+      } catch (e) {
+        return done(false, e instanceof HttpError ? e.message : `연결하지 못했습니다: ${(e as Error).message}`);
+      }
+    },
+    false,
+  );
+  on("POST", "/api/me/ai/conns/:id/oauth/disconnect", async (c, p) => (await acc.disconnectOauth("personal", c.user!.id, p.id!), mine(c)));
+  on("POST", "/api/projects/:code/ai/conns/:id/oauth/disconnect", async (c, p) => (await need(c, p.code!, "OWNER"), await acc.disconnectOauth("project", p.code!, p.id!), projAi(p.code!)));
+
   /** 연결 확인 — body 에 {scope, conn, model} 이 있으면 그 조합을, 없으면 지금 쓰는 설정을 부른다 */
   async function testAi(c: Ctx, code: string | null) {
     const b = c.body ?? {};
@@ -514,7 +573,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
       const params: Record<string, string> = {};
       route.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1]!)));
       const out = await route.fn(c, params);
-      send(res, 200, JSON.stringify(out ?? {}), "application/json; charset=utf-8");
+      if (!res.writableEnded) send(res, 200, JSON.stringify(out ?? {}), "application/json; charset=utf-8");
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       if (status === 500) console.error(e);

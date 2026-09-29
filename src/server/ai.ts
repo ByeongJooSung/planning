@@ -4,7 +4,8 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AiProbe, AiResolved } from "./accounts.js";
-import { HttpError } from "./accounts.js";
+import { HttpError, type OAuthCreds } from "./accounts.js";
+import { createHash } from "node:crypto";
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type AiInputMessages = string | Turn[];
@@ -20,6 +21,74 @@ function toTurns(input: AiInputMessages): Turn[] {
   const size = turns.reduce((a, t) => a + t.content.length, 0);
   if (size > 400_000) throw new HttpError(413, "보낼 내용이 너무 깁니다. 요청을 줄여 주세요");
   return turns;
+}
+
+// ── Google Cloud OAuth (Gemini) ──────────────────────────────────────
+// 사용자가 자기 Google Cloud 프로젝트에 만든 OAuth 클라이언트로 로그인하고, 저장한 리프레시 토큰으로 호출마다 액세스 토큰을 받는다.
+// 요금·한도는 그 Google Cloud 프로젝트(x-goog-user-project) 기준이다 — Gemini 구독(Google AI Pro 등)과는 별개.
+export const GOOGLE_SCOPES = "openid email https://www.googleapis.com/auth/cloud-platform";
+const googleAuthUrl = () => process.env.GOOGLE_OAUTH_AUTH_URL ?? "https://accounts.google.com/o/oauth2/v2/auth";
+const googleTokenUrl = () => process.env.GOOGLE_OAUTH_TOKEN_URL ?? "https://oauth2.googleapis.com/token";
+const tokenCache = new Map<string, { token: string; exp: number }>();
+
+export function googleAuthLink(o: { clientId: string; redirectUri: string; state: string; loginHint?: string }): string {
+  const q = new URLSearchParams({ client_id: o.clientId, redirect_uri: o.redirectUri, response_type: "code", scope: GOOGLE_SCOPES, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state: o.state });
+  if (o.loginHint) q.set("login_hint", o.loginHint);
+  return `${googleAuthUrl()}?${q}`;
+}
+
+async function tokenRequest(form: Record<string, string>): Promise<{ access_token?: string; refresh_token?: string; expires_in?: number; id_token?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(googleTokenUrl(), { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form), signal: AbortSignal.timeout(20_000) });
+  } catch (e) {
+    throw new HttpError(502, `Google 로그인 서버에 연결하지 못했습니다: ${(e as Error).message}`);
+  }
+  const body = (await res.json().catch(() => ({}))) as { error?: string; error_description?: string } & Record<string, never>;
+  if (!res.ok) {
+    const code = body.error ?? "";
+    if (code === "invalid_grant") throw new HttpError(502, "Google 연결이 만료됐거나 해제됐습니다. AI 설정에서 ‘Google 계정 연결’을 다시 하세요. (OAuth 동의 화면이 ‘테스트’ 상태면 리프레시 토큰이 7일 뒤 만료됩니다 — 게시 상태로 바꾸면 유지됩니다)");
+    if (code === "invalid_client" || code === "unauthorized_client") throw new HttpError(502, `OAuth 클라이언트 ID 또는 시크릿이 올바르지 않습니다 (${body.error_description ?? code}). Google Cloud 콘솔의 사용자 인증 정보를 확인하세요.`);
+    if (code === "redirect_uri_mismatch") throw new HttpError(502, "승인된 리디렉션 URI가 맞지 않습니다. Google Cloud 콘솔의 OAuth 클라이언트에 이 화면에 표시된 리디렉션 URI를 그대로 추가하세요.");
+    throw new HttpError(502, `Google 로그인 오류 (${res.status}${code ? ` ${code}` : ""}): ${body.error_description ?? ""}`.trim());
+  }
+  return body as never;
+}
+
+/** 로그인 후 받은 code → 리프레시 토큰 (+ 계정 이메일) */
+export async function googleExchangeCode(o: { clientId: string; clientSecret: string; code: string; redirectUri: string }): Promise<{ refreshToken: string; email?: string }> {
+  const t = await tokenRequest({ grant_type: "authorization_code", code: o.code, client_id: o.clientId, client_secret: o.clientSecret, redirect_uri: o.redirectUri });
+  if (!t.refresh_token) throw new HttpError(502, "Google이 리프레시 토큰을 주지 않았습니다. https://myaccount.google.com/permissions 에서 이 앱의 권한을 삭제한 뒤 다시 연결하세요.");
+  let email: string | undefined;
+  try {
+    email = JSON.parse(Buffer.from(t.id_token!.split(".")[1]!, "base64url").toString()).email;
+  } catch {
+    /* 표시용이라 없어도 된다 */
+  }
+  return { refreshToken: t.refresh_token, email };
+}
+
+export async function googleAccessToken(o: OAuthCreds): Promise<string> {
+  const key = createHash("sha256").update(`${o.clientId}\n${o.refreshToken}`).digest("hex");
+  const hit = tokenCache.get(key);
+  if (hit && hit.exp - 60_000 > Date.now()) return hit.token;
+  const t = await tokenRequest({ grant_type: "refresh_token", refresh_token: o.refreshToken, client_id: o.clientId, client_secret: o.clientSecret });
+  if (!t.access_token) throw new HttpError(502, "Google이 액세스 토큰을 주지 않았습니다");
+  tokenCache.set(key, { token: t.access_token, exp: Date.now() + (t.expires_in ?? 3600) * 1000 });
+  return t.access_token;
+}
+
+/** 호출에 붙일 인증 헤더 — API 키 또는 Google OAuth */
+async function authHeaders(cfg: { apiKey?: string; oauth?: OAuthCreds; needsOauth?: boolean }): Promise<Record<string, string>> {
+  if (cfg.needsOauth) throw new HttpError(409, "이 AI 연결은 Google 계정을 아직 연결하지 않았습니다. AI 설정 → 연결 편집에서 ‘Google 계정 연결’을 누르세요.");
+  if (cfg.oauth) return { authorization: `Bearer ${await googleAccessToken(cfg.oauth)}`, "x-goog-user-project": cfg.oauth.projectId };
+  return cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {};
+}
+function oauthDenied(status: number, msg: string, projectId: string): HttpError {
+  const off = /SERVICE_DISABLED|has not been used|is disabled|not enabled/i.test(msg);
+  return new HttpError(502, off
+    ? `Google Cloud 프로젝트 ‘${projectId}’에서 Generative Language API가 꺼져 있습니다. 콘솔 → API 및 서비스 → ‘Generative Language API’ 사용 설정 후 몇 분 뒤 다시 시도하세요.`
+    : `Google이 요청을 거부했습니다 (${status}). 프로젝트 ID(${projectId})가 맞는지, 로그인한 계정에 이 프로젝트 권한(Service Usage Consumer 등)이 있는지, 결제가 켜져 있는지 확인하세요. — ${msg.slice(0, 160)}`);
 }
 
 export interface AiResult {
@@ -183,9 +252,15 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     return done({ ok: false, models: [], url, code: "TAILSCALE_ADDRESS", error: `${host} 는 Tailscale 내부 주소라 인터넷(Vercel)에서 접속할 수 없습니다`, hint: TAILSCALE_HINT });
   if (env.VERCEL && PRIVATE_HOST.test(host))
     return done({ ok: false, models: [], url, code: "PRIVATE_ADDRESS", error: `이 서비스는 인터넷(Vercel)에서 돌고 있어 ${host} 에 접속할 수 없습니다`, hint: TUNNEL_HINT });
+  let hdr: Record<string, string>;
+  try {
+    hdr = await authHeaders(p);
+  } catch (e) {
+    return done({ ok: false, models: [], url, error: (e as Error).message, hint: "Google 연결(OAuth)을 다시 하거나 클라이언트 ID·시크릿을 확인하세요." });
+  }
   let res: Response;
   try {
-    res = await fetch(url, { headers: { accept: "application/json", "ngrok-skip-browser-warning": "1", ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) }, signal: AbortSignal.timeout(20_000) });
+    res = await fetch(url, { headers: { accept: "application/json", "ngrok-skip-browser-warning": "1", ...hdr }, signal: AbortSignal.timeout(20_000) });
   } catch (e) {
     return done({ ok: false, models: [], url, ...describeNetError(e, host) });
   }
@@ -199,6 +274,7 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
   const detail = (typeof body?.error === "string" ? body.error : body?.error?.message) ?? body?.detail ?? (body ? undefined : text.replace(/\s+/g, " ").slice(0, 200));
   if (!res.ok) {
     const status = res.status;
+    if (p.oauth && (status === 401 || status === 403)) return done({ ok: false, models: [], url, status, detail, error: `Google이 요청을 거부했습니다 (${status})`, hint: oauthDenied(status, detail ?? "", p.oauth.projectId).message });
     if (status === 401 || status === 403) return done({ ok: false, models: [], url, status, detail, error: `API 키가 필요하거나 올바르지 않습니다 (${status})`, hint: host === "generativelanguage.googleapis.com" ? "Google AI Studio(aistudio.google.com/apikey)에서 발급한 AIza… 키를 넣으세요. 구글 계정 로그인(OAuth)이 아니라 API 키가 필요합니다." : "NVIDIA는 build.nvidia.com 에서 발급한 nvapi-… 키를 넣으세요. LM Studio에서 인증을 켰다면 그 토큰을 넣으세요." });
     if (status === 404) return done({ ok: false, models: [], url, status, detail, error: "주소는 열렸지만 /models 를 찾지 못했습니다 (404)", hint: /\/v1$/.test(base) ? "OpenAI 호환 API 주소가 맞는지 확인하세요." : "주소 끝에 /v1 을 붙여 보세요 (예: http://…:1234/v1)." });
     return done({ ok: false, models: [], url, status, detail, error: `서버 오류 (${status})`, hint: "AI 서버 쪽 로그를 확인하거나 잠시 뒤 다시 시도하세요." });
@@ -208,7 +284,7 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     return done({ ok: false, models: [], url, status: res.status, detail, error: html ? "JSON 대신 웹페이지(HTML)가 왔습니다" : "응답을 읽지 못했습니다 (JSON 아님)", hint: html ? "API 주소가 아니라 웹페이지 주소일 수 있습니다. 주소 끝이 /v1 인지, 터널 경고 페이지가 아닌지 확인하세요." : "OpenAI 호환 API 주소가 맞는지 확인하세요." });
   }
   // Google Gemini(OpenAI 호환)는 "models/gemini-…" 로 돌려주고, 채팅에는 접두어 없는 이름을 쓴다
-  const strip = host === "generativelanguage.googleapis.com" ? (x: string) => x.replace(/^models\//, "") : (x: string) => x;
+  const strip = host === "generativelanguage.googleapis.com" || p.oauth ? (x: string) => x.replace(/^models\//, "") : (x: string) => x;
   const ids = [...new Set((body.data ?? body.models ?? []).map((m) => strip((m as { id?: string }).id || (m as { name?: string }).name || (m as { model?: string }).model || "")).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (!ids.length) return done({ ok: false, models: [], url, status: res.status, error: "연결은 됐지만 모델이 0개입니다", hint: "LM Studio는 모델을 내려받아 두어야 목록에 나옵니다(JIT 로딩을 끈 경우 먼저 Load). Ollama는 ollama pull 로 받아 두세요. 목록 없이도 모델 이름을 직접 입력할 수 있습니다." });
   return done({ ok: true, models: ids, url, status: res.status });
@@ -225,11 +301,12 @@ export async function listModels(p: AiProbe): Promise<string[]> {
 async function callOpenAiCompatible(cfg: AiResolved, turns: Turn[], signal?: AbortSignal): Promise<string> {
   const url = `${cfg.baseUrl!.replace(/\/$/, "")}/chat/completions`;
   const post = async (withMax: boolean) => {
+    const auth = await authHeaders(cfg);
     try {
       return await fetch(url, {
         method: "POST",
         signal: signal ?? AbortSignal.timeout(10 * 60_000),
-        headers: { "content-type": "application/json", "ngrok-skip-browser-warning": "1", ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}) },
+        headers: { "content-type": "application/json", "ngrok-skip-browser-warning": "1", ...auth },
         body: JSON.stringify({ model: cfg.model, messages: [{ role: "system", content: SYSTEM }, ...turns], temperature: 0.3, ...(withMax ? { max_tokens: cfg.maxTokens ?? 8192 } : {}) }),
       });
     } catch (e) {
@@ -258,6 +335,7 @@ async function callOpenAiCompatible(cfg: AiResolved, turns: Turn[], signal?: Abo
   }
   if (!res.ok) {
     const msg = errText(body) || res.statusText;
+    if (cfg.oauth && (res.status === 401 || res.status === 403)) throw oauthDenied(res.status, msg, cfg.oauth.projectId);
     if (res.status === 401 || res.status === 403) throw new HttpError(502, "AI API 키가 올바르지 않습니다. AI 설정을 확인하세요");
     if (res.status === 404) throw new HttpError(502, `모델 또는 주소를 찾을 수 없습니다: ${msg}`.slice(0, 240));
     if (res.status === 429 || res.status === 503 || /ResourceExhausted|rate limit|too many requests|overloaded/i.test(msg))
