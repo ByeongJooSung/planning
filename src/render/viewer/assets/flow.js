@@ -6,7 +6,7 @@
    * 배치·그리기는 FlowLayout(flowlayout.js)이 한다: 글자 수에 맞는 도형 크기, 직각 연결선, 되돌아가는 흐름 표시
    */
   function svg(f, opts) {
-    return FlowLayout.svg(f, Object.assign({ mode: "screen" }, opts || {}));
+    return FlowLayout.svg(f, Object.assign({ mode: "screen", fit: true }, opts || {}));
   }
 
   /**

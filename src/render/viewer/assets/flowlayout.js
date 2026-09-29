@@ -533,7 +533,9 @@
     var title = f.title || (f.id || "");
     var lg = opts.legend === false ? null : legend(10, L.H + 6, { mode: opts.mode, only: usedShapes(f), maxW: Math.max(L.W - 20, 520) });
     var H = L.H + (lg ? lg.h + 10 : 0), W = Math.max(L.W, lg ? 540 : 0);
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(title) + '">' + body(L, Object.assign({ uid: (f.id || "f") + (opts.suffix || "") }, opts)) + (lg ? lg.markup : "") + "</svg>";
+    // fit: 화면 폭에 맞춰 줄여 전체가 한눈에 보이게 (원래 크기보다 키우지는 않음)
+    var size = opts.fit ? 'width="100%" style="max-width:' + W + 'px;height:auto;display:block"' : 'width="' + W + '" height="' + H + '"';
+    return '<svg xmlns="http://www.w3.org/2000/svg" ' + size + ' viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(title) + '">' + body(L, Object.assign({ uid: (f.id || "f") + (opts.suffix || "") }, opts)) + (lg ? lg.markup : "") + "</svg>";
   }
 
   var api = { layout: layout, body: body, svg: svg, legend: legend, usedShapes: usedShapes, nodeSize: nodeSize, measure: measure, wrap: wrap, clearCache: clearCache, roundPath: roundPath, shade: shade, esc: esc, K: K, FONT: FONT, MONO: MONO, LIGHT: LIGHT, useCanvas: true, shortTask: shortTask };

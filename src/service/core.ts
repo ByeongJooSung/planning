@@ -9,7 +9,8 @@
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
 import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec } from "../model/schema.js";
-import { applyFlow, normalizeStoryboardOutput } from "../ai/apply.js";
+import { applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
+import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
 
 const applyGenerated0 = (m: Model, reqId: string, flow: unknown) => applyFlow(m, reqId, flow, { keepPos: true });
 import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } from "../trace/work.js";
@@ -83,6 +84,17 @@ export type Command =
   | { op: "sb.component"; screenId: string; no?: number; input?: unknown; remove?: boolean }
   /** 설명(planner·customer·options·validation)만 AI 결과로 갱신 — 항목·와이어프레임은 그대로 */
   | { op: "sb.desc"; screenId: string; components: unknown }
+  /** 정보구조도 캔버스 저장 — 한 시스템의 노드 전체. id가 비었거나 new: 로 시작하면 새 ID. dropStoryboards면 지운 화면의 화면설계서도 지운다 */
+  | { op: "ia.save"; systemCode: string; nodes: unknown[]; dropStoryboards?: boolean }
+  /** 화면 추가 (id를 비우면 화면 ID 규칙으로) */
+  | { op: "screen.add"; systemCode: string; parentId?: string | null; name: string; kind?: string; id?: string; taskIds?: string[] }
+  /** 화면 ↔ Task 연결 (수동) */
+  | { op: "screen.tasks"; screenId: string; taskIds: string[] }
+  | { op: "task.screens"; taskId: string; screenIds: string[] }
+  /** 빈 화면설계서 만들기 · 항목 순서 바꾸기 · 화면설계서 지우기 */
+  | { op: "sb.create"; screenId: string; template?: string }
+  | { op: "sb.reorder"; screenId: string; order: number[] }
+  | { op: "sb.delete"; screenId: string }
   /** 프로세스 플로우 저장 (캔버스에서 직접 편집한 결과 — 옮긴 위치 포함) */
   | { op: "flow.save"; requirementId: string; flow: unknown }
   /** 기능 명세 저장 (빈 문자열이면 지워 참조자료 초안으로 돌아간다) */
@@ -236,6 +248,96 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       touchStoryboard(m, sb.screenId, now);
       message = `${cmd.screenId} 설명 ${n}개를 AI로 다시 썼습니다`;
       detail = { updated: n };
+      break;
+    }
+    case "ia.save": {
+      const sys = m.systems.find((x) => x.code === cmd.systemCode);
+      if (!sys?.hasScreens) throw new Error(`화면이 있는 시스템이 아닙니다: ${cmd.systemCode}`);
+      if (!Array.isArray(cmd.nodes)) throw new Error("노드 목록이 없습니다");
+      const nodes = assignIaIds(m, cmd.systemCode, cmd.nodes);
+      const keep = new Set(nodes.map((n) => n.id));
+      const lost = m.storyboard.screens.filter((x) => x.systemCode === cmd.systemCode && !keep.has(x.screenId));
+      if (lost.length && !cmd.dropStoryboards) throw new Error(`화면설계서가 있는 화면을 지우려 합니다: ${lost.map((x) => x.screenId).join(", ")} — 화면설계서도 함께 지우려면 확인하세요`);
+      for (const x of lost) delete m.rtmRecords.work[`sb:${x.screenId}`];
+      m.storyboard.screens = m.storyboard.screens.filter((x) => !lost.includes(x));
+      // 지운 화면을 가리키던 플로우 노드의 화면 ID, 화면설계서의 이동 링크를 뗀다
+      const removed = new Set(m.ia.nodes.filter((n) => n.systemCode === cmd.systemCode && !keep.has(n.id)).map((n) => n.id));
+      if (removed.size) {
+        for (const f of m.flows) for (const n of f.nodes) if (n.screenId && removed.has(n.screenId)) delete n.screenId;
+        for (const sb of m.storyboard.screens)
+          for (const c of sb.components) {
+            if (c.ui?.link && removed.has(c.ui.link)) delete c.ui.link;
+            const btns = (c.ui?.props as { buttons?: { link?: string }[] } | undefined)?.buttons;
+            if (Array.isArray(btns)) for (const b of btns) if (b.link && removed.has(b.link)) delete b.link;
+          }
+      }
+      if (!nodes.length) {
+        const gone = m.ia.nodes.filter((n) => n.systemCode === cmd.systemCode && n.kind !== "MENU").map((n) => n.id);
+        m.ia.nodes = m.ia.nodes.filter((n) => n.systemCode !== cmd.systemCode);
+        for (const id of gone) if (!m.ia.retiredIds.includes(id)) m.ia.retiredIds.push(id);
+        message = `${cmd.systemCode} 정보구조도를 비웠습니다`;
+      } else {
+        const r = applyIa(m, cmd.systemCode, { nodes });
+        message = r.summary + (lost.length ? ` · 화면설계서 ${lost.length}개 삭제` : "");
+        detail = r;
+      }
+      m.rtmRecords.work[`ia:${cmd.systemCode}`] = { status: "IN_PROGRESS", at: now.toISOString(), by: "내용 편집", note: "" };
+      break;
+    }
+    case "screen.add": {
+      const sys = m.systems.find((x) => x.code === cmd.systemCode);
+      if (!sys?.hasScreens) throw new Error(`화면이 있는 시스템이 아닙니다: ${cmd.systemCode}`);
+      const name = String(cmd.name ?? "").trim();
+      if (!name) throw new Error("화면 이름을 입력하세요");
+      const kind = isScreenKind(String(cmd.kind ?? "PAGE")) ? String(cmd.kind ?? "PAGE") : "PAGE";
+      const parentId = cmd.parentId || null;
+      if (parentId && !m.ia.nodes.some((n) => n.id === parentId && n.systemCode === cmd.systemCode)) throw new Error(`상위 메뉴·화면이 없습니다: ${parentId}`);
+      const taken = new Set(m.ia.nodes.map((n) => n.id));
+      let id = String(cmd.id ?? "").trim();
+      if (id) {
+        if (taken.has(id)) throw new Error(`이미 있는 화면 ID입니다: ${id}`);
+        if (m.ia.retiredIds.includes(id)) throw new Error(`폐기된 화면 ID는 다시 쓸 수 없습니다: ${id}`);
+      } else id = nextScreenId(m, m.ia.nodes, cmd.systemCode, parentId, kind, taken);
+      m.ia.nodes.push({ id, systemCode: cmd.systemCode, parentId, name, kind: kind as "PAGE", loginRequired: false, roles: [], taskIds: [], change: "NEW" });
+      if (cmd.taskIds?.length) setScreenTasks(m, id, cmd.taskIds);
+      message = `화면 ${id} ${name}을(를) 추가했습니다`;
+      detail = { id };
+      break;
+    }
+    case "screen.tasks":
+      setScreenTasks(m, cmd.screenId, cmd.taskIds ?? []);
+      message = `${cmd.screenId} 연결 Task ${(cmd.taskIds ?? []).length}개`;
+      break;
+    case "task.screens":
+      setTaskScreens(m, cmd.taskId, cmd.screenIds ?? []);
+      message = `${cmd.taskId} 연결 화면 ${(cmd.screenIds ?? []).length}개`;
+      break;
+    case "sb.create": {
+      const node = m.ia.nodes.find((n) => n.id === cmd.screenId);
+      if (!node || node.kind === "MENU") throw new Error(`정보구조도에 없는 화면입니다: ${cmd.screenId}`);
+      if (m.storyboard.screens.some((x) => x.screenId === cmd.screenId)) throw new Error("이미 화면설계서가 있습니다");
+      const d = m.design.systems.find((x) => x.systemCode === node.systemCode && x.status === "SELECTED");
+      const tpl = ["login", "dashboard", "main", "list", "detail", "form", "popup"].includes(String(cmd.template)) ? (cmd.template as "form") : node.kind === "POPUP" ? "popup" : undefined;
+      m.storyboard.screens.push({ screenId: node.id, systemCode: node.systemCode, title: node.name, template: tpl, taskIds: node.taskIds.slice(), components: [], status: "DRAFT", designRevision: d?.revision });
+      message = `${node.id} 빈 화면설계서를 만들었습니다`;
+      break;
+    }
+    case "sb.reorder": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      const order = (cmd.order ?? []).map(Number);
+      if (order.length !== sb.components.length || new Set(order).size !== order.length || order.some((no) => !sb.components.some((c) => c.no === no)))
+        throw new Error("항목 순서가 올바르지 않습니다");
+      sb.components = order.map((no, i) => ({ ...sb.components.find((c) => c.no === no)!, no: i + 1 }));
+      touchStoryboard(m, sb.screenId, now);
+      message = `${cmd.screenId} 항목 순서를 바꿨습니다`;
+      break;
+    }
+    case "sb.delete": {
+      if (!m.storyboard.screens.some((x) => x.screenId === cmd.screenId)) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      m.storyboard.screens = m.storyboard.screens.filter((x) => x.screenId !== cmd.screenId);
+      delete m.rtmRecords.work[`sb:${cmd.screenId}`];
+      message = `${cmd.screenId} 화면설계서를 지웠습니다`;
       break;
     }
     case "flow.save": {

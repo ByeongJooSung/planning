@@ -43,6 +43,7 @@
     req: ["요구사항·Task", "요구사항을 등록하면 시스템별 Task가 자동 또는 수동으로 만들어집니다. Task를 누르면 그 Task의 프로세스 플로우, 화면설계서, 프로토타입을 봅니다."],
     design: ["디자인 시스템", "시스템 영역마다 컨셉 3종을 제안받아 하나를 고르면 디자인 시스템이 만들어집니다. 화면설계서와 프로토타입은 이 디자인으로 그립니다."],
     ia: ["정보구조도", "Task별로 만든 화면이 통합된 시스템별 메뉴·화면 구조"],
+    sb: ["화면설계서", "시스템별 모든 화면의 화면설계서 — Task 연결과 상관없이 작성하고, 화면과 Task를 직접 연결합니다"],
     proto: ["프로토타입 통합본", "시스템 구분별로 모든 화면을 메뉴 순서대로 이어 붙인 클릭 가능한 프로토타입과 설계 진행 순서"],
     rtm: ["요구사항 추적표", "요구사항 → 시스템별 Task → 산출물 연결과 충족 상태"],
     flow: ["시스템별 프로세스 플로우", "Task별 흐름을 통합한 프로세스를 시스템 영역별로 나눠 봅니다"],
@@ -188,7 +189,7 @@
       html += '<div class="proj-id"><span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><b>' + esc(pr.name) + "</b></div>";
       var groups = [
         ["프로젝트", [["dash", null], ["kb", p.model.sources.length], ["req", p.rtm.rows.length], ["design", sel + "/" + ds.length]]],
-        ["통합 산출물", [["ia", null], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
+        ["통합 산출물", [["ia", null], ["sb", p.model.storyboard.screens.length + "/" + p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).length], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
         ["이력", [["ver", p.snapshots.length]]]
       ];
       if (SRV) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
@@ -224,6 +225,7 @@
     }
     document.getElementById("main").innerHTML = html;
     afterRender();
+    if (layer && layer.kind === "sbfull") renderLayer();
     syncUrl();
   }
   function overlayBanner() {
@@ -242,6 +244,7 @@
       case "rtm": return renderRtm();
       case "flow": return renderFlows();
       case "proto": return renderProtoPage();
+      case "sb": return renderSb();
       case "ver": return renderVer();
       case "members": return SRV ? renderMembers() : renderDash();
       case "aiset": return SRV ? renderAiSettings() : renderDash();
@@ -512,8 +515,38 @@
       onClose: function () { render(); }
     });
   }
+  /** 플로우 그림을 누르면 전체 화면 캔버스로 */
+  function flowOpenAttr(reqId) { return reqId ? ' data-flowedit="' + esc(reqId) + '" role="button" tabindex="0" title="눌러서 전체 화면 캔버스로 크게 보기"' : ""; }
   function flowEditBtn(p, reqId, label) {
     return reqId ? '<button class="btn-sm fe-open" data-flowedit="' + esc(reqId) + '">▣ ' + esc(label || "캔버스 · 전체보기") + "</button>" : "";
+  }
+  /** 정보구조도 캔버스 (시스템 하나). select: 처음 고를 화면 ID */
+  function openIaEditor(code, select) {
+    var p = P(), s = sysOf(p, code), g = p.gens["ia:" + code];
+    if (!s) return;
+    var hasSb = function (id) { return P().model.storyboard.screens.some(function (x) { return x.screenId === id; }); };
+    var nodesOf = function () { return P().model.ia.nodes.filter(function (n) { return n.systemCode === code; }); };
+    IaEdit.open({
+      system: { code: s.code, name: s.name, color: s.color },
+      nodes: nodesOf(),
+      select: select,
+      editable: SRV ? canEdit() : false,
+      tasks: allTasks(p).map(function (t) { return { id: t.taskId, label: (t.actor ? t.actor + ": " : "") + t.action, systemCode: t.systemCode }; }),
+      status: function (id) { var w = workOf(P(), "sb:" + id); return { status: w.status, label: WORK_LABEL[w.status] || w.status }; },
+      hasSb: hasSb,
+      project: p.model.project.name,
+      save: SRV && canEdit() ? function (nodes) {
+        var keep = {};
+        nodes.forEach(function (n) { keep[n.id] = true; });
+        var lost = nodesOf().filter(function (n) { return !keep[n.id] && hasSb(n.id); });
+        if (lost.length && !window.confirm("화면설계서가 있는 화면 " + lost.length + "개를 지웁니다 (" + lost.map(function (n) { return n.id; }).join(", ") + ").\n화면설계서도 함께 지울까요?")) return Promise.resolve(false);
+        return cmd({ op: "ia.save", systemCode: code, nodes: nodes, dropStoryboards: lost.length > 0 }).then(function () { return nodesOf(); });
+      } : null,
+      openScreen: function (id) { state.sbSel = state.sbSel || {}; state.sbSel[code] = id; state.dsSys[P().model.project.code] = code; go({ view: "project", p: state.route.p, page: "sb" }); },
+      ai: g && SRV && canEdit() ? { available: !!(AI.sample && p.ai), label: p.ai ? effLabel(p.ai) : "", refine: DATA.refine, prompt: function () { return fillSpecs(g.prompt, g); }, run: function (input, signal) { return AI.sample.json(input, { signal: signal, cache: false }); } } : null,
+      toast: toast,
+      onClose: function () { render(); }
+    });
   }
   function taskFlowBody(p, t) {
     var ids = p.rtm.rows.find(function (r) { return r.requirementId === t.requirementId; }).tasks.map(function (x) { return x.taskId; });
@@ -521,7 +554,7 @@
     if (!flows.length) return '<div class="box empty">이 요구사항의 Task는 아직 프로세스 플로우에 연결되지 않았습니다.' + (canEdit() || !SRV ? '<div class="row-actions center">' + flowEditBtn(p, t.requirementId, "캔버스에서 직접 그리기") + genBtn("flow:" + t.requirementId, "AI로 그리기") + "</div>" : "") + "</div>";
     var mine = t.flowNodes.length;
     return flows.map(function (f) {
-      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + " · 진하게 표시한 노드가 이 Task" + (mine ? "" : " (이 Task는 아직 노드가 없습니다)") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, reqOfFlow(p, f) || t.requirementId, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + '</div><div class="box flow-box">' +
+      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + " · 진하게 표시한 노드가 이 Task" + (mine ? "" : " (이 Task는 아직 노드가 없습니다)") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, reqOfFlow(p, f) || t.requirementId, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + '</div><div class="box flow-box fit"' + flowOpenAttr(reqOfFlow(p, f) || t.requirementId) + ">" +
         Flow.svg(f, { color: sysColor, highlight: [t.taskId], suffix: "-t" }) + "</div></section>";
     }).join("") + '<p class="hint">같은 요구사항의 다른 Task는 흐리게 표시합니다. 점선 화살표는 반려·보완처럼 되돌아가는 흐름입니다.</p>';
   }
@@ -561,27 +594,59 @@
     return Wire.screen(ds, sb, ctx);
   }
 
+  /** Task 탭: 연결된 화면마다 화면설계서. 편집자는 화면 연결을 직접 고치고 새 화면을 추가할 수 있다 */
   function taskSheets(p, t) {
     if (t.screenless) return '<div class="box empty">화면이 없는 Task입니다. 프로세스 플로우로 설계를 확인합니다.</div>';
-    if (!t.screens.length) return '<div class="box empty">아직 연결된 화면이 없습니다. 정보구조도(S2)에서 화면 ID를 만들고 이 Task에 연결하면 화면설계서를 작성할 수 있습니다.</div>';
-    return t.screens.map(function (sid) {
-      var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; });
-      var node = p.model.ia.nodes.find(function (n) { return n.id === sid; }) || {};
-      var ctx = wireCtx(p, node.systemCode || t.systemCode, sid);
-      var headRow = '<table class="sheet-head"><tbody><tr><th>화면 ID</th><td class="mono">' + esc(sid) + "</td><th>화면명</th><td>" + esc(node.name || (sb && sb.title) || "") + "</td><th>시스템</th><td>" + esc(ctx.systemName) + "</td></tr>" +
-        "<tr><th>Location</th><td colspan=\"3\">" + esc(ctx.crumbs.join(" > ")) + "</td><th>화면 유형</th><td>" + esc(KIND[node.kind] || "") + (sb && sb.template ? " · " + esc(sb.template) : "") + "</td></tr></tbody></table>";
-      if (!sb) return '<article class="box sheet">' + headRow + workCtl(p, "sb:" + sid, "화면설계서") + '<div class="empty">화면설계서가 아직 없습니다. 이 화면은 요구사항 추적표에서 “스토리보드 미작성”으로 잡힙니다.<div class="ai-bar center">' + genBtn("sb:" + sid, "AI로 화면설계서 생성") + "</div></div></article>";
-      var wire = screenWire(p, sb, true);
-      var ds = designOf(p, sb.systemCode);
-      var left = wire ? sbCanvas(p, sb) :
-        '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
-      var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
-        var rowTools = SRV && canEdit() ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
-        return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
-      }).join("") + "</tbody></table>" + (SRV && canEdit() ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
-      var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
-      return '<article class="box sheet">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
-    }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다. 공공기관 제출 양식으로 내보내면 장표 단위로 나뉘고, 한 장을 넘으면 같은 화면 ID로 “다음 페이지에 계속”이 붙습니다(S4 출력 기능).</p>';
+    var tools = SRV && canEdit() ? '<div class="link-bar"><span class="hint">이 Task의 화면 ' + t.screens.length + "개 · 한 Task에 화면을 여러 개 연결할 수 있습니다</span>" + actBtn("task-screens", "화면 연결 편집", t.taskId) + actBtn("screen-new", "+ 새 화면 만들어 연결", t.taskId) + "</div>" : "";
+    if (!t.screens.length) return tools + '<div class="box empty">아직 연결된 화면이 없습니다. ' + (SRV && canEdit() ? "위에서 기존 화면을 연결하거나 새 화면을 만들어 연결하세요. 화면설계서 메뉴에서는 Task 없이도 화면마다 작성할 수 있습니다." : "정보구조도에서 화면을 이 Task에 연결하면 화면설계서를 작성할 수 있습니다.") + "</div>";
+    return tools + t.screens.map(function (sid) { return sheetHtml(p, sid, t.systemCode); }).join("") + '<p class="hint">설명은 기획자 관점(정책·규칙·예외)과 고객 관점(보이는 것·할 수 있는 것)으로 적고, 개발자 관점은 넣지 않습니다.</p>';
+  }
+  /** 화면 하나의 화면설계서 (캔버스 + 설명 표). opts.full: 전체 화면 편집기 안 */
+  function sheetHtml(p, sid, fallbackSys, opts) {
+    opts = opts || {};
+    var ed = SRV && canEdit();
+    var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === sid; });
+    var node = p.model.ia.nodes.find(function (n) { return n.id === sid; }) || {};
+    var ctx = wireCtx(p, node.systemCode || fallbackSys, sid);
+    var tasks = (node.taskIds || []).map(function (id) { var t = findTrace(p, id); return '<span class="tag mono" title="' + esc(t ? t.action : "") + '">' + esc(id) + "</span>"; }).join(" ");
+    var headRow = '<table class="sheet-head"><tbody><tr><th>화면 ID</th><td class="mono">' + esc(sid) + "</td><th>화면명</th><td>" + esc(node.name || (sb && sb.title) || "") + "</td><th>시스템</th><td>" + esc(ctx.systemName) + "</td></tr>" +
+      "<tr><th>Location</th><td colspan=\"3\">" + esc(ctx.crumbs.join(" > ")) + "</td><th>화면 유형</th><td>" + esc(KIND[node.kind] || "") + (sb && sb.template ? " · " + esc(sb.template) : "") + "</td></tr>" +
+      '<tr><th>연결 Task</th><td colspan="5">' + (tasks || '<span class="warn-t">연결된 Task 없음</span>') + (ed ? " " + actBtn("screen-tasks", "Task 연결 편집", sid) : "") + "</td></tr></tbody></table>";
+    if (!sb) return '<article class="box sheet" data-sheet="' + esc(sid) + '">' + headRow + workCtl(p, "sb:" + sid, "화면설계서") + '<div class="empty">화면설계서가 아직 없습니다.' + (tasks ? "" : " Task가 없어도 화면 이름·메뉴 위치·참조자료로 AI가 작성할 수 있고, 나중에 Task를 연결하면 됩니다.") + '<div class="ai-bar center">' + genBtn("sb:" + sid, "AI로 화면설계서 생성") + (ed ? actBtn("sb-create", "빈 화면설계서 만들기", sid) : "") + "</div></div></article>";
+    var wire = screenWire(p, sb, true);
+    var ds = designOf(p, sb.systemCode);
+    var left = wire ? sbCanvas(p, sb) :
+      '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
+    var n = sb.components.length;
+    var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + (sb.components.map(function (c, i) {
+      var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
+      return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
+    }).join("") || '<tr><td colspan="4" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
+    var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
+    return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
+  }
+
+  // ── 화면설계서 페이지: 시스템별 모든 화면 (Task 연결과 상관없이 작성·AI 생성) ──
+  function renderSb() {
+    var p = P(), systems = p.model.systems.filter(function (s) { return s.hasScreens; }), ed = SRV && canEdit();
+    if (!systems.length) return '<div class="box empty">화면이 있는 시스템이 없습니다.</div>';
+    var code = protoSys(p), screens = systemScreens(p, code);
+    var chips = '<div class="filters">' + systems.map(function (s) {
+      var list = systemScreens(p, s.code), done = list.filter(function (n) { return workOf(p, "sb:" + n.id).status === "DONE"; }).length;
+      return '<button class="fchip" data-dsys="' + esc(s.code) + '" aria-pressed="' + (s.code === code) + '"><i style="background:' + s.color + '"></i>' + esc(s.code + " " + s.name) + '<em class="' + (list.length && done === list.length ? "ok" : "wait") + '">' + done + "/" + list.length + "</em></button>";
+    }).join("") + "</div>";
+    var sel = state.sbSel && state.sbSel[code];
+    if (!screens.some(function (n) { return n.id === sel; })) sel = screens.length ? screens[0].id : null;
+    var noTask = screens.filter(function (n) { return !(n.taskIds || []).length; }).length;
+    var rows = screens.map(function (n) {
+      var has = p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; });
+      var tk = (n.taskIds || []).length ? n.taskIds.map(function (id) { return '<span class="tag mono">' + esc(id) + "</span>"; }).join("") : '<span class="warn-t">Task 없음</span>';
+      return '<button class="sb-row' + (n.id === sel ? " on" : "") + '" data-sbsel="' + esc(n.id) + '"><span class="mono">' + esc(n.id) + "</span><b>" + esc(n.name) + '</b><span class="tk">' + tk + "</span>" + (has ? workPill(p, "sb:" + n.id) : '<span class="pill NOT_STARTED">미작성</span>') + "</button>";
+    }).join("");
+    return '<section class="section"><div class="toolbar">' + chips + (ed ? actBtn("screen-new", "+ 새 화면", "|" + code) : "") + '<button class="btn-sm fe-open" data-iaedit="' + esc(code) + '"' + (sel ? ' data-iasel="' + esc(sel) + '"' : "") + ">▣ 정보구조도 캔버스에서 Task 연결·구조 편집</button></div>" +
+      (noTask ? '<div class="note row"><div><b>Task가 없는 화면 ' + noTask + '개</b><p class="hint">Task 자동 연결이 맞지 않으면 화면을 고른 뒤 ‘Task 연결 편집’으로 직접 연결하세요. Task 없이도 화면설계서를 작성·AI 생성할 수 있습니다.</p></div></div>' : "") +
+      '<div class="sb-page"><nav class="sb-list" aria-label="' + esc(code) + ' 화면 목록">' + (rows || '<div class="empty">정보구조도에 화면이 없습니다.</div>') + "</nav>" +
+      '<div class="sb-main">' + (sel ? sheetHtml(p, sel, code) : '<div class="box empty">화면을 고르세요.</div>') + "</div></div></section>";
   }
 
   // ── 기능 명세 보기·편집 (요구사항·추적표) ──
@@ -641,7 +706,8 @@
         if (f.maxLength) val.maxLength = Number(f.maxLength);
         if (f.format) val.format = f.format;
         if (val.required || val.minLength != null || val.maxLength != null || val.format || val.timing.length || val.messages.length) input.validation = val;
-        if (f.component) input.ui = { component: f.component, props: c.ui && c.ui.component === f.component ? c.ui.props : {}, link: f.link || undefined };
+        // 새로 고른 컴포넌트는 예시 데이터로 채워 와이어프레임에 바로 보이게 한다 (AI 생성·편집으로 바꿀 수 있음)
+        if (f.component) input.ui = { component: f.component, props: c.ui && c.ui.component === f.component ? c.ui.props : JSON.parse(JSON.stringify(SAMPLE_PROPS[f.component] || {})), link: f.link || undefined };
         if (c.marker) input.marker = c.marker;
         return cmd({ op: "sb.component", screenId: sid, no: c.no, input: input });
       }
@@ -680,6 +746,81 @@
       document.querySelectorAll('[data-act="sb-desc"]').forEach(function (b) { b.disabled = false; });
     });
   };
+
+  // ── 화면 ↔ Task 수동 연결 · 새 화면 · 화면설계서 순서 ──
+  function checkList(name, groups) {
+    return '<div class="chk-list">' + groups.map(function (g) {
+      return '<fieldset><legend>' + g.title + "</legend>" + g.items.map(function (it) {
+        return '<label class="chk-item"><input type="checkbox" data-' + name + '="' + esc(it.id) + '"' + (it.on ? " checked" : "") + '><span class="mono">' + esc(it.id) + "</span><span>" + esc(it.label) + "</span>" + (it.note ? '<em class="hint">' + esc(it.note) + "</em>" : "") + "</label>";
+      }).join("") + "</fieldset>";
+    }).join("") + "</div>";
+  }
+  function picked(name) { return Array.prototype.map.call(document.querySelectorAll("[data-" + name + "]:checked"), function (e) { return e.getAttribute("data-" + name); }); }
+  ACTIONS_LATE["task-screens"] = function (taskId) {
+    var p = P(), t = findTrace(p, taskId);
+    var groups = p.model.systems.filter(function (s) { return s.hasScreens; }).sort(function (a, b) { return (b.code === t.systemCode) - (a.code === t.systemCode); }).map(function (s) {
+      return { title: sysChip(s.code) + " " + esc(s.name) + (s.code === t.systemCode ? " (이 Task의 시스템)" : ""), items: systemScreens(p, s.code).map(function (n) {
+        var others = (n.taskIds || []).filter(function (x) { return x !== taskId; });
+        return { id: n.id, label: n.name, on: t.screens.indexOf(n.id) >= 0, note: others.length ? "다른 Task " + others.length : "" };
+      }) };
+    }).filter(function (g) { return g.items.length; });
+    openForm({
+      eyebrow: taskId + " · " + t.action, title: "화면 연결 편집", submit: "저장",
+      intro: "이 Task를 처리하는 화면을 모두 고르세요. 한 Task에 화면 여러 개(목록·상세·등록·팝업 등)를 연결할 수 있고, 한 화면이 여러 Task에 쓰여도 됩니다.",
+      fields: [{ type: "html", html: groups.length ? checkList("lnk-screen", groups) : '<p class="hint">정보구조도에 화면이 없습니다. ‘+ 새 화면 만들어 연결’을 쓰세요.</p>' }],
+      onSubmit: function () { return cmd({ op: "task.screens", taskId: taskId, screenIds: picked("lnk-screen") }); }
+    });
+  };
+  ACTIONS_LATE["screen-tasks"] = function (sid) {
+    var p = P(), node = p.model.ia.nodes.find(function (n) { return n.id === sid; });
+    var groups = p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) {
+      return { title: '<span class="mono">' + esc(r.requirementId) + "</span> " + esc(r.title), items: r.tasks.map(function (t) {
+        return { id: t.taskId, label: "[" + t.systemCode + "] " + (t.actor ? t.actor + ": " : "") + t.action, on: (node.taskIds || []).indexOf(t.taskId) >= 0, note: t.systemCode !== node.systemCode ? "다른 시스템" : t.screens.length ? "화면 " + t.screens.length : "" };
+      }) };
+    });
+    openForm({
+      eyebrow: sid + " · " + node.name, title: "Task 연결 편집", submit: "저장",
+      intro: "이 화면이 처리하는 Task를 고르세요. 자동 연결이 잘못됐으면 여기서 바로잡습니다. 연결하면 화면설계서 AI 생성에 그 Task의 요구사항·기능 명세가 함께 실립니다.",
+      fields: [{ type: "html", html: checkList("lnk-task", groups) }],
+      onSubmit: function () { return cmd({ op: "screen.tasks", screenId: sid, taskIds: picked("lnk-task") }); }
+    });
+  };
+  /** arg: "TaskID" (그 Task에 연결) 또는 "|시스템" */
+  ACTIONS_LATE["screen-new"] = function (arg) {
+    var p = P(), a = String(arg || ""), taskId = a.indexOf("|") === 0 ? "" : a, t = taskId ? findTrace(p, taskId) : null;
+    var sys = t ? t.systemCode : a.slice(1) || protoSys(p);
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens; });
+    var parents = function (code) { return [["", "(맨 위)"]].concat(p.model.ia.nodes.filter(function (n) { return n.systemCode === code; }).map(function (n) { return [n.id, (n.kind === "MENU" ? "▸ 메뉴 " : "   화면 ") + n.name + " · " + n.id]; })); };
+    openForm({
+      eyebrow: t ? taskId + " · " + t.action : "화면설계서", title: "새 화면 만들기", submit: "만들기",
+      intro: "화면 ID는 프로젝트 화면 ID 규칙(상위 메뉴 약어 + 순번)으로 붙습니다. 팝업은 부모 화면 아래에 두면 부모 ID + _P01 처럼 붙습니다." + (t ? " 만든 화면은 이 Task에 바로 연결됩니다." : ""),
+      fields: [
+        { name: "system", label: "시스템", type: "select", options: systems.map(function (s) { return [s.code, s.code + " " + s.name]; }), value: sys },
+        { name: "parent", label: "상위 메뉴·화면", type: "select", options: parents(sys), value: "" },
+        { name: "name", label: "화면 이름", required: true, placeholder: "예: 공개 신청 내역" },
+        { name: "kind", label: "화면 유형", type: "select", options: [["PAGE", "페이지"], ["POPUP", "팝업"], ["LAYER", "레이어"], ["TAB", "탭"]], value: "PAGE" },
+        { name: "screenId", label: "화면 ID (선택)", placeholder: "비우면 규칙으로 자동" }
+      ],
+      onSubmit: function (v) {
+        return cmd({ op: "screen.add", systemCode: v.system, parentId: v.parent || null, name: v.name, kind: v.kind, id: v.screenId || undefined, taskIds: taskId ? [taskId] : [] }).then(function (r) {
+          if (r.detail && r.detail.id) { state.sbSel = state.sbSel || {}; state.sbSel[v.system] = r.detail.id; state.dsSys[P().model.project.code] = v.system; render(); }
+        });
+      }
+    });
+    // 시스템을 바꾸면 상위 목록도 바꾼다
+    var sel = document.getElementById("f-system");
+    if (sel) sel.addEventListener("change", function () { var ps = document.getElementById("f-parent"); if (ps) ps.innerHTML = parents(sel.value).map(function (o) { return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + "</option>"; }).join(""); });
+  };
+  ACTIONS_LATE["sb-create"] = function (sid) { cmd({ op: "sb.create", screenId: sid }).catch(function (e) { toast(e.message, "err"); }); };
+  function sbMove(arg, d) {
+    var a = arg.split("|"), sb = P().model.storyboard.screens.find(function (x) { return x.screenId === a[0]; });
+    var order = sb.components.map(function (c) { return c.no; }), i = order.indexOf(Number(a[1])), j = i + d;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+    cmd({ op: "sb.reorder", screenId: a[0], order: order }).catch(function (e) { toast(e.message, "err"); });
+  }
+  ACTIONS_LATE["sb-up"] = function (arg) { sbMove(arg, -1); };
+  ACTIONS_LATE["sb-down"] = function (arg) { sbMove(arg, 1); };
 
   // ── 화면설계서 캔버스: 화면 원본(1920) 위에 설명 번호를 올리고, 번호는 끌어서 옮긴다 ──
   var CV_PAD = 44, MK = 24;
@@ -1237,7 +1378,7 @@
       if (!s.hasScreens) return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + '</span></h3><div class="empty">화면 없는 시스템 (프로세스 플로우 레인으로만 표시)</div></div>';
       var d = selectedDesign(p, s.code), ov = appliedOverlay("ia:" + s.code);
       return '<div class="box ia-col"><h3><i style="background:' + s.color + '"></i>' + esc(s.name) + "<span>" + esc(s.code) + " · 화면 " + nodes.filter(function (n) { return n.kind !== "MENU"; }).length + (d ? " · 디자인 " + esc(d.selectedId) : "") + "</span></h3>" +
-        '<div class="col-tools">' + genBtn("ia:" + s.code, ov ? "AI 적용본 v" + ov.applied + " · 조정" : "AI 생성·조정") + protoLink(p, s.code) + "</div>" + workCtl(p, "ia:" + s.code, "정보구조도") + iaTree(nodes, st) + "</div>";
+        '<div class="col-tools"><button class="btn-sm fe-open" data-iaedit="' + esc(s.code) + '">▣ ' + (SRV && canEdit() ? "캔버스로 편집 · 전체보기" : "캔버스 · 전체보기") + "</button>" + genBtn("ia:" + s.code, ov ? "AI 적용본 v" + ov.applied + " · 조정" : "AI 생성·조정") + protoLink(p, s.code) + "</div>" + workCtl(p, "ia:" + s.code, "정보구조도") + iaTree(nodes, st) + "</div>";
     }).join("");
     var aiBar = '<div class="ai-bar"><span class="hint">AI 요청(프롬프트 복사)</span>' + aiBtn("ia:ALL", "전체") + m.systems.filter(function (s) { return s.hasScreens; }).map(function (s) { return aiBtn("ia:" + s.code, s.code + " " + s.name); }).join("") + "</div>";
     done = screens.filter(function (n) { return workOf(p, "sb:" + n.id).status === "DONE"; }).length;
@@ -1259,7 +1400,7 @@
       var g = cur === "ALL" ? f : Flow.forSystem(f, cur);
       if (!g) return "";
       var rq = reqOfFlow(p, f);
-      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, rq, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + (rq ? "" : '<span class="hint">요구사항과 연결되지 않은 플로우라 보기만 할 수 있습니다</span>') + '</div><div class="box flow-box">' + Flow.svg(g, { color: sysColor }) + "</div></section>";
+      return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, rq, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + (rq ? "" : '<span class="hint">요구사항과 연결되지 않은 플로우라 보기만 할 수 있습니다</span>') + '</div><div class="box flow-box fit"' + flowOpenAttr(rq) + ">" + Flow.svg(g, { color: sysColor }) + "</div></section>";
     }).join("") || '<div class="box empty">이 시스템이 들어간 플로우가 없습니다.</div>';
     var genBar = '<div class="ai-bar"><span class="hint">AI 생성·조정</span>' + p.rtm.rows.filter(function (r) { return p.gens["flow:" + r.requirementId]; }).map(function (r) { return genBtn("flow:" + r.requirementId, r.requirementId + " " + r.title); }).join("") + "</div>";
     var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + (!flowOfReq(p, r.requirementId) && (canEdit() || !SRV) ? flowEditBtn(p, r.requirementId, "캔버스에서 그리기") : "") + "</div>"; }).join("") + "</div>";
@@ -1941,6 +2082,14 @@
     return "";
   }
 
+  /** 화면설계서 전체 화면 편집: 크게 보는 캔버스 + 설명 표, 같은 시스템 화면 사이 이동 */
+  function renderSbFull() {
+    var p = P(), sid = layer.sid, node = p.model.ia.nodes.find(function (n) { return n.id === sid; }) || {};
+    var list = systemScreens(p, node.systemCode), i = list.findIndex(function (n) { return n.id === sid; });
+    var nav = '<span class="hint">' + (i + 1) + " / " + list.length + '</span><button class="btn-sm" data-sbnav="-1"' + (i > 0 ? "" : " disabled") + '>← 이전 화면</button><button class="btn-sm" data-sbnav="1"' + (i < list.length - 1 ? "" : " disabled") + ">다음 화면 →</button>";
+    return '<header class="layer-h"><div><span class="eyebrow">화면설계서 · 전체 화면 · ' + esc(node.systemCode || "") + '</span><h2 id="layer-t"><span class="mono">' + esc(sid) + "</span> " + esc(node.name || "") + '</h2></div><span class="sp"></span>' + nav + '<button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
+      '<div class="sbfull-body">' + sheetHtml(p, sid, node.systemCode, { full: true }) + "</div>";
+  }
   function renderGenLayer() {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { versions: [], applied: null };
     // 섹션·댓글·전역 요청으로 연 경우(fresh)는 기존 버전을 고르지 않고 새로 생성한다
@@ -2136,12 +2285,14 @@
     if (layer && !(ev.target.closest && ev.target.closest(".layer-box"))) ev.preventDefault();
   }, { passive: false });
   function openLayer(l) {
-    lastFocus = document.activeElement;
+    if (layer && layer.kind === "sbfull" && l.kind !== "sbfull") l.back = layer;
+    else lastFocus = document.activeElement;
     layer = l;
     lockScroll(true);
     renderLayer();
   }
   function closeLayer() {
+    if (layer && layer.back) { layer = layer.back; renderLayer(); return; }
     layer = null;
     document.getElementById("layer").innerHTML = "";
     lockScroll(false);
@@ -2165,6 +2316,8 @@
       body = renderReviewLayer();
     } else if (layer.kind === "gen") {
       body = renderGenLayer();
+    } else if (layer.kind === "sbfull") {
+      body = renderSbFull();
     } else if (layer.kind === "ai") {
       var ps = P().prompts[layer.key], text = ps[layer.target];
       var TARGET = {
@@ -2184,7 +2337,7 @@
       body = '<header class="layer-h"><div><span class="eyebrow">실제 규격 미리보기 · ' + VW + " × " + (pv.h || "가변") + '</span><h2 id="layer-t">' + esc(pv.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
         '<div class="layer-stage">' + stage(pv.html, { w: VW, h: pv.h, page: !pv.h }) + "</div>";
     }
-    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : layer.kind === "form" ? " form" : layer.kind === "aiconn" ? " conn" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
+    root.innerHTML = '<div class="layer" data-backdrop><div class="layer-box' + (layer.kind === "ai" ? "" : layer.kind === "form" ? " form" : layer.kind === "aiconn" ? " conn" : layer.kind === "sbfull" ? " full" : " wide") + '" role="dialog" aria-modal="true" aria-labelledby="layer-t">' + body + "</div></div>";
     fitStages(root);
     if (layer.kind === "aiconn") { if (!layer.opened) { layer.opened = true; var fi = document.getElementById("ac-label"); if (fi) fi.focus(); } return; }
     var gi = document.getElementById("gen-in") || document.getElementById("rv-in") || root.querySelector("#fm input, #fm select, #fm textarea");
@@ -2200,7 +2353,7 @@
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && layer) { if (layer.busy && layer.ctl) layer.ctl.abort(); closeLayer(); return; }
     if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.stin) { ev.preventDefault(); var bt = ev.target.parentNode.querySelector("[data-strun]"); if (bt) bt.click(); return; }
-    var pv = ev.target.closest && ev.target.closest("[data-preview][role=button], [data-review][role=button]");
+    var pv = ev.target.closest && ev.target.closest("[data-preview][role=button], [data-review][role=button], [data-flowedit][role=button]");
     if (pv && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); pv.click(); }
   });
 
@@ -2287,7 +2440,7 @@
       if (r.view === "task") want = "/p/" + enc(code) + "/task/" + enc(r.taskId) + "/" + (r.tab || "flow");
       else {
         want = "/p/" + enc(code) + "/" + (r.page || "dash");
-        if ((r.page === "design" || r.page === "proto") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
+        if ((r.page === "design" || r.page === "proto" || r.page === "sb") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
       }
     } else if (r.view === "account") want = "/account";
     else if (r.view === "admin") want = "/admin";
@@ -3178,7 +3331,12 @@
           return;
         }
       }
-      if (target.closest(".layer")) return;
+      if (lb && layer.kind === "sbfull" && lb.dataset.sbnav) {
+        var sp = P(), snode = sp.model.ia.nodes.find(function (n) { return n.id === layer.sid; }), slist = systemScreens(sp, snode.systemCode), si = slist.findIndex(function (n) { return n.id === layer.sid; }) + Number(lb.dataset.sbnav);
+        if (slist[si]) { layer.sid = slist[si].id; renderLayer(); }
+        return;
+      }
+      if (target.closest(".layer") && layer.kind !== "sbfull") return;
     }
     var amb = target.closest && target.closest("[data-authmode]");
     if (amb) { authState.err = ""; showAuth(amb.dataset.authmode); return; }
@@ -3203,6 +3361,10 @@
         .then(function (r) { setProject(r.project); rebuild(); render(); toast("번호 위치를 기본으로 되돌렸습니다"); }, function (e) { toast(e.message, "err"); render(); });
       return;
     }
+    var sfb = target.closest && target.closest("[data-sbfull]");
+    if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
+    var ieb = target.closest && target.closest("[data-iaedit]");
+    if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
     var feb = target.closest && target.closest("[data-flowedit]");
     if (feb) { openFlowEditor(feb.getAttribute("data-flowedit")); return; }
     var wkb = target.closest && target.closest("[data-work]");
@@ -3264,6 +3426,7 @@
     else if (d.sys) { var key = P().model.project.code + ":" + d.sys; state.off[key] = !state.off[key]; render(); }
     else if (d.fsys) { state.flowSys = d.fsys; render(); }
     else if (d.dsys) { state.dsSys[P().model.project.code] = d.dsys; render(); }
+    else if (d.sbsel) { state.sbSel = state.sbSel || {}; state.sbSel[protoSys(P())] = d.sbsel; render(); }
     else if (d.pscreen) { state.proto[protoCtx().key] = d.pscreen; renderProto(); }
     else if (d.pstep) { var pcx = protoCtx(), ix = pcx.list.indexOf(state.proto[pcx.key]) + Number(d.pstep); if (pcx.list[ix]) { state.proto[pcx.key] = pcx.list[ix]; renderProto(); } }
   });
@@ -3284,7 +3447,7 @@
     }
   });
   document.addEventListener("submit", function (ev) {
-    if (ev.target.id === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
+    if (ev.target.getAttribute("id") === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
     else if (ev.target.id === "auth-form") { ev.preventDefault(); submitAuth(ev.target); }
   });
   document.addEventListener("change", function (ev) {

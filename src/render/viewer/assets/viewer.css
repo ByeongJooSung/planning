@@ -991,3 +991,57 @@ html.fe-open, html.fe-open body { overflow: hidden; }
 .flow-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
 .fe-b.fe-primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
 .fe-b.danger:hover:not(:disabled) { background: var(--crit-bg); }
+.flow-box.fit { overflow: hidden; }
+.flow-box[data-flowedit] { cursor: zoom-in; }
+.flow-box[data-flowedit]:hover { box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* 화면설계서 페이지 · 전체 화면 · 연결 편집 */
+.sb-page { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 10px; }
+.sb-list { display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 220px); overflow-y: auto; position: sticky; top: 12px; }
+.sb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; font: 13px var(--font); }
+.sb-row .mono { font-size: 11px; color: var(--ink-3); grid-column: 1; }
+.sb-row b { grid-column: 1; font-weight: 600; }
+.sb-row .tk { grid-column: 1; display: flex; flex-wrap: wrap; gap: 3px; font-size: 11px; }
+.sb-row .tk .tag { font-size: 10.5px; padding: 0 5px; }
+.sb-row .pill { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+.sb-row:hover { border-color: var(--line-strong); }
+.sb-row.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.sb-main { min-width: 0; }
+@media (max-width: 1000px) { .sb-page { grid-template-columns: minmax(0, 1fr); } .sb-list { position: static; max-height: 260px; } }
+.link-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.link-bar .hint { flex: 1 1 260px; }
+.sheet-head td .btn-sm { margin-left: 6px; }
+.layer-box.full { width: 100%; max-width: none; height: calc(100vh - 24px); max-height: none; }
+.layer:has(.layer-box.full) { padding: 12px; }
+.layer-box.full .layer-h { gap: 8px; flex-wrap: wrap; }
+.layer-box.full .layer-h .sp { flex: 1; }
+.sbfull-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; background: var(--bg); }
+.sheet.full { margin: 0; }
+.sheet.full .sheet-body { grid-template-columns: minmax(0, 1.9fr) minmax(360px, 1fr); }
+.sheet.full .sbc-view { max-height: calc(100vh - 300px); }
+.chk-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; }
+.chk-list fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; }
+.chk-list legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
+.chk-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 2px; font-size: 13px; cursor: pointer; }
+.chk-item .mono { font-size: 11.5px; color: var(--ink-3); }
+.chk-item em { font-style: normal; font-size: 11px; }
+/* 정보구조도 캔버스 */
+.fe-body.no-tools { grid-template-columns: 0 minmax(0, 1fr) 320px; }
+.ie .fe-body { grid-template-columns: 76px minmax(0, 1fr) 320px; }
+.ie .fe-body.no-tools { grid-template-columns: 0 minmax(0, 1fr) 320px; }
+.ie-svg [data-iid] { cursor: grab; }
+.ie-svg.dragging, .ie-svg.dragging [data-iid] { cursor: grabbing; }
+.ie-svg [data-iid]:hover > rect:first-child { filter: drop-shadow(0 0 3px var(--accent)); }
+.ie-inline { position: absolute; z-index: 3; padding: 4px 8px; border: 2px solid var(--accent); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: var(--font); font-weight: 600; box-shadow: var(--shadow, 0 4px 14px rgba(0,0,0,.15)); }
+.fe-panel label.fe-chk { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; }
+.fe-panel .fe-row2 label { flex: 1; }
+.ie-tasks { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid var(--line); padding-top: 8px; }
+.ie-tasks > b { font-size: 12px; color: var(--ink-2); }
+.ie-tasks > b small { font-weight: 400; color: var(--ink-3); }
+.ie-tlist { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.fe-panel label.ie-t { display: grid; grid-template-columns: auto auto 1fr; align-items: start; gap: 6px; padding: 4px 6px; border-radius: 5px; font-weight: 400; font-size: 12px; color: var(--ink); cursor: pointer; }
+.fe-panel label.ie-t:hover { background: var(--surface-2); }
+.fe-panel label.ie-t .mono { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.fe-panel label.ie-t.other { opacity: .75; }
+.fe-panel label.ie-t.bad .mono { color: var(--crit); }
+.fe-panel .warn { color: var(--crit); }
