@@ -111,7 +111,8 @@ const REPAIR_PROMPT =
 
 export async function callAi(cfg: AiResolved, input: AiInputMessages, opts: { signal?: AbortSignal; json?: boolean; repair?: boolean } = {}): Promise<AiResult> {
   const turns = toTurns(input);
-  const call = (t: Turn[]) => (cfg.provider === "anthropic" ? callAnthropic(cfg, t, opts.signal) : callOpenAiCompatible(cfg, t, opts.signal));
+  const call = (t: Turn[]) =>
+    cfg.provider === "anthropic" ? callAnthropic(cfg, t, opts.signal) : cfg.oauth || cfg.needsOauth ? callGeminiNative(cfg, t, opts.signal) : callOpenAiCompatible(cfg, t, opts.signal);
   const text = await call(turns);
   if (opts.json === false) return { text, output: null, model: cfg.model };
   const first = extractJson(text);
@@ -240,7 +241,9 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     }
   }
   const base = (p.baseUrl ?? "").replace(/\/$/, "");
-  const url = `${base}/models`;
+  // Gemini(OpenAI 호환 주소)는 모델 목록을 원래 API로 받는다 — 호환 주소의 /models 는 OAuth 토큰을 받지 못하고 400을 돌려준다
+  const native = isGeminiCompat(base);
+  const url = native ? `${geminiRoot(base)}/models?pageSize=1000` : `${base}/models`;
   let host = "";
   try {
     host = new URL(base).host;
@@ -255,6 +258,7 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
   let hdr: Record<string, string>;
   try {
     hdr = await authHeaders(p);
+    if (native && !p.oauth && p.apiKey) hdr = { "x-goog-api-key": p.apiKey };
   } catch (e) {
     return done({ ok: false, models: [], url, error: (e as Error).message, hint: "Google 연결(OAuth)을 다시 하거나 클라이언트 ID·시크릿을 확인하세요." });
   }
@@ -265,7 +269,7 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     return done({ ok: false, models: [], url, ...describeNetError(e, host) });
   }
   const text = await res.text().catch(() => "");
-  let body: { data?: { id?: string }[]; models?: { name?: string; id?: string; model?: string }[]; error?: { message?: string } | string; detail?: string } | null = null;
+  let body: { data?: { id?: string }[]; models?: { name?: string; id?: string; model?: string; supportedGenerationMethods?: string[] }[]; error?: { message?: string } | string; detail?: string } | null = null;
   try {
     body = JSON.parse(text);
   } catch {
@@ -284,8 +288,9 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     return done({ ok: false, models: [], url, status: res.status, detail, error: html ? "JSON 대신 웹페이지(HTML)가 왔습니다" : "응답을 읽지 못했습니다 (JSON 아님)", hint: html ? "API 주소가 아니라 웹페이지 주소일 수 있습니다. 주소 끝이 /v1 인지, 터널 경고 페이지가 아닌지 확인하세요." : "OpenAI 호환 API 주소가 맞는지 확인하세요." });
   }
   // Google Gemini(OpenAI 호환)는 "models/gemini-…" 로 돌려주고, 채팅에는 접두어 없는 이름을 쓴다
-  const strip = host === "generativelanguage.googleapis.com" || p.oauth ? (x: string) => x.replace(/^models\//, "") : (x: string) => x;
-  const ids = [...new Set((body.data ?? body.models ?? []).map((m) => strip((m as { id?: string }).id || (m as { name?: string }).name || (m as { model?: string }).model || "")).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const strip = host === "generativelanguage.googleapis.com" || p.oauth || native ? (x: string) => x.replace(/^models\//, "") : (x: string) => x;
+  const listed = (body.data ?? body.models ?? []).filter((m) => !(m as { supportedGenerationMethods?: string[] }).supportedGenerationMethods || (m as { supportedGenerationMethods?: string[] }).supportedGenerationMethods!.includes("generateContent"));
+  const ids = [...new Set(listed.map((m) => strip((m as { id?: string }).id || (m as { name?: string }).name || (m as { model?: string }).model || "")).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (!ids.length) return done({ ok: false, models: [], url, status: res.status, error: "연결은 됐지만 모델이 0개입니다", hint: "LM Studio는 모델을 내려받아 두어야 목록에 나옵니다(JIT 로딩을 끈 경우 먼저 Load). Ollama는 ollama pull 로 받아 두세요. 목록 없이도 모델 이름을 직접 입력할 수 있습니다." });
   return done({ ok: true, models: ids, url, status: res.status });
 }
@@ -298,6 +303,57 @@ export async function listModels(p: AiProbe): Promise<string[]> {
 }
 
 /** OpenAI 호환 /chat/completions — NVIDIA(integrate.api.nvidia.com), LM Studio, Ollama, vLLM, 외부 호환 API */
+/** Gemini의 OpenAI 호환 주소(…/v1beta/openai)에서 원래 API 주소(…/v1beta)를 얻는다 */
+const isGeminiCompat = (base: string) => /\/v1beta\/openai$/.test(base);
+const geminiRoot = (base: string) => base.replace(/\/openai$/, "");
+
+/**
+ * Google OAuth 연결의 호출 — Gemini 원래 API(generateContent). OpenAI 호환 주소는 API 키용이라 OAuth 토큰과 잘 맞지 않아
+ * 문서화된 원래 API를 쓴다 (Authorization: Bearer + x-goog-user-project).
+ */
+async function callGeminiNative(cfg: AiResolved, turns: Turn[], signal?: AbortSignal): Promise<string> {
+  const root = geminiRoot((cfg.baseUrl ?? "").replace(/\/$/, ""));
+  const url = `${root}/models/${encodeURIComponent(cfg.model.replace(/^models\//, ""))}:generateContent`;
+  const contents = turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] }));
+  type Res = { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[]; promptFeedback?: { blockReason?: string }; error?: { message?: string; status?: string } } | null;
+  const post = async (strict: boolean): Promise<{ res: Response; body: Res }> => {
+    const auth = await authHeaders(cfg);
+    const generationConfig = strict ? { temperature: 0.3, maxOutputTokens: cfg.maxTokens ?? 8192, responseMimeType: "application/json" } : { temperature: 0.3 };
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await fetch(url, { method: "POST", signal: signal ?? AbortSignal.timeout(10 * 60_000), headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig }) });
+      } catch (e) {
+        if ((e as Error).name === "AbortError" && signal?.aborted) throw new HttpError(499, "요청을 멈췄습니다");
+        const d = describeNetError(e, new URL(url).host);
+        throw new HttpError(502, `${d.error} — ${d.hint}`);
+      }
+      if (![429, 503, 500].includes(res.status) || attempt >= 2 || signal?.aborted) return { res, body: (await res.json().catch(() => null)) as Res };
+      const ra = Number(res.headers.get("retry-after"));
+      await new Promise((ok) => setTimeout(ok, Math.min(Number.isFinite(ra) && ra > 0 ? ra * 1000 : [3000, 8000][attempt]!, 15000)));
+    }
+  };
+  let { res, body } = await post(true);
+  // 모델이 JSON 모드·출력 한도 설정을 지원하지 않으면 빼고 다시
+  if (res.status === 400 && /response_?mime|maxOutputTokens|max_output|json mode|not supported/i.test(body?.error?.message ?? "")) ({ res, body } = await post(false));
+  if (!res.ok) {
+    const msg = body?.error?.message ?? res.statusText;
+    if (res.status === 401 || res.status === 403) throw oauthDenied(res.status, msg, cfg.oauth?.projectId ?? "");
+    if (res.status === 404) throw new HttpError(502, `Gemini 모델을 찾을 수 없습니다 (${cfg.model}). 모델 이름을 확인하세요 — ${msg}`.slice(0, 240));
+    if (res.status === 429 || res.status === 503) throw new HttpError(503, `Gemini가 지금 요청을 처리하지 못했습니다 (${res.status}). 잠시 뒤 다시 시도하거나 사용량 한도(프로젝트 할당량)를 확인하세요. — ${msg}`.slice(0, 300));
+    throw new HttpError(502, `Gemini API 오류 (${res.status}): ${msg}`.slice(0, 300));
+  }
+  const cand = body?.candidates?.[0];
+  if (!cand) throw new HttpError(502, body?.promptFeedback?.blockReason ? `Gemini가 요청을 막았습니다 (${body.promptFeedback.blockReason}). 요청 내용을 바꿔 보세요` : "AI 결과가 비었습니다. 다시 시도해 주세요");
+  const text = (cand.content?.parts ?? []).filter((x) => !x.thought).map((x) => x.text ?? "").join("");
+  if (!text.trim()) throw new HttpError(502, `AI 결과가 비었습니다 (${cand.finishReason ?? "빈 답"}). 다시 시도해 주세요`);
+  if (cand.finishReason === "MAX_TOKENS") {
+    if (extractJson(text).ok) return text;
+    throw new AiParseError(truncatedMessage(text, cfg.maxTokens), text, "최대 출력 토큰에 닿아 잘림");
+  }
+  return text;
+}
+
 async function callOpenAiCompatible(cfg: AiResolved, turns: Turn[], signal?: AbortSignal): Promise<string> {
   const url = `${cfg.baseUrl!.replace(/\/$/, "")}/chat/completions`;
   const post = async (withMax: boolean) => {

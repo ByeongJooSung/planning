@@ -42,8 +42,10 @@ beforeAll(async () => {
       seen.push(entry);
       res.setHeader("content-type", "application/json");
       if (req.headers.authorization !== "Bearer at-refreshed") return void ((res.statusCode = 401), res.end(JSON.stringify({ error: { message: "bad token" } })));
-      if (url.pathname === "/v1beta/openai/models") return void res.end(JSON.stringify({ data: [{ id: "models/gemini-2.5-flash" }, { id: "models/gemini-2.5-pro" }] }));
-      if (url.pathname === "/v1beta/openai/chat/completions") return void res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }] }));
+      // Gemini 원래 API (OpenAI 호환 주소는 OAuth 토큰에서 400을 돌려주므로 쓰지 않는다)
+      if (url.pathname === "/v1beta/models") return void res.end(JSON.stringify({ models: [{ name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] }, { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent", "countTokens"] }, { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] }] }));
+      if (url.pathname === "/v1beta/models/gemini-2.5-flash:generateContent") return void res.end(JSON.stringify({ candidates: [{ content: { parts: [{ text: "생각", thought: true }, { text: '{"ok":true}' }] }, finishReason: "STOP" }] }));
+      if (url.pathname.startsWith("/v1beta/openai/")) return void ((res.statusCode = 400), res.end(JSON.stringify({ error: { message: "Request contains an invalid argument." } })));
       res.statusCode = 404;
       res.end("{}");
     });
@@ -131,14 +133,18 @@ describe("Google Cloud OAuth (Gemini)", () => {
     const after = (await me.req("POST", "/api/me/ai/models", { provider: "openai-compatible", baseUrl: input.baseUrl, connId: conn.id })).body;
     expect(after.ok).toBe(true);
     expect(after.models).toEqual(["gemini-2.5-flash", "gemini-2.5-pro"]);
-    const list = seen.filter((x) => x.path === "/v1beta/openai/models").at(-1)!;
+    const list = seen.filter((x) => x.path === "/v1beta/models").at(-1)!;
     expect(list).toMatchObject({ auth: "Bearer at-refreshed", project: "my-gemini-123" });
 
     const ok = await me.req("POST", "/api/me/ai/test", { scope: "personal", conn: conn.id, model: "gemini-2.5-flash" });
     expect(ok.status).toBe(200);
     expect(ok.body).toMatchObject({ ok: true, model: "gemini-2.5-flash" });
-    const chat = seen.filter((x) => x.path === "/v1beta/openai/chat/completions").at(-1)!;
+    const chat = seen.filter((x) => x.path === "/v1beta/models/gemini-2.5-flash:generateContent").at(-1)!;
     expect(chat).toMatchObject({ auth: "Bearer at-refreshed", project: "my-gemini-123" });
+    expect(chat.body.contents[0]).toMatchObject({ role: "user" });
+    expect(chat.body.systemInstruction.parts[0].text).toBeTruthy();
+    expect(chat.body.generationConfig).toMatchObject({ maxOutputTokens: 8192, responseMimeType: "application/json" });
+    expect(seen.some((x) => x.path.startsWith("/v1beta/openai/"))).toBe(false);
     // 액세스 토큰은 캐시해서 재사용 (리프레시 1번)
     expect(seen.filter((x) => x.path === "/token" && x.form?.grant_type === "refresh_token")).toHaveLength(1);
 
