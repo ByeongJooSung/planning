@@ -312,7 +312,7 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       const r = applyGenerated(m, cmd.kind as GenKind, cmd.target, cmd.output, { now, instruction: cmd.instruction, scope: cmd.scope });
       // AI가 만들었다고 완료가 아니다 — 진행중으로 두고 작업자가 검토 후 완료 표시
       const wk = cmd.kind === "flow" ? `flow:${cmd.target}` : `${cmd.kind}:${cmd.target}`;
-      m.rtmRecords.work[wk] = { status: "IN_PROGRESS", at: now.toISOString(), by: "AI 적용", note: "" };
+      if (cmd.kind !== "dsc") m.rtmRecords.work[wk] = { status: "IN_PROGRESS", at: now.toISOString(), by: "AI 적용", note: "" };
       message = r.summary;
       detail = r;
       break;

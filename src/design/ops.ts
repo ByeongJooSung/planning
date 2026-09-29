@@ -30,6 +30,14 @@ export function selectDesign(m: Model, systemCode: string, conceptId: string, c:
   const concept = d.proposals.find((p) => p.id === conceptId.toUpperCase());
   if (!concept) throw new Error(`컨셉 ${conceptId}가 없습니다 (제안: ${d.proposals.map((p) => p.id).join(", ")})`);
   const added = d.components.filter((x) => x.origin === "ADDED");
+  // 이미 쓰던 디자인을 다른 컨셉으로 바꾸는 경우: 개정을 올려 화면설계서가 재검토 대상이 되게 하고, 조정한 스타일은 새 컨셉 기준으로 초기화
+  const switching = d.status === "SELECTED" && d.selectedId !== concept.id;
+  const now = (c.now ?? new Date()).toISOString();
+  if (switching) {
+    d.revision += 1;
+    d.history.push({ rev: d.revision, at: now, note: `컨셉 변경 ${d.selectedId} → ${concept.id} ${concept.name}`, changes: [`컨셉 ${d.selectedId} → ${concept.id}`] });
+    d.componentStyles = {};
+  }
   d.status = "SELECTED";
   d.selectedId = concept.id;
   d.selectedAt = (c.now ?? new Date()).toISOString();

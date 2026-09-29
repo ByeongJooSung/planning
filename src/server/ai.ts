@@ -199,7 +199,7 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
   const detail = (typeof body?.error === "string" ? body.error : body?.error?.message) ?? body?.detail ?? (body ? undefined : text.replace(/\s+/g, " ").slice(0, 200));
   if (!res.ok) {
     const status = res.status;
-    if (status === 401 || status === 403) return done({ ok: false, models: [], url, status, detail, error: `API 키가 필요하거나 올바르지 않습니다 (${status})`, hint: "NVIDIA는 build.nvidia.com 에서 발급한 nvapi-… 키를 넣으세요. LM Studio에서 인증을 켰다면 그 토큰을 넣으세요." });
+    if (status === 401 || status === 403) return done({ ok: false, models: [], url, status, detail, error: `API 키가 필요하거나 올바르지 않습니다 (${status})`, hint: host === "generativelanguage.googleapis.com" ? "Google AI Studio(aistudio.google.com/apikey)에서 발급한 AIza… 키를 넣으세요. 구글 계정 로그인(OAuth)이 아니라 API 키가 필요합니다." : "NVIDIA는 build.nvidia.com 에서 발급한 nvapi-… 키를 넣으세요. LM Studio에서 인증을 켰다면 그 토큰을 넣으세요." });
     if (status === 404) return done({ ok: false, models: [], url, status, detail, error: "주소는 열렸지만 /models 를 찾지 못했습니다 (404)", hint: /\/v1$/.test(base) ? "OpenAI 호환 API 주소가 맞는지 확인하세요." : "주소 끝에 /v1 을 붙여 보세요 (예: http://…:1234/v1)." });
     return done({ ok: false, models: [], url, status, detail, error: `서버 오류 (${status})`, hint: "AI 서버 쪽 로그를 확인하거나 잠시 뒤 다시 시도하세요." });
   }
@@ -207,7 +207,9 @@ export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.e
     const html = /<html|<!doctype/i.test(text);
     return done({ ok: false, models: [], url, status: res.status, detail, error: html ? "JSON 대신 웹페이지(HTML)가 왔습니다" : "응답을 읽지 못했습니다 (JSON 아님)", hint: html ? "API 주소가 아니라 웹페이지 주소일 수 있습니다. 주소 끝이 /v1 인지, 터널 경고 페이지가 아닌지 확인하세요." : "OpenAI 호환 API 주소가 맞는지 확인하세요." });
   }
-  const ids = [...new Set((body.data ?? body.models ?? []).map((m) => (m as { id?: string }).id || (m as { name?: string }).name || (m as { model?: string }).model || "").filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  // Google Gemini(OpenAI 호환)는 "models/gemini-…" 로 돌려주고, 채팅에는 접두어 없는 이름을 쓴다
+  const strip = host === "generativelanguage.googleapis.com" ? (x: string) => x.replace(/^models\//, "") : (x: string) => x;
+  const ids = [...new Set((body.data ?? body.models ?? []).map((m) => strip((m as { id?: string }).id || (m as { name?: string }).name || (m as { model?: string }).model || "")).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   if (!ids.length) return done({ ok: false, models: [], url, status: res.status, error: "연결은 됐지만 모델이 0개입니다", hint: "LM Studio는 모델을 내려받아 두어야 목록에 나옵니다(JIT 로딩을 끈 경우 먼저 Load). Ollama는 ollama pull 로 받아 두세요. 목록 없이도 모델 이름을 직접 입력할 수 있습니다." });
   return done({ ok: true, models: ids, url, status: res.status });
 }

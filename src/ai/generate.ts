@@ -11,6 +11,7 @@ import type { Model, SystemDesign } from "../model/schema.js";
 import { buildRtm, STATUS_LABEL } from "../trace/rtm.js";
 import type { GenKind } from "./apply.js";
 import { SPEC_SLOT, specItems, type SpecItem } from "./spec.js";
+import { baseConcept, profileOf } from "../design/concepts.js";
 import {
 
   componentCatalog,
@@ -60,6 +61,7 @@ export function buildGenPrompts(m: Model, chunks: Chunk[], opts: PromptOptions =
   for (const sb of m.storyboard.screens) if (c.node(sb.screenId)) out[`desc:${sb.screenId}`] = descGen(c, sb.screenId);
   for (const r of c.rtm.rows) if (r.status !== "EXCLUDED" && r.tasks.length) out[`flow:${r.requirementId}`] = flowGen(c, r.requirementId);
   for (const d of m.design.systems) if (d.status === "SELECTED") out[`ds:${d.systemCode}`] = dsGen(c, d.systemCode);
+  for (const s of m.systems.filter((x) => x.hasScreens)) out[`dsc:${s.code}`] = dscGen(c, s.code);
   return out;
 }
 
@@ -236,6 +238,60 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
   return { kind: "flow", target: requirementId, title: `${requirementId} ${req.title} 프로세스 플로우`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, [requirementId]) };
 }
 
+/** 디자인 토큰·레이아웃의 정확한 키와 값 형식 — 컨셉 생성과 섹션 조정이 함께 쓴다 (없는 키는 무시되므로 이름을 정확히) */
+export const TOKEN_SCHEMA = [
+  'tokens.color: primary, onPrimary(주 색 위 글자), accent, bg, surface, surfaceAlt, border, text, textMuted, nav(메뉴 배경), onNav(메뉴 글자), success, warning, danger, info — 모두 "#RRGGBB"',
+  'tokens.font: family("\\"Noto Sans KR\\", \\"Malgun Gothic\\", sans-serif" 형식), scale{display,h1,h2,h3,body,small,caption} — px 숫자, weightBold — 600 또는 700',
+  "tokens.radius{sm,md,lg} · tokens.control{height,rowHeight} · tokens.spacing · tokens.grid{columns(정수),maxWidth,gutter} — px 숫자",
+  'tokens.shadow: "none" | "soft" | "strong"',
+  "layout.nav: top | top-mega | side · layout.logo: left | center · layout.search: header | hero | panel · layout.list: table | card",
+  "layout.pagination: numbered | numbered-size | more · layout.button: square | rounded | pill · layout.density: comfortable | compact · layout.footer: full | simple | none",
+].join("\n");
+
+/** AI 컨셉 제안 — 규칙 기반 3종 대신 시스템 성격·참조자료·기존 디자인에 맞춘 3종을 만든다 */
+function dscGen(c: Ctx, code: string): GenPrompt {
+  const s = c.system(code)!;
+  const d = c.design(code);
+  const base = baseConcept(s);
+  const others = c.m.design.systems
+    .filter((x) => x.systemCode !== code && x.status === "SELECTED" && x.tokens && x.layout)
+    .map((x) => `- ${x.systemCode}: 주 색 ${x.tokens!.color.primary}, 글꼴 ${x.tokens!.font.family}, 모서리 ${x.tokens!.radius.md}px, GNB ${x.layout!.nav}`);
+  const ev = c.evidence(`${s.name} 디자인 브랜드 색상 로고 화면 UI UX 접근성 ${c.m.project.name}`, 5);
+  const existing = c.m.project.serviceType === "EXISTING";
+  const prompt = finish([
+    head(`${code} ${s.name} 디자인 시스템 컨셉 3종`, "이 시스템 영역의 디자인 컨셉 3종(서로 뚜렷이 다른 방향)을 제안해 주세요. 작업자가 하나를 고르면 그 컨셉의 토큰·레이아웃으로 디자인 시스템이 만들어집니다."),
+    section(
+      "대상",
+      [
+        projectLine(c),
+        `- 시스템: ${code} ${s.name} · 성격 ${profileOf(s) === "admin" ? "업무·관리자" : profileOf(s) === "service" ? "신청·민원 서비스" : "대국민 포털"}`,
+        `- 주 사용자: ${s.users.join(", ") || "-"} · 채널: ${s.channels.join(", ") || "-"}`,
+        `- ${existing ? "기존 서비스 개편: 기존 사용자가 낯설어하지 않도록 아래 참조 URL의 기존 화면 분위기와 브랜드 색을 이어가되 개선한다" : "신규 서비스"}`,
+        `- 설계 규격: ${VIEWPORT.width}×${VIEWPORT.height} 데스크톱`,
+      ].join("\n"),
+    ),
+    section("참조 URL (기존 서비스·Figma·참고)", urlBlock(c.urls(code))),
+    section("참조자료 근거 (브랜드·디자인 언급)", ev.text),
+    section("이미 확정된 다른 시스템 디자인 (같은 서비스로 보이게 일관성 유지)", others.join("\n") || "- (없음)"),
+    section("현재 상태", d ? `- 이미 ${d.proposals.length}개 제안됨: ${d.proposals.map((p) => `${p.id} ${p.name}`).join(", ")} ${d.status === "SELECTED" ? `(현재 ${d.selectedId} 사용 중 — 새 컨셉은 후보로 추가되고 현재 디자인은 그대로)` : "(새 제안이 이를 대체)"}` : "- 처음 제안"),
+    section("값 형식 (키 이름을 정확히)", TOKEN_SCHEMA),
+    section(
+      "규칙",
+      [
+        "- 3종은 GNB(nav)·목록(list)·페이지네이션·버튼 모양·밀도·색 계열·글꼴 중 최소 3가지가 서로 달라야 한다 (색만 바꾼 변형 금지)",
+        "- 모든 색은 #RRGGBB. 본문 글자(text)와 배경(bg·surface)은 명도 대비 4.5:1 이상, onPrimary는 primary 위에서, onNav는 nav 위에서 4.5:1 이상 (웹 접근성)",
+        '- 글꼴은 "Noto Sans KR", "Gothic A1", "IBM Plex Sans KR", "Nanum Gothic" 중에서 고르고 대체 글꼴 "Malgun Gothic", sans-serif 를 붙인다',
+        "- 공공·업무 서비스에 어울리는 절제된 톤. 이름·summary·fit은 한국어, 이름은 6자 안팎, summary는 구성 특징을 한 문장, fit은 어울리는 이유·대상을 한 문장",
+        "- 참조 URL·참조자료에 브랜드 색이나 디자인 지침이 있으면 그것을 우선 반영하고, summary에 근거를 밝힌다",
+        `- 모든 tokens 값을 빠짐없이 채운다 (기준 예시를 복사해 필요한 곳만 바꿔도 된다)`,
+      ].join("\n"),
+    ),
+    section("기준 예시 (이 성격의 규칙 기반 컨셉 — 형식 참고용, 그대로 쓰지 말 것)", JSON.stringify({ id: base.id, name: base.name, summary: base.summary, fit: base.fit, tokens: base.tokens, layout: base.layout })),
+    section("출력 형식", '{"concepts":[{"id":"A","name":"…","summary":"…","fit":"…","tokens":{…},"layout":{…}},{"id":"B",…},{"id":"C",…}]}'),
+  ]);
+  return { kind: "dsc", target: code, title: `${code} ${s.name} 디자인 컨셉 AI 제안`, prompt, requiresInstruction: false };
+}
+
 /** 디자인 미세조정 프롬프트의 자리표시자 — 조정 범위·현재 디자인(적용본 포함)·댓글은 요청할 때 채운다 */
 export const DS_SLOTS = { scope: "{{SCOPE}}", design: "{{DESIGN}}", vars: "{{STYLE_VARS}}", comments: "{{COMMENTS}}" } as const;
 
@@ -248,6 +304,7 @@ function dsGen(c: Ctx, code: string): GenPrompt {
     section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s?.name ?? ""} (주 사용자: ${s?.users.join(", ") || "-"})`),
     section("조정 범위 (이 범위 밖의 값은 넣지 않는다)", DS_SLOTS.scope),
     section("현재 디자인 시스템 (적용된 조정 포함, JSON)", DS_SLOTS.design),
+    section("값 형식 — 이 키 이름만 쓴다 (없는 키는 버려진다)", TOKEN_SCHEMA),
     section("컴포넌트", componentCatalog(d)),
     section("조정할 수 있는 컴포넌트 스타일 변수 (componentStyles)", DS_SLOTS.vars),
     section("이 디자인 시스템을 쓰는 화면 (패치 후 한꺼번에 다시 그려짐)", screens.map((x) => `- ${x}`).join("\n") || "- (없음)"),
@@ -264,6 +321,9 @@ function dsGen(c: Ctx, code: string): GenPrompt {
         "- 댓글이 특정 컴포넌트를 가리키면 그 컴포넌트의 componentStyles로 먼저 고친다. 디자인 시스템으로 바꿀 수 없는 요청(문구·항목·배치·데이터)은 고치지 말고 comments에 done:false와 이유를 적는다",
         '- 댓글이 있으면 댓글별 결과를 넣는다: "comments":[{"id":"C1","done":true,"change":"무엇을 바꿨나"},{"id":"C2","done":false,"reason":"왜 못 했나"}]',
         "- 요청과 관계없는 값은 넣지 않는다",
+        "- 조정 범위 밖의 요청이면(예: ‘색상’ 범위에서 버튼 모양) 억지로 넣지 말고 summary에 ‘이 범위에서는 바꿀 수 없음: 이유’를 적는다",
+        "- ‘조금·더·약간’ 같은 표현도 화면에서 바뀐 것이 눈에 보이게 현재 값에서 충분히 바꾼다: 색은 명도·채도를 뚜렷하게(비슷한 색으로 돌려주지 않는다), 크기·간격은 2px 이상, 높이는 4px 이상",
+        "- 현재 값과 같은 값은 넣지 않는다",
       ].join("\n"),
     ),
     section("댓글", DS_SLOTS.comments),

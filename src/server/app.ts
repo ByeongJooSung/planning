@@ -57,6 +57,11 @@ export type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<voi
 
 const COOKIE = "ps_session";
 const CODE = /^[A-Z][A-Z0-9_-]{1,19}$/;
+/** 처음 넣어 주는 샘플(더미) 프로젝트 — 같은 코드로 다시 만든 프로젝트는 만든 시각이 달라 샘플로 보지 않는다 */
+const SAMPLE_CODES = new Set(["PUBINFO", "SHOPMY"]);
+const SAMPLE_CREATED = "2026-09-25T09:00:00.000Z";
+const isSample = (p: { code: string; createdAt: string }) => SAMPLE_CODES.has(p.code) && p.createdAt === SAMPLE_CREATED;
+
 const KV_PREFIX = { gens: "gens", reviews: "reviews" } as const;
 
 interface Ctx {
@@ -125,8 +130,8 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
   async function projectView(code: string, userId: string, full: boolean, state?: ProjectState) {
     const st = state ?? (await repo.load(code, full ? "last" : "none"));
     const v = deriveProject(st);
-    const base = full ? v : { ...v, chunks: [], prompts: {}, gens: {} };
-    return { ...base, role: await acc.roleOf(code, userId), ai: await acc.aiSource(code, userId) };
+    const base = full ? v : { ...v, chunks: [], prompts: {}, gens: {}, specs: {} };
+    return { ...base, sample: isSample(v.model.project), role: await acc.roleOf(code, userId), ai: await acc.aiSource(code, userId) };
   }
 
   /** 명령 실행 → 저장. 실패하면 아무것도 저장하지 않는다 */

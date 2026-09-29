@@ -15,14 +15,16 @@ import {
   DesignTokens,
   Flow,
   IANode,
+  DesignConcept,
   LayoutRules,
   type Model,
   type StoryboardScreen,
 } from "../model/schema.js";
 import { validateModel } from "../model/validate.js";
 import { isValidStyleValue, scopeOf, styleVarsOf } from "../design/catalog.js";
+import { baseConcept } from "../design/concepts.js";
 
-export const GEN_KINDS = ["ia", "sb", "flow", "ds"] as const;
+export const GEN_KINDS = ["ia", "sb", "flow", "ds", "dsc"] as const;
 export type GenKind = (typeof GEN_KINDS)[number];
 
 export const IaOutput = z.object({
@@ -92,6 +94,8 @@ function applyKind(m: Model, kind: GenKind, target: string, output: unknown, c: 
       return applyFlow(m, target, output);
     case "ds":
       return applyDesignPatch(m, target, output, c);
+    case "dsc":
+      return applyConcepts(m, target, output);
   }
 }
 
@@ -389,6 +393,105 @@ export function applyDesignPatch(m: Model, systemCode: string, output: unknown, 
   commit(m, work);
   const affectedScreens = m.storyboard.screens.filter((s) => s.systemCode === systemCode).map((s) => s.screenId);
   return { summary: `${systemCode} 디자인 시스템 r${d.revision}: 변경 ${changes.length}건 · 다시 그려지는 화면 ${affectedScreens.length}개`, changes, affectedScreens };
+}
+
+// ── 디자인 컨셉 AI 제안 ─────────────────────────────────────────────
+
+function lum(hex: string): number {
+  const ch = (i: number) => {
+    const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * ch(0) + 0.7152 * ch(1) + 0.0722 * ch(2);
+}
+export function contrast(a: string, b: string): number {
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x! + 0.05) / (y! + 0.05);
+}
+/** 배경 위에서 4.5:1 이상이 되는 글자색 (흰색·거의 검정 중 더 나은 쪽) */
+function readableOn(bg: string): string {
+  return contrast("#FFFFFF", bg) >= contrast("#1E2124", bg) ? "#FFFFFF" : "#1E2124";
+}
+
+const FONT_OK = /Noto Sans KR|Gothic A1|IBM Plex Sans KR|Nanum Gothic|Malgun Gothic|sans-serif/;
+
+/** 컨셉 하나를 검증·보정한다. 빠진 값은 기준 컨셉에서 채우고, 접근성 대비가 모자란 글자색은 고친다 */
+function cleanConcept(raw: unknown, base: DesignConcept, id: string, notes: string[]): DesignConcept | null {
+  if (!isObj(raw)) return null;
+  const t = coerceLike(base.tokens, isObj(raw.tokens) ? raw.tokens : {}) as Record<string, unknown>;
+  if (isObj(t.color)) for (const [k, v] of Object.entries(t.color)) if (!/^#[0-9A-Fa-f]{6}$/.test(String(v))) delete (t.color as Record<string, unknown>)[k];
+  if (isObj(t.font)) {
+    if (typeof t.font.family !== "string" || !FONT_OK.test(t.font.family)) delete t.font.family;
+    if (isObj(t.font.scale)) for (const [k, v] of Object.entries(t.font.scale)) if (typeof v !== "number" || v < 8 || v > 96) delete (t.font.scale as Record<string, unknown>)[k];
+    if (typeof t.font.weightBold !== "number") delete t.font.weightBold;
+  }
+  if (!["none", "soft", "strong"].includes(String(t.shadow))) delete t.shadow;
+  for (const k of ["radius", "control", "grid"] as const) if (isObj(t[k])) for (const [kk, v] of Object.entries(t[k] as object)) if (typeof v !== "number" || v < 0 || v > 4000) delete (t[k] as Record<string, unknown>)[kk];
+  if (typeof t.spacing !== "number" || t.spacing <= 0 || t.spacing > 64) delete t.spacing;
+  const tokens = DesignTokens.parse(deepMerge(base.tokens, t));
+  const rawLayout = isObj(raw.layout) ? raw.layout : {};
+  const layout = LayoutRules.parse(
+    Object.fromEntries(Object.entries(base.layout).map(([k, def]) => [k, (LAYOUT_OPTIONS[k] ?? []).includes(String(rawLayout[k])) ? rawLayout[k] : def])),
+  );
+  // 접근성: 글자·배경 대비
+  const c = tokens.color;
+  const fix = (key: "text" | "onPrimary" | "onNav" | "textMuted", bg: string, min: number, label: string) => {
+    if (contrast(c[key], bg) < min) {
+      const was = c[key];
+      c[key] = readableOn(bg);
+      notes.push(`${id}: ${label} 대비 부족(${was}) → ${c[key]}로 보정`);
+    }
+  };
+  fix("text", c.bg, 4.5, "본문 글자/배경");
+  fix("text", c.surface, 4.5, "본문 글자/면");
+  fix("onPrimary", c.primary, 4.5, "주 색 위 글자");
+  fix("onNav", c.nav, 4.5, "메뉴 글자");
+  fix("textMuted", c.surface, 3, "보조 글자");
+  const str1 = (v: unknown, d: string) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : d);
+  return DesignConcept.parse({ id, name: str1(raw.name, `${base.name} 변형`).slice(0, 30), summary: str1(raw.summary, base.summary), fit: str1(raw.fit, base.fit), tokens, layout });
+}
+const LAYOUT_OPTIONS: Record<string, string[]> = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
+
+/** AI가 제안한 컨셉을 반영한다. 선택 전에는 제안 전체를 대체(A·B·C), 이미 선택했으면 후보로만 추가(현재 디자인 유지) */
+export function applyConcepts(m: Model, systemCode: string, output: unknown): ApplyResult {
+  const system = m.systems.find((s) => s.code === systemCode);
+  if (!system) throw new Error(`등록되지 않은 시스템입니다: ${systemCode}`);
+  if (!system.hasScreens) throw new Error(`${systemCode}는 화면이 없는 시스템입니다`);
+  const list = isObj(output) ? (output.concepts ?? output.proposals ?? output.items) : output;
+  if (!Array.isArray(list) || !list.length) throw new Error("AI 결과에 concepts 목록이 없습니다");
+  const base = baseConcept(system);
+  const work = structuredClone(m);
+  let d = work.design.systems.find((x) => x.systemCode === systemCode);
+  const selected = d?.status === "SELECTED";
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const used = new Set(d?.proposals.map((p) => p.id) ?? []);
+  const nextId = () => letters.split("").find((l) => !used.has(l)) ?? `X${used.size}`;
+  const notes: string[] = [];
+  const out: DesignConcept[] = [];
+  for (const raw of list.slice(0, 3)) {
+    try {
+      const id = selected ? nextId() : letters[out.length]!;
+      const cc = cleanConcept(raw, base, id, notes);
+      if (cc) {
+        out.push(cc);
+        used.add(id);
+      }
+    } catch (e) {
+      notes.push(`${out.length + 1}번째 컨셉을 읽지 못했습니다: ${e instanceof z.ZodError ? zodText(e) : (e as Error).message}`);
+    }
+  }
+  if (!out.length) throw new Error(`쓸 수 있는 컨셉이 없습니다. ${notes.join(" / ")}`);
+  if (d) d.proposals = selected ? [...d.proposals, ...out] : out;
+  else {
+    d = { systemCode, status: "PROPOSED", proposals: out, components: [], icons: [], componentStyles: {}, revision: 1, history: [] };
+    work.design.systems.push(d);
+  }
+  commit(m, work);
+  return {
+    summary: `${systemCode} 디자인 컨셉 ${out.length}종 ${selected ? "후보로 추가" : "제안"}: ${out.map((c) => `${c.id} ${c.name}`).join(", ")}`,
+    changes: [...out.map((c) => `${c.id} ${c.name} — ${c.summary}`), ...notes],
+    affectedScreens: [],
+  };
 }
 
 /** 디자인 변경 뒤 아직 다시 검토하지 않은 화면 (화면의 designRevision < 현재 개정) */

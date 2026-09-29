@@ -162,3 +162,8 @@ const CONCEPTS: Record<SystemProfile, DesignConcept[]> = {
 export function proposeConcepts(system: System): DesignConcept[] {
   return structuredClone(CONCEPTS[profileOf(system)]);
 }
+
+/** AI가 일부 값만 돌려줘도 채울 수 있는 기준 컨셉 (같은 성격의 첫 규칙 기반 컨셉) */
+export function baseConcept(system: System): DesignConcept {
+  return structuredClone(CONCEPTS[profileOf(system)][0]!);
+}

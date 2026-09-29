@@ -916,3 +916,11 @@ tr[data-dno].hl td { background: var(--accent-soft); }
 .desc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
 .desc-tools .hint { flex: 1 1 260px; }
 .btn-sm.ai { color: var(--accent); border-color: var(--accent); }
+
+/* 프로젝트 카드 삭제 · 샘플 안내 */
+.pcard-wrap { position: relative; display: flex; }
+.pcard-wrap > .pcard { flex: 1; }
+.pc-del { position: absolute; top: 10px; right: 10px; z-index: 2; font-size: 11.5px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--crit); cursor: pointer; }
+.pc-del:hover { background: var(--crit-bg); border-color: var(--crit); }
+.tag.sample-t { color: var(--st-prog); border-color: var(--st-prog); background: var(--st-prog-bg); }
+.note.sample-n { border-style: solid; border-color: var(--st-prog); background: var(--st-prog-bg); margin-bottom: 14px; }

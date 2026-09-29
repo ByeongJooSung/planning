@@ -269,20 +269,28 @@
         var d = designOf(p, s.code);
         return '<span class="tag"><i class="dot" style="background:' + s.color + '"></i>' + esc(s.code) + (s.hasScreens ? (d && d.status === "SELECTED" ? " · 디자인 " + esc(d.selectedId) : d ? " · 컨셉 선택 대기" : "") : "") + "</span>";
       }).join("");
-      return '<button class="box pcard" data-open="' + i + '">' +
+      return '<div class="pcard-wrap">' + (SRV && p.role === "OWNER" ? '<button class="pc-del" data-act="proj-delete-card" data-arg="' + esc(pr.code) + '" title="프로젝트 삭제" aria-label="' + esc(pr.name) + ' 삭제">삭제</button>' : "") + '<button class="box pcard" data-open="' + i + '">' +
         '<div class="pc-top"><span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><span class="tag">' + esc(TYPE[pr.serviceType] + (pr.changeScope ? " · " + SCOPE[pr.changeScope] : "")) + "</span></div>" +
         '<b class="pc-name">' + esc(pr.name) + '</b><div class="pc-sys">' + sysChips + '</div><div class="track">' + track + "</div>" +
         '<div class="pc-rate"><div class="bar"><b style="width:' + c.designedRate + '%;background:var(--accent)"></b></div><span>설계완료 ' + c.designedRate + "%</span></div>" +
         '<dl class="pc-nums"><div><dt>요구사항</dt><dd>' + p.rtm.rows.length + "</dd></div><div><dt>Task</dt><dd>" + c.tasks.total + "</dd></div><div><dt>참조자료</dt><dd>" + p.model.sources.length +
         '</dd></div><div class="' + (p.rtm.gaps.length ? "warn" : "") + '"><dt>누락</dt><dd>' + p.rtm.gaps.length + "</dd></div></dl>" +
-        '<span class="pc-foot">' + (p.role ? ROLE_LABEL[p.role] + " · " : "") + esc(TEMPLATE[pr.submissionTemplate]) + " · 수정 " + esc(fmtDate(pr.updatedAt)) + "</span></button>";
+        '<span class="pc-foot">' + (p.sample ? '<span class="tag sample-t">샘플</span> ' : "") + (p.role ? ROLE_LABEL[p.role] + " · " : "") + esc(TEMPLATE[pr.submissionTemplate]) + " · 수정 " + esc(fmtDate(pr.updatedAt)) + "</span></button></div>";
     }).join("");
     var newCard = SRV ? '<button class="box pcard new" data-act="new-project"><b>+ 새 프로젝트</b><p class="hint">서비스 유형, 변경 범위, 시스템 구분을 정해 만듭니다. 만든 사람이 운영자가 되어 공동 작업자를 초대합니다.</p></button>' :
       '<div class="box pcard new"><b>새 프로젝트</b><p class="hint">서비스 유형, 변경 범위, 시스템 구분을 정해 만듭니다.</p>' + copyBox('planning init <코드> --name "<프로젝트명>" --type NEW --preset public-civil') + "</div>";
     return '<header class="page-head"><span class="eyebrow">Planning Studio</span><h1>프로젝트</h1><p>' + (SRV && ME ? esc(ME.name) + "님이 참여한 " : "") + "프로젝트 " + DATA.projects.length + "개 · 요구사항 " + totals.req + "건 · Task " + totals.task + "건 · 누락 " + totals.gap + "건</p></header>" +
-      (SRV ? invitesBanner() : "") + '<section class="pgrid">' + cards + newCard + "</section>";
+      (SRV ? invitesBanner() + sampleBanner() : "") + '<section class="pgrid">' + cards + newCard + "</section>";
   }
 
+  /** 샘플(더미) 프로젝트 안내 + 일괄 삭제 */
+  function sampleBanner() {
+    var mine = DATA.projects.filter(function (p) { return p.sample; });
+    if (!mine.length) return "";
+    var own = mine.filter(function (p) { return p.role === "OWNER"; });
+    return '<div class="note row sample-n"><div><b>샘플 프로젝트 ' + mine.length + '개가 있습니다</b><p class="hint">' + mine.map(function (p) { return esc(p.model.project.name + " (" + p.model.project.code + ")"); }).join(" · ") + ". 둘러본 뒤 필요 없으면 삭제하세요. 삭제한 샘플은 다시 생기지 않습니다.</p></div>" +
+      (own.length ? actBtn("sample-del", "샘플 " + own.length + "개 모두 삭제", null, "btn-sm danger") : '<span class="hint">삭제는 운영자만 할 수 있습니다</span>') + "</div>";
+  }
   // ── 대시보드 ────────────────────────────────────
   function renderDash() {
     var p = P(), pr = p.model.project, rtm = p.rtm, c = rtm.coverage;
@@ -999,10 +1007,10 @@
     }).join("") + "</div>";
     var s = sysOf(p, code), d = designOf(p, code), ctx = wireCtx(p, code, null);
     var body;
-    if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.' + (SRV ? '<div class="row-actions center">' + editBtn("ds-propose", "컨셉 3종 제안받기", code, "btn-primary") + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
+    if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.<br><span class="hint">AI 제안은 이 시스템의 사용자·채널·참조 URL·참조자료를 읽고 만들고, 기본 제안은 시스템 성격별로 정해 둔 규칙 기반 3종입니다.</span>' + (SRV ? '<div class="row-actions center">' + genBtn("dsc:" + code, "AI로 컨셉 3종 제안") + editBtn("ds-propose", "기본 컨셉 3종 (규칙 기반)", code) + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
     else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
-    return '<section class="section"><div class="toolbar">' + chips + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
+    return '<section class="section"><div class="toolbar">' + chips + (d && d.status === "SELECTED" ? genBtn("dsc:" + code, "AI 새 컨셉 후보 제안") : "") + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
   }
 
   function renderProposals(p, d, ctx) {
@@ -1012,7 +1020,7 @@
         swatches(c.tokens) + '<p class="hint">글꼴 ' + esc(fontName(c.tokens.font.family)) + " · 본문 " + c.tokens.font.scale.body + "px · 버튼 높이 " + c.tokens.control.height + "px</p>" + layoutChips(c.layout) +
         thumbs(ds, ctx, c.id + ". " + c.name) + (SRV ? (canEdit() ? '<div class="pick">' + actBtn("ds-select", "컨셉 " + esc(c.id) + " 으로 정하기", d.systemCode + "|" + c.id, "btn-primary") + "</div>" : "") : '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div>") + "</article>";
     }).join("");
-    return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 미리보기는 모두 " + VW + "×" + VH + " 실제 규격을 축소한 것이고, 누르면 크게 볼 수 있습니다. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p></div>" +
+    return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 미리보기는 모두 " + VW + "×" + VH + " 실제 규격을 축소한 것이고, 누르면 크게 볼 수 있습니다. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p>" + (SRV && canEdit() ? '<div class="row-actions">' + genBtn("dsc:" + d.systemCode, "AI로 컨셉 다시 제안") + "</div>" : "") + "</div>" +
       '<div class="concepts">' + cols + "</div>";
   }
 
@@ -1036,7 +1044,7 @@
     var t = d.tokens, L = d.layout, c = t.color, code = d.systemCode;
     var chosen = d.proposals.find(function (x) { return x.id === d.selectedId; });
     var others = d.proposals.map(function (x) {
-      return '<div class="box pmini' + (x.id === d.selectedId ? " on" : "") + '"><span class="cid">' + esc(x.id) + "</span><b>" + esc(x.name) + "</b>" + swatches(x.tokens) + (x.id === d.selectedId ? '<span class="pill DESIGNED">선택</span>' : "") + "</div>";
+      return '<div class="box pmini' + (x.id === d.selectedId ? " on" : "") + '"><span class="cid">' + esc(x.id) + "</span><b>" + esc(x.name) + "</b>" + swatches(x.tokens) + (x.id === d.selectedId ? '<span class="pill DESIGNED">선택</span>' : SRV && canEdit() ? actBtn("ds-select", "이 컨셉으로 교체", d.systemCode + "|" + x.id) : "") + "</div>";
     }).join("");
     var colors = [["primary", "주 색"], ["onPrimary", "주 색 위 글자"], ["accent", "강조"], ["nav", "메뉴 배경"], ["onNav", "메뉴 글자"], ["bg", "배경"], ["surface", "면"], ["surfaceAlt", "보조 면"], ["border", "선"], ["text", "글자"], ["textMuted", "보조 글자"], ["success", "성공"], ["warning", "주의"], ["danger", "오류"], ["info", "안내"]].map(function (k) {
       return '<div class="color"><i style="background:' + c[k[0]] + '"></i><b>' + k[1] + '</b><span class="mono">' + esc(c[k[0]]) + "</span></div>";
@@ -1492,6 +1500,16 @@
         out.edges.forEach(function (e) { if (!nid[e.from] || !nid[e.to]) errs.push("없는 노드를 잇는 연결 " + e.from + "→" + e.to); });
         if (!out.id) errs.push("flow id가 없습니다");
       }
+    } else if (kind === "dsc") {
+      var cl = Array.isArray(out.concepts) ? out.concepts : Array.isArray(out.proposals) ? out.proposals : null;
+      if (!cl || !cl.length) errs.push("concepts 목록이 없습니다");
+      else cl.forEach(function (c, i) {
+        if (!c || typeof c !== "object") { errs.push((i + 1) + "번째 컨셉이 객체가 아닙니다"); return; }
+        if (!c.name) warns.push((i + 1) + "번째 컨셉에 이름이 없어 기본 이름을 씁니다");
+        if (!c.tokens || !c.tokens.color) warns.push((i + 1) + "번째 컨셉에 색상이 없어 기본 색을 씁니다");
+        if (!c.layout) warns.push((i + 1) + "번째 컨셉에 레이아웃이 없어 기본 규칙을 씁니다");
+      });
+      if (cl && cl.length > 3) warns.push("컨셉은 앞의 3개만 반영합니다");
     } else if (kind === "ds") {
       var d0 = selectedDesign(p, target);
       var clean = sanitizeDsPatch(normDsPatch(out, d0), d0, scope);
@@ -1640,6 +1658,33 @@
     return '<div class="spec-sum"><div><b>기능 명세</b> <span class="hint">' + (specs.length ? "요구사항 " + specs.length + "건 중 " + filled + "건 프롬프트에 포함" + (edited ? " · 편집 " + edited + "건" : "") : "연결된 요구사항 없음") + (onRight ? " · 오른쪽에서 편집" : "") + "</span></div>" +
       (!onRight && !layer.busy ? '<button class="btn-sm" data-specedit>명세 보기·편집</button>' : "") + "</div>";
   }
+  /** 디자인 패치가 현재 디자인에서 실제로 바꾸는 값의 수 (현재와 같은 값·범위 밖·형식 오류는 세지 않는다) */
+  function dsEffect(out, d, scope) {
+    var sp = sanitizeDsPatch(normDsPatch(out, d), d, scope), patch = sp.patch, n = 0;
+    var get = function (o, path) { return path.reduce(function (a, k) { return a == null ? undefined : a[k]; }, o); };
+    ["tokens", "layout"].forEach(function (top) {
+      if (!patch[top]) return;
+      Object.keys(flat(patch[top])).forEach(function (pth) { if (JSON.stringify(get(d[top], pth.split("."))) !== JSON.stringify(get(patch[top], pth.split(".")))) n++; });
+    });
+    Object.keys(patch.componentStyles || {}).forEach(function (cid) {
+      Object.keys(patch.componentStyles[cid] || {}).forEach(function (vn) { if (String((d.componentStyles && d.componentStyles[cid] || {})[vn]) !== String(patch.componentStyles[cid][vn])) n++; });
+    });
+    ((patch.components && patch.components.add) || []).forEach(function (c) { if (!d.components.some(function (x) { return x.id === c.id; })) n++; });
+    return { effective: n, dropped: sp.dropped };
+  }
+  /** 섹션·전역 디자인 조정 호출 — 반영될 것이 없으면(값이 같음·키 이름 틀림·범위 밖·형식 오류) 이유를 알려 주고 한 번 더 받는다 */
+  function dsAsk(input, p, g, scope, ctl, onText) {
+    var d = selectedDesign(p, g.target);
+    return AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (out) {
+      var chk = dsEffect(out, d, scope);
+      if (chk.effective > 0 || ctl.signal.aborted || (out && Array.isArray(out.comments) && out.comments.length)) return { out: out, retried: false };
+      var sc = scopeInfo(scope || "global");
+      var why = chk.dropped.length ? chk.dropped.slice(0, 8) : ["넣은 값이 모두 현재 값과 같아 바뀌는 것이 없습니다"];
+      var msgs = typeof input === "string" ? [{ role: "user", content: input }] : input.slice();
+      msgs = msgs.concat([{ role: "assistant", content: JSON.stringify(out) }, { role: "user", content: "방금 답으로는 화면에 바뀌는 것이 없습니다. 원인:\n- " + why.join("\n- ") + "\n\n조정 범위는 ‘" + sc.label + "’(" + sc.allowed.join(", ") + ")입니다. 프롬프트의 ‘값 형식’에 적힌 키 이름과 형식(색 #RRGGBB, 크기 숫자, 열거값)만 쓰고, 요청이 눈에 보이게 현재 값과 다른 값을 넣어 같은 JSON 형식으로 다시 답하세요. 이 범위에서 정말 할 수 없는 요청이면 summary에 이유를 쓰세요." }]);
+      return AI.sample.json(msgs, { signal: ctl.signal, cache: false, onText: onText }).then(function (out2) { return { out: out2, retried: true, reason: why }; });
+    });
+  }
   function genRun(instruction) {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
     var base = layer.sel != null && !layer.fresh ? doc.versions[layer.sel] : null;
@@ -1659,9 +1704,12 @@
     var ctl = layer.ctl;
     saveSpecs(g).then(function () {
       if (ctl.signal.aborted) { var ab = new Error("cancelled"); ab.code = "cancelled"; throw ab; }
-      return AI.sample.json(input, { signal: ctl.signal, cache: false, onText: function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; } })
+      var onText = function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; };
+      return g.kind === "ds" && selectedDesign(p, g.target) ? dsAsk(input, p, g, scope, ctl, onText) : AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (o) { return { out: o }; });
     }, function (e) { if (!e.code) e.code = "server"; throw e; })
-      .then(function (out) {
+      .then(function (res) {
+        var out = res.out;
+        if (res.retried) toast("처음 답은 반영될 것이 없어 이유를 알려 주고 다시 받았습니다");
         if (g.kind === "ds") out = normDsPatch(out, selectedDesign(p, g.target));
         var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
         var v = { n: n, scope: scope, scopeLabel: scopeInfo(scope).label, commentIds: cids, instruction: instruction || (cids.length ? "댓글 " + cids.length + "개 반영" : "(1차 생성)"), from: base ? base.n : null, root: g.requiresInstruction ? rootText : null, output: out, at: new Date().toISOString() };
@@ -1803,6 +1851,17 @@
       return '<p class="hint">추가 ' + Object.keys(added).length + " · 삭제 " + removed.length + (removed.length ? " (" + removed.map(esc).join(", ") + ")" : "") + "</p>" + iaTree(nodes, statusByScreen(p), { added: added });
     }
     if (g.kind === "flow") return '<div class="flow-box">' + Flow.svg(out, { color: sysColor, suffix: "-gen" }) + "</div>";
+    if (g.kind === "dsc") {
+      var cl = (Array.isArray(out.concepts) ? out.concepts : Array.isArray(out.proposals) ? out.proposals : []).slice(0, 3);
+      return '<p class="hint">AI가 제안한 컨셉 ' + cl.length + '개입니다. 적용하면 디자인 시스템 페이지의 컨셉 카드가 되고, 그 자리에서 로그인·목록·상세 화면 미리보기로 비교해 고를 수 있습니다. 빠진 값은 기준 컨셉으로 채우고, 글자 대비가 4.5:1에 못 미치면 자동으로 보정합니다.</p><div class="concepts">' + cl.map(function (c, i) {
+        c = c || {};
+        var col = (c.tokens && c.tokens.color) || {}, f = (c.tokens && c.tokens.font) || {}, L = {};
+        Object.keys(c.layout || {}).forEach(function (k) { if (LAYOUT_ALLOWED[k] && LAYOUT_ALLOWED[k].indexOf(c.layout[k]) >= 0) L[k] = c.layout[k]; });
+        var sw = [["주 색", col.primary], ["강조", col.accent], ["메뉴", col.nav], ["배경", col.bg], ["글자", col.text]].filter(function (x) { return /^#[0-9A-Fa-f]{6}$/.test(String(x[1])); }).map(function (x) { return '<span class="sw" title="' + x[0] + " " + esc(x[1]) + '"><i style="background:' + esc(x[1]) + '"></i>' + x[0] + "</span>"; }).join("");
+        return '<article class="box concept"><div class="concept-h"><span class="cid">' + "ABC".charAt(i) + "</span><div><b>" + esc(c.name || "(이름 없음)") + "</b><p>" + esc(c.summary || "") + '</p></div></div><p class="fit"><b>어울리는 경우</b> ' + esc(c.fit || "") + '</p><div class="swatches">' + (sw || '<span class="hint">색상 없음</span>') + "</div>" +
+          '<p class="hint">글꼴 ' + esc(f.family ? fontName(f.family) : "기본") + "</p>" + (c.layout ? layoutChips(Object.assign({ nav: "top", logo: "left", search: "header", list: "table", pagination: "numbered", button: "square", density: "comfortable", footer: "full" }, L)) : "") + "</article>";
+      }).join("") + "</div>";
+    }
     if (g.kind === "sb") {
       var node = p.model.ia.nodes.find(function (n) { return n.id === g.target; }) || {};
       var sb = { screenId: g.target, systemCode: node.systemCode, title: node.name, template: out.template, components: out.components || [] };
@@ -2409,7 +2468,8 @@
     "ds-propose": function (sys) { cmd({ op: "design.propose", systemCode: sys }).catch(function (e) { toast(e.message, "err"); }); },
     "ds-select": function (arg) {
       var a = arg.split("|");
-      confirmAct("컨셉 " + a[1] + " 선택", a[0] + " 디자인 시스템을 컨셉 " + a[1] + "(으)로 만듭니다. 이 시스템의 화면설계서와 프로토타입이 이 디자인으로 그려집니다.", "이 컨셉으로 정하기", function () { return cmd({ op: "design.select", systemCode: a[0], conceptId: a[1] }); });
+      var cur = designOf(P(), a[0]), swap = cur && cur.status === "SELECTED";
+      confirmAct("컨셉 " + a[1] + (swap ? " 로 교체" : " 선택"), swap ? a[0] + " 디자인 시스템을 컨셉 " + cur.selectedId + " 에서 " + a[1] + " 로 바꿉니다. 조정해 둔 컴포넌트 스타일은 초기화되고, 디자인 개정이 올라가 완료된 화면설계서가 ‘재검토 필요’가 됩니다. (되돌리려면 이전 컨셉으로 다시 교체)" : a[0] + " 디자인 시스템을 컨셉 " + a[1] + "(으)로 만듭니다. 이 시스템의 화면설계서와 프로토타입이 이 디자인으로 그려집니다.", swap ? "교체" : "이 컨셉으로 정하기", function () { return cmd({ op: "design.select", systemCode: a[0], conceptId: a[1] }); });
     },
     "ds-comp-add": function (sys) {
       openForm({
@@ -2436,6 +2496,20 @@
     "proj-rename": function () {
       var p = P();
       openForm({ title: "프로젝트 이름 바꾸기", submit: "바꾸기", fields: [{ name: "name", label: "이름", required: true, value: p.model.project.name }], onSubmit: function (v) { return cmd({ op: "project.update", name: v.name }); } });
+    },
+    "sample-del": function () {
+      var list = DATA.projects.filter(function (p) { return p.sample && p.role === "OWNER"; }).map(function (p) { return p.model.project.code; });
+      confirmAct("샘플 프로젝트 삭제", list.join(", ") + " 프로젝트와 각 프로젝트의 멤버·초대·AI 호출 기록이 모두 지워집니다. 서버 보관함에만 남고 화면에서는 사라집니다. 삭제할까요?", "샘플 " + list.length + "개 삭제", function () {
+        return list.reduce(function (pr, code) { return pr.then(function () { return api("DELETE", "/api/projects/" + enc(code), { confirm: code }); }); }, Promise.resolve()).then(function () { toast("샘플 프로젝트를 삭제했습니다"); return goHome(); });
+      });
+    },
+    "proj-delete-card": function (code) {
+      var pr = DATA.projects.find(function (p) { return p.model.project.code === code; }), name = pr ? pr.model.project.name : code;
+      openForm({
+        title: "프로젝트 삭제", submit: "삭제", danger: true, intro: esc(name) + " 프로젝트와 멤버·초대·AI 설정이 모두 지워집니다. 서버 보관함에만 남습니다." + (pr && pr.sample ? " (샘플 프로젝트라 코드 입력 없이 삭제할 수 있습니다.)" : " 확인하려면 프로젝트 코드 <b>" + esc(code) + "</b>를 입력하세요."),
+        fields: pr && pr.sample ? [] : [{ name: "confirm", label: "프로젝트 코드", required: true }],
+        onSubmit: function (v) { return api("DELETE", "/api/projects/" + enc(code), { confirm: pr && pr.sample ? code : v.confirm }).then(function () { toast("프로젝트를 삭제했습니다"); return goHome(); }); }
+      });
     },
     "proj-delete": function () {
       var code = P().model.project.code;
@@ -2504,10 +2578,11 @@
     nvidia: { label: "NVIDIA", provider: "openai-compatible", baseUrl: "https://integrate.api.nvidia.com/v1", key: "nvapi-… (build.nvidia.com에서 발급)", hint: "NVIDIA API 카탈로그(build.nvidia.com)의 OpenAI 호환 주소입니다. ‘모델 불러오기’로 쓸 모델을 고르세요." },
     lmstudio: { label: "LM Studio", provider: "openai-compatible", baseUrl: "http://localhost:1234/v1", key: "보통 비움", hint: "LM Studio → Developer(개발자) 탭 → Start Server. 이 서비스가 인터넷(Vercel)에 있으면 localhost 로는 닿지 않습니다. 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널 등)를 넣으세요." },
     ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
-    anthropic: { label: "Anthropic", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API. 주소는 비워 두면 기본 주소를 씁니다." },
+    gemini: { label: "Gemini", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "AIza… (필수)", hint: "Google AI Studio(aistudio.google.com/apikey)에서 API 키를 발급받아 넣으세요. 무료 사용량이 있는 키도 발급됩니다. 구글 계정 로그인(OAuth)이나 Gemini 구독으로는 API를 호출할 수 없어 키 방식만 지원합니다." },
+    anthropic: { label: "Anthropic", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API. 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude 구독(Pro·Max) 로그인은 Anthropic 정책상 다른 서비스에서 쓸 수 없어 지원하지 않습니다." },
     custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
   };
-  var PRESET_ORDER = ["nvidia", "lmstudio", "ollama", "anthropic", "custom"];
+  var PRESET_ORDER = ["nvidia", "gemini", "lmstudio", "ollama", "anthropic", "custom"];
   function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
   function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
   function afterAiChange(scope) {

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildPubInfo } from "../scripts/build-examples.js";
-import { applyDesignPatch, applyGenerated, applyIa, screensNeedingReview } from "../src/ai/apply.js";
+import { applyDesignPatch, applyGenerated, applyIa, contrast, screensNeedingReview } from "../src/ai/apply.js";
+import { selectDesign } from "../src/design/ops.js";
 import { buildGenPrompts, type GenPrompt } from "../src/ai/generate.js";
 import { fillSpecPrompt, SPEC_SLOT } from "../src/ai/spec.js";
 import { loadChunks } from "../src/knowledge/store.js";
@@ -59,6 +60,53 @@ describe("AI 생성 프롬프트", () => {
     const g3 = buildGenPrompts(m, [])["flow:SFR-006"]!;
     expect(g3.specs![0]!.from).toEqual([]);
     expect(g3.specs![0]!.draft).toBe(m.requirements.find((r) => r.id === "SFR-006")!.description);
+  });
+  it("디자인 컨셉 AI 제안: 일부만 와도 기준으로 채우고, 잘못된 값·대비 부족은 보정, 선택 후에는 후보로 추가", async () => {
+    const g = gens["dsc:CVL"]!;
+    expect(g.prompt).toContain("tokens.color: primary");
+    expect(g.prompt).toContain("색만 바꾼 변형 금지");
+    expect(gens["dsc:EXT"]).toBeUndefined(); // 화면 없는 시스템
+    const m = await fresh();
+    m.design.systems = m.design.systems.filter((d) => d.systemCode !== "CVL");
+    m.storyboard.screens = m.storyboard.screens.filter((x) => x.systemCode !== "CVL"); // 컨셉을 고르기 전에는 화면설계서가 없다
+    const out = {
+      concepts: [
+        { name: "차분한 남색", summary: "s", fit: "f", tokens: { color: { primary: "#12355b", onPrimary: "#223344", text: "#ccc", bg: "fff", bad: "#zzz" }, font: { family: "Comic Sans", scale: { h1: "30px", body: 3 } }, shadow: "huge", radius: { md: "10px" } }, layout: { nav: "side", list: "grid", button: "pill" } },
+        { name: "두 번째", tokens: { color: { primary: "#B3261E" } } },
+        { tokens: "깨짐" },
+        "문자열",
+      ],
+    };
+    const r = applyGenerated(m, "dsc", "CVL", out);
+    const d = m.design.systems.find((x) => x.systemCode === "CVL")!;
+    expect(d.status).toBe("PROPOSED");
+    expect(d.proposals.map((p) => p.id)).toEqual(["A", "B", "C"]);
+    const a = d.proposals[0]!;
+    expect(a).toMatchObject({ name: "차분한 남색", layout: { nav: "side", pagination: expect.any(String), button: "pill" } });
+    expect(a.layout.list).not.toBe("grid");
+    expect(a.tokens.color.primary).toBe("#12355B");
+    expect(a.tokens.font.scale.h1).toBe(30);
+    expect(a.tokens.font.scale.body).toBeGreaterThan(8);
+    expect(a.tokens.font.family).not.toContain("Comic");
+    expect(a.tokens.shadow).toMatch(/none|soft|strong/);
+    expect(a.tokens.radius.md).toBe(10);
+    expect(contrast(a.tokens.color.text, a.tokens.color.bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(a.tokens.color.onPrimary, a.tokens.color.primary)).toBeGreaterThanOrEqual(4.5);
+    expect(r.changes.some((c) => /보정/.test(c))).toBe(true);
+    // 선택 뒤에는 현재 디자인을 유지하고 D,E… 후보로 추가
+    selectDesign(m, "CVL", "A");
+    const before = structuredClone(m.design.systems.find((x) => x.systemCode === "CVL")!.tokens);
+    applyGenerated(m, "dsc", "CVL", { concepts: [{ name: "새 후보", tokens: { color: { primary: "#0B6E4F" } } }] });
+    const d2 = m.design.systems.find((x) => x.systemCode === "CVL")!;
+    expect(d2.status).toBe("SELECTED");
+    expect(d2.proposals.map((p) => p.id)).toEqual(["A", "B", "C", "D"]);
+    expect(d2.tokens).toEqual(before);
+    // 다른 컨셉으로 바꾸면 개정이 오르고 화면설계서는 재검토 대상
+    const rev = d2.revision;
+    selectDesign(m, "CVL", "D");
+    expect(m.design.systems.find((x) => x.systemCode === "CVL")!.revision).toBe(rev + 1);
+    expect(() => applyGenerated(m, "dsc", "CVL", { concepts: [] })).toThrow(/concepts/);
+    expect(() => applyGenerated(m, "dsc", "CVL", { concepts: ["x"] })).toThrow(/쓸 수 있는 컨셉/);
   });
   it("정보구조도 생성 프롬프트에 화면 ID 규칙과 이 시스템 Task를 담는다", () => {
     const p = gens["ia:ADM"]!.prompt;
