@@ -1138,3 +1138,18 @@ html.fe-open, html.fe-open body { overflow: hidden; }
 .step-wrap .step { padding-right: 44px; }
 .step-ed { position: absolute; right: 26px; top: 6px; width: 26px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--ink-3); cursor: pointer; font-size: 14px; }
 .step-wrap:hover .step-ed, .step-ed:focus-visible { border-color: var(--line); background: var(--surface); color: var(--accent); }
+/* 설명 번호: 화면 배율을 따라 크기가 바뀐다 (--mk는 캔버스 배치 때 정해짐) */
+.sb-canvas .sbc-mk { width: var(--mk, 24px); height: var(--mk, 24px); font-size: calc(var(--mk, 24px) * .52); line-height: calc(var(--mk, 24px) - 4px); border-width: clamp(1px, calc(var(--mk, 24px) * .08), 2px); }
+/* Description 패널 (프로토타입의 화면 설명 패널처럼: 번호 · 항목 · 설명, 옵션·유효성은 설명 아래) */
+table.desc.dpanel { table-layout: fixed; width: 100%; }
+table.desc.dpanel th:nth-child(1), table.desc.dpanel td:nth-child(1) { width: 44px; text-align: center; }
+table.desc.dpanel th:nth-child(2), table.desc.dpanel td:nth-child(2) { width: 32%; }
+table.desc.dpanel td { vertical-align: top; }
+table.desc.dpanel .d-item { display: table-cell; }
+table.desc.dpanel .d-item > b { display: block; font-size: 13px; }
+table.desc.dpanel .d-item > .hint { display: block; font-size: 11.5px; word-break: break-all; }
+table.desc.dpanel .d-text { font-size: 12.5px; line-height: 1.55; }
+table.desc.dpanel .d-rules { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); font-size: 12px; }
+table.desc.dpanel .d-rules p { margin: 0 0 2px; }
+table.desc.dpanel .d-rules .msg { color: var(--ink-2); }
+table.desc.dpanel .row-tools { margin-top: 6px; }

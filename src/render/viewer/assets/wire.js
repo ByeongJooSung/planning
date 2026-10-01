@@ -99,7 +99,9 @@
     var cols = p.columns || [], rows = p.rows || [], bc = p.badgeColumn;
     var head = '<div class="wf-thead"><span>총 <b>' + esc(p.total != null ? p.total : rows.length) + "</b>건</span>" +
       (ds.layout.pagination === "numbered-size" ? '<span class="wf-input sel sm"><em>30개씩</em>▾</span>' : "") + "</div>";
-    if (ds.layout.list === "card") {
+    // 항목마다 표/카드를 고를 수 있다 (props.view: "table" | "card"). 없으면 디자인 시스템 목록 형태
+    var view = p.view === "table" || p.view === "list" ? "table" : p.view === "card" ? "card" : ds.layout.list;
+    if (view === "card") {
       return head + '<div class="wf-cards">' + rows.map(function (r) {
         return '<div class="wf-card"' + linkAttr(ctx, link) + ">" + (bc != null ? badge(r[bc]) : "") + "<b>" + esc(r[1] != null ? r[1] : r[0]) + '</b><span class="wf-meta">' +
           r.filter(function (_, i) { return i !== 1 && i !== bc; }).map(esc).join(" · ") + "</span></div>";
@@ -270,7 +272,8 @@
 
   /** 화면 한 장: 틀(GNB/사이드) + 제목 + 블록들 */
   function page(ds, ctx, blocksHtml) {
-    var title = ctx.title ? '<div class="wf-ptitle"><h1>' + esc(ctx.title) + "</h1>" + (ds.layout.nav === "side" ? "" : C.breadcrumb(ds, { items: ctx.crumbs || [] })) + "</div>" : "";
+    var acts = ctx.titleActions ? '<div class="wf-tacts">' + ctx.titleActions + "</div>" : "";
+    var title = ctx.title ? '<div class="wf-ptitle"><h1>' + esc(ctx.title) + "</h1>" + (ds.layout.nav === "side" ? "" : C.breadcrumb(ds, { items: ctx.crumbs || [] })) + acts + "</div>" : "";
     var body = title + '<div class="wf-blocks">' + blocksHtml + "</div>";
     var frame;
     if (ctx.bare) frame = '<div class="wf-bare">' + blocksHtml + "</div>";
@@ -279,7 +282,26 @@
     return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
   }
 
+  /** 입력 항목: 이어서 나오면 실제 신청 화면처럼 왼쪽 항목명 · 오른쪽 입력칸 표(폼 테이블)로 묶는다 */
+  var FIELD = { "text-input": 1, textarea: 1, select: 1, "radio-group": 1, "checkbox-group": 1, "date-range": 1, "file-upload": 1 };
+  function isField(c) { return c.ui && FIELD[c.ui.component] && !(c.ui.props && c.ui.props.stacked); }
   function blocks(ds, comps, ctx) {
+    var out = [], run = [];
+    var flush = function () {
+      if (!run.length) return;
+      if (run.length === 1 && ds.layout.form === "stacked") { out.push(blockList(ds, run, ctx)); run = []; return; }
+      out.push('<div class="wf-form">' + run.map(function (c) {
+        var p = c.ui.props || {}, req = p.required || (c.validation && c.validation.required);
+        var no = ctx.markers ? ' data-no="' + c.no + '"' : "";
+        return '<div class="wf-fr"' + no + ">" + (ctx.markers === true ? '<span class="wf-mk">' + c.no + "</span>" : "") + '<div class="wf-fth">' + esc(p.label || c.label) + (req ? ' <i class="wf-req">*</i>' : "") + '</div><div class="wf-ftd">' + component(ds, c.ui.component, p, ctx, c.ui.link, c) + "</div></div>";
+      }).join("") + "</div>");
+      run = [];
+    };
+    comps.forEach(function (c) { if (isField(c)) run.push(c); else { flush(); out.push(blockList(ds, [c], ctx)); } });
+    flush();
+    return out.join("");
+  }
+  function blockList(ds, comps, ctx) {
     return comps.map(function (c) {
       // markers: true → 번호 배지, "pos" → 배지 없이 위치만 표시(data-no, 화면설계서 캔버스가 배지를 따로 올림)
       var no = ctx.markers ? ' data-no="' + c.no + '"' : "";
@@ -289,7 +311,15 @@
   }
 
   /** 스토리보드 화면 렌더링. ctx: {systemName, profile, menus, crumbs, markers, parent (팝업일 때 부모 화면)} */
+  /** 제목 줄 오른쪽에 둘 버튼 묶음 (props.placement: "title") — 실제 화면처럼 [삭제][저장]을 제목 옆에 */
+  function isTitleAct(c) { return c.ui && c.ui.component === "button-group" && c.ui.props && c.ui.props.placement === "title"; }
   function screen(ds, sb, ctx) {
+    var tops = ctx.popup ? [] : sb.components.filter(isTitleAct);
+    if (tops.length) {
+      var rest = sb.components.filter(function (c) { return !isTitleAct(c); });
+      var ta = blocks(ds, tops, ctx).replace(/class="wf-blk"/g, 'class="wf-blk inline"');
+      return page(ds, Object.assign({}, ctx, { title: sb.title, titleActions: ta }), blocks(ds, rest, ctx));
+    }
     var c = Object.assign({}, ctx, { title: sb.title });
     if (ctx.popup) {
       var inner = '<div class="wf-blocks">' + blocks(ds, sb.components, ctx) + "</div>";

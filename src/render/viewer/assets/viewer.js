@@ -624,10 +624,10 @@
     var left = wire ? sbCanvas(p, sb) :
       '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
     var n = sb.components.length;
-    var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + (sb.components.map(function (c, i) {
+    var desc = '<table class="desc dpanel"><thead><tr><th>No</th><th>항목</th><th>Description</th></tr></thead><tbody>' + (sb.components.map(function (c, i) {
       var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
-      return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<br><span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + "</td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
-    }).join("") || '<tr><td colspan="4" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
+      return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
+    }).join("") || '<tr><td colspan="3" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
     var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
     return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
   }
@@ -831,12 +831,13 @@
   // ── 화면설계서 캔버스: 화면 원본(1920) 위에 설명 번호를 올리고, 번호는 끌어서 옮긴다 ──
   var CV_PAD = 44, MK = 24;
   state.sbZoom = state.sbZoom || {};
-  function sbCanvas(p, sb) {
-    var sid = sb.screenId, wire = screenWire(p, sb, "pos"), z = state.sbZoom[sid] || 1;
-    var movable = SRV && canEdit();
+  function sbCanvas(p, sb, opts) {
+    opts = opts || {};
+    var sid = opts.key || sb.screenId, wire = screenWire(p, sb, "pos"), z = state.sbZoom[sid] || 1;
+    var movable = SRV && canEdit() && !opts.preview;
     var moved = sb.components.filter(function (c) { return c.marker; }).length;
     return '<div class="wire-box sb-canvas" data-sbc="' + esc(sid) + '">' +
-      '<div class="sbc-tools"><span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 오른쪽 설명이 표시됩니다.") + '</span><span class="sp"></span>' +
+      '<div class="sbc-tools"><span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 해당 설명이 강조됩니다.") + '</span><span class="sp"></span>' +
       '<button class="btn-sm" data-sbzoom="-1" aria-label="축소">−</button><span class="sbc-z">' + Math.round(z * 100) + '%</span><button class="btn-sm" data-sbzoom="1" aria-label="확대">+</button><button class="btn-sm" data-sbzoom="0">화면 맞춤</button>' +
       (movable && moved ? '<button class="btn-sm" data-sbreset="' + esc(sid) + '">번호 위치 초기화 (' + moved + ")</button>" : "") + "</div>" +
       '<div class="sbc-view"><div class="sbc-board"><div class="sbc-frame"><div class="sbc-inner" style="width:' + VW + 'px">' + wire + "</div></div>" +
@@ -844,47 +845,67 @@
       sb.components.map(function (c) {
         return '<button class="sbc-mk' + (c.marker ? " moved" : "") + (movable ? " drag" : "") + (state.sbHl === sid + "|" + c.no ? " hl" : "") + '" data-mk="' + c.no + '"' + (c.marker ? ' data-mx="' + c.marker.x + '" data-my="' + c.marker.y + '"' : "") + ' title="' + esc(c.no + ". " + c.label) + '" aria-label="' + esc(c.no + "번 " + c.label) + '">' + c.no + "</button>";
       }).join("") + "</div></div>" +
-      '<div class="stage-cap"><span>' + VW + " × 가변 (첫 화면 " + VH + ')</span><span class="pct"></span></div></div>';
+      '<div class="stage-cap"><span>' + VW + " × 가변 (첫 화면 " + VH + ') · 본문 영역 기준으로 표시</span><span class="pct"></span></div></div>';
   }
   /** 캔버스 배치: 맞춤 배율 × 확대, 번호 기본 위치 = 컴포넌트 왼쪽 위 */
   function layoutCanvases(root) {
     (root || document).querySelectorAll(".sb-canvas").forEach(function (cv) {
       var sid = cv.getAttribute("data-sbc"), view = cv.querySelector(".sbc-view"), board = cv.querySelector(".sbc-board"), frame = cv.querySelector(".sbc-frame"), inner = cv.querySelector(".sbc-inner");
       if (!view.clientWidth) return;
-      var fit = Math.max(0.1, (view.clientWidth - CV_PAD * 2) / VW), z = fit * (state.sbZoom[sid] || 1);
-      inner.style.transform = "scale(" + z + ")";
+      // 내용 영역만 잘라 보여 준다: 1920 프레임 가운데 놓인 본문(약 1200px)에 맞추면 같은 폭에서 화면이 1.5배쯤 크게 보인다.
+      // 좌표(번호 위치)는 1920 프레임 기준 그대로라 저장된 번호 위치가 바뀌지 않는다
+      inner.style.transform = "none";
+      var i0 = inner.getBoundingClientRect(), L = 0, R = VW;
+      var cons = inner.querySelectorAll(".wf-container");
+      if (cons.length && !inner.querySelector(".wf-sshell")) {
+        L = VW; R = 0;
+        Array.prototype.forEach.call(cons, function (e) { var r = e.getBoundingClientRect(); if (r.width) { L = Math.min(L, r.left - i0.left); R = Math.max(R, r.right - i0.left); } });
+        inner.querySelectorAll("[data-no]").forEach(function (e) { var r = e.getBoundingClientRect(); if (r.width) { L = Math.min(L, r.left - i0.left); R = Math.max(R, r.right - i0.left); } });
+        L = Math.max(0, Math.floor(L - 48)); R = Math.min(VW, Math.ceil(R + 48));
+        if (R - L < 600) { L = 0; R = VW; }
+      }
+      var CW = R - L;
+      var fit = Math.max(0.1, (view.clientWidth - CV_PAD * 2) / CW), z = fit * (state.sbZoom[sid] || 1);
+      inner.style.transform = "scale(" + z + ") translateX(" + -L + "px)";
       var h = inner.offsetHeight;
-      frame.style.width = Math.round(VW * z) + "px";
+      frame.style.width = Math.round(CW * z) + "px";
       frame.style.height = Math.round(h * z) + "px";
-      board.style.width = Math.round(VW * z + CV_PAD * 2) + "px";
+      board.style.width = Math.round(CW * z + CV_PAD * 2) + "px";
       board.style.height = Math.round(h * z + CV_PAD * 2) + "px";
       cv.dataset.z = z;
+      cv.dataset.cl = L;
+      // 설명 번호 크기도 화면 배율을 따른다 (실제 화면에서 32px 원 기준, 너무 작거나 크지 않게)
+      var ms = Math.round(Math.max(12, Math.min(40, 32 * z)));
+      cv.dataset.ms = ms;
+      cv.style.setProperty("--mk", ms + "px");
       var ir = inner.getBoundingClientRect(), lines = [];
       cv.querySelectorAll(".sbc-mk").forEach(function (mk) {
         var no = mk.getAttribute("data-mk"), el = inner.querySelector('[data-no="' + no + '"]'), dx = 0, dy = 0;
         if (el) { var r = el.getBoundingClientRect(); if ((!r.width || !r.height) && el.firstElementChild) r = el.firstElementChild.getBoundingClientRect(); dx = (r.left - ir.left) / z; dy = (r.top - ir.top) / z; }
         mk.dataset.dx = dx; mk.dataset.dy = dy;
         var x = mk.hasAttribute("data-mx") ? Number(mk.getAttribute("data-mx")) : dx, y = mk.hasAttribute("data-my") ? Number(mk.getAttribute("data-my")) : dy;
-        placeMk(mk, x, y, z);
+        placeMk(mk, x, y, z, L, ms);
         if (el && mk.hasAttribute("data-mx") && Math.hypot(x - dx, y - dy) * z > 24) lines.push([x, y, dx, dy]);
       });
-      drawLines(cv, lines, z);
+      drawLines(cv, lines, z, L);
       var z0 = cv.querySelector(".sbc-z"); if (z0) z0.textContent = Math.round((state.sbZoom[sid] || 1) * 100) + "%";
       var cap = cv.querySelector(".stage-cap .pct"); if (cap) cap.textContent = "실제 크기의 " + Math.round(z * 1000) / 10 + "%";
     });
   }
-  function placeMk(mk, x, y, z) { mk.style.left = Math.round(CV_PAD + x * z - MK / 2) + "px"; mk.style.top = Math.round(CV_PAD + y * z - MK / 2) + "px"; }
-  function drawLines(cv, lines, z) {
+  function placeMk(mk, x, y, z, L, ms) { L = L || 0; ms = ms || MK; mk.style.left = Math.round(CV_PAD + (x - L) * z - ms / 2) + "px"; mk.style.top = Math.round(CV_PAD + y * z - ms / 2) + "px"; }
+  function drawLines(cv, lines, z, L) {
+    L = L || 0;
     var svg = cv.querySelector(".sbc-lines"), board = cv.querySelector(".sbc-board");
     svg.setAttribute("width", board.offsetWidth); svg.setAttribute("height", board.offsetHeight);
-    svg.innerHTML = lines.map(function (l) { return '<line x1="' + (CV_PAD + l[0] * z) + '" y1="' + (CV_PAD + l[1] * z) + '" x2="' + (CV_PAD + l[2] * z) + '" y2="' + (CV_PAD + l[3] * z) + '"/><circle cx="' + (CV_PAD + l[2] * z) + '" cy="' + (CV_PAD + l[3] * z) + '" r="3"/>'; }).join("");
+    var X = function (v) { return CV_PAD + (v - L) * z; };
+    svg.innerHTML = lines.map(function (l) { return '<line x1="' + X(l[0]) + '" y1="' + (CV_PAD + l[1] * z) + '" x2="' + X(l[2]) + '" y2="' + (CV_PAD + l[3] * z) + '"/><circle cx="' + X(l[2]) + '" cy="' + (CV_PAD + l[3] * z) + '" r="3"/>'; }).join("");
   }
   var mkDrag = null;
   document.addEventListener("pointerdown", function (ev) {
     var mk = ev.target.closest && ev.target.closest(".sbc-mk.drag");
     if (!mk || ev.button > 0) return;
     var cv = mk.closest(".sb-canvas"), z = Number(cv.dataset.z || 1);
-    mkDrag = { mk: mk, cv: cv, z: z, sx: ev.clientX, sy: ev.clientY, l: parseFloat(mk.style.left), t: parseFloat(mk.style.top), moved: false };
+    mkDrag = { mk: mk, cv: cv, z: z, L: Number(cv.dataset.cl || 0), ms: Number(cv.dataset.ms || MK), sx: ev.clientX, sy: ev.clientY, l: parseFloat(mk.style.left), t: parseFloat(mk.style.top), moved: false };
     try { mk.setPointerCapture(ev.pointerId); } catch (e) { /* 무시 */ }
     ev.preventDefault();
   });
@@ -894,8 +915,8 @@
     if (!mkDrag.moved && Math.hypot(dx, dy) < 4) return;
     mkDrag.moved = true;
     var b = mkDrag.cv.querySelector(".sbc-board");
-    mkDrag.mk.style.left = Math.max(0, Math.min(b.offsetWidth - MK, mkDrag.l + dx)) + "px";
-    mkDrag.mk.style.top = Math.max(0, Math.min(b.offsetHeight - MK, mkDrag.t + dy)) + "px";
+    mkDrag.mk.style.left = Math.max(0, Math.min(b.offsetWidth - mkDrag.ms, mkDrag.l + dx)) + "px";
+    mkDrag.mk.style.top = Math.max(0, Math.min(b.offsetHeight - mkDrag.ms, mkDrag.t + dy)) + "px";
     mkDrag.mk.classList.add("dragging");
   });
   document.addEventListener("pointerup", function () {
@@ -905,7 +926,7 @@
     d.mk.classList.remove("dragging");
     var sid = d.cv.getAttribute("data-sbc"), no = Number(d.mk.getAttribute("data-mk"));
     if (!d.moved) { mkHighlight(sid, no); return; }
-    var x = (parseFloat(d.mk.style.left) + MK / 2 - CV_PAD) / d.z, y = (parseFloat(d.mk.style.top) + MK / 2 - CV_PAD) / d.z;
+    var x = (parseFloat(d.mk.style.left) + d.ms / 2 - CV_PAD) / d.z + d.L, y = (parseFloat(d.mk.style.top) + d.ms / 2 - CV_PAD) / d.z;
     d.mk.setAttribute("data-mx", Math.round(x)); d.mk.setAttribute("data-my", Math.round(y)); d.mk.classList.add("moved");
     layoutCanvases(d.cv.parentNode);
     cmd({ op: "sb.marker", screenId: sid, no: no, pos: { x: x, y: y } }).catch(function (e) { toast(e.message, "err"); render(); });
@@ -2474,11 +2495,11 @@
     if (g.kind === "sb") {
       var node = p.model.ia.nodes.find(function (n) { return n.id === g.target; }) || {};
       var sb = { screenId: g.target, systemCode: node.systemCode, title: node.name, template: out.template, components: out.components || [] };
-      var wire = screenWire(p, sb, true);
-      var desc = '<table class="desc"><thead><tr><th>No</th><th>항목</th><th>설명</th><th>옵션·유효성</th></tr></thead><tbody>' + sb.components.map(function (c) {
-        return '<tr><td><span class="no">' + esc(c.no) + "</span></td><td><b>" + esc(c.label) + '</b><br><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span></td><td>" + descCell(c) + "</td><td>" + ruleCell(c) + "</td></tr>";
+      var gk = "gen:" + g.target, hasWire = !!selectedDesign(p, node.systemCode);
+      var desc = '<table class="desc dpanel"><thead><tr><th>No</th><th>항목</th><th>Description</th></tr></thead><tbody>' + sb.components.map(function (c) {
+        return '<tr data-dno="' + esc(gk + "|" + c.no) + '"><td><span class="no">' + esc(c.no) + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
       }).join("") + "</tbody></table>";
-      return (wire ? stage(wire, { page: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>";
+      return (hasWire ? sbCanvas(p, sb, { key: gk, preview: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>";
     }
     if (g.kind === "ds") {
       var d0 = selectedDesign(p, g.target), nd = designWithPatch(d0, sanitizeDsPatch(normDsPatch(out, d0), d0, null).patch, d0.revision + 1), ch = designChanges(d0, nd), ctx = wireCtx(p, g.target, null);
@@ -3791,7 +3812,7 @@
         if (slist[si]) { layer.sid = slist[si].id; renderLayer(); }
         return;
       }
-      if (target.closest(".layer") && layer.kind !== "sbfull") return;
+      if (target.closest(".layer") && layer.kind !== "sbfull" && !target.closest(".sb-canvas")) return;
     }
     var amb = target.closest && target.closest("[data-authmode]");
     if (amb) { authState.err = ""; showAuth(amb.dataset.authmode); return; }

@@ -44,12 +44,13 @@ export const REFINE_INSTRUCTION =
 
 const PROPS_GUIDE = `컴포넌트별 props 형식 (ui.props):
 - search-panel: {"fields":[{"label":"기간","type":"date-range"},{"label":"상태","type":"select","options":["전체","심사중"]},{"label":"검색어","type":"text","placeholder":"제목"}]}
-- data-table: {"total":42,"columns":["번호","제목","상태"],"rows":[["1","…","심사중"]],"badgeColumn":2} + ui.link(행 클릭 이동 화면)
+- data-table: {"total":42,"columns":["번호","제목","상태"],"rows":[["1","…","심사중"]],"badgeColumn":2,"view":"table"} + ui.link(행 클릭 이동 화면). view: "table"(목록·리스트 표) | "card"(카드). 없으면 디자인 시스템 기본 목록 형태
 - pagination: {"total":42} · tabs: {"items":["전체 6","반려 1"],"active":0} · step-indicator: {"steps":["입력","확인","완료"],"current":0}
 - detail-table: {"rows":[["항목","값"]]} · file-list: {"files":["파일명.pdf (1.2MB)"]} · status-badge: {"label":"승인"}
 - text-input / textarea: {"label":"제목","placeholder":"…","required":true} · select / radio-group: {"label":"…","options":["…"],"value":"…","required":true}
 - checkbox-group: {"label":"…","options":["…"],"values":["…"]} · date-range: {"label":"기간"} · file-upload: {"label":"첨부파일","hint":"PDF, 20MB"}
-- button-group: {"buttons":[{"label":"임시저장","variant":"secondary","action":"toast","message":"임시저장했습니다."},{"label":"신청","variant":"primary","action":"submit","confirm":"신청할까요?","message":"접수했습니다.","link":"이동 화면 ID"}]}
+- 이어지는 입력 항목(text-input·textarea·select·radio-group·checkbox-group·date-range·file-upload)은 화면에서 왼쪽 항목명·오른쪽 입력칸 폼 표로 묶여 보인다. 따로 떼어 위에 라벨을 두려면 "stacked":true
+- button-group: {"buttons":[{"label":"임시저장","variant":"secondary","action":"toast","message":"임시저장했습니다."},{"label":"신청","variant":"primary","action":"submit","confirm":"신청할까요?","message":"접수했습니다.","link":"이동 화면 ID"}]}. 제목 줄 오른쪽에 둘 버튼(예: [삭제][저장])은 "placement":"title"
 - stat-cards: {"items":[["신규","12"]]} · notice-list: {"title":"공지사항","items":[["제목","09-24"]]} · hero-banner: {"title":"…","text":"…"} · quick-links: {"items":["…"]}
 - 그 밖의 컴포넌트(추가 컴포넌트 포함): {"items":[["일시","처리자","상태","내용"]]} 처럼 표시할 데이터만`;
 

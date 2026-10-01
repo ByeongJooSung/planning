@@ -224,3 +224,23 @@
 /* 컴포넌트 경계 (댓글 핀·번호 라벨이 가리키는 단위) */
 .wf-c { display: block; min-width: 0; }
 .wf-overlay > .wf-c, .wf-toast-wrap > .wf-c { display: contents; }
+
+/* 폼 테이블: 실제 신청·등록 화면처럼 왼쪽 항목명(회색) · 오른쪽 입력칸 */
+.wf-form { display: flex; flex-direction: column; border-top: 2px solid var(--w-text); background: var(--w-surface); }
+.wf-fr { position: relative; display: grid; grid-template-columns: var(--w-fth-w, 200px) minmax(0, 1fr); border-bottom: 1px solid var(--w-border); min-height: calc(var(--w-h) + 20px); }
+.wf-fth { background: var(--w-alt); padding: 12px 16px; font-weight: 600; font-size: var(--w-small); display: flex; align-items: center; gap: 2px; white-space: nowrap; border-right: 1px solid var(--w-border); }
+.wf-ftd { padding: 10px 16px; display: flex; align-items: center; min-width: 0; }
+.wf-ftd > .wf-c { flex: 1; min-width: 0; }
+.wf-form .wf-field { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.wf-form .wf-field > .wf-lbl { display: none; }
+.wf-form .wf-input { max-width: 640px; }
+.wf-form .wf-input.area { max-width: none; }
+.wf-form .wf-upload { max-width: none; }
+.wf-compact .wf-fth { padding: 8px 12px; }
+.wf-compact .wf-ftd { padding: 6px 12px; }
+.wf-form .wf-mk { left: -10px; top: 50%; margin-top: -11px; }
+/* 제목 줄 오른쪽 버튼 ([삭제][저장] 등) */
+.wf-ptitle .wf-tacts { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.wf-ptitle .wf-bc + .wf-tacts { margin-left: 16px; }
+.wf-blk.inline { display: inline-flex; }
+.wf-blk.inline .wf-btns { margin: 0; }
