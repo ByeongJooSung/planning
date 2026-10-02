@@ -2310,18 +2310,75 @@
       });
     });
   }
-  function genRun(instruction) {
+  /** 생성·고치기 요청 만들기 — AI 연결로 부를 때와 claude.ai에 붙여 넣을 때가 같은 내용을 쓴다 */
+  function genInput(instruction) {
     var p = P(), key = layer.key, g = p.gens[key], doc = overlayOf(key) || { project: p.model.project.code, kind: g.kind, target: g.target, versions: [], applied: null };
     var base = layer.sel != null && !layer.fresh ? doc.versions[layer.sel] : null;
     var scope = base ? base.scope || "global" : layer.scope || "global";
     var cids = base ? base.commentIds || [] : layer.commentIds || [];
-    if (g.requiresInstruction && !base && !instruction && !cids.length) { layer.err = "조정 요청을 적어 주세요."; renderLayer(); return; }
-    if (base && !instruction) { layer.err = "고칠 내용을 적어 주세요."; renderLayer(); return; }
+    if (g.requiresInstruction && !base && !instruction && !cids.length) return { err: "조정 요청을 적어 주세요." };
+    if (base && !instruction) return { err: "고칠 내용을 적어 주세요." };
     captureSpecs();
     var tpl = g.kind === "ds" ? fillDs(g.prompt, p, g.target, scope, cids) : fillSpecs(g.prompt, g);
     var rootText = base ? base.root || "" : instruction || (cids.length ? "위 댓글을 모두 반영해 주세요." : "");
     var first = tpl + (g.requiresInstruction ? rootText : (!base && instruction ? "\n## 추가 지시\n" + instruction + "\n" : ""));
     var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: DATA.refine + instruction }] : first;
+    // 한 번에 붙여 넣을 글 (claude.ai용): 이전 결과와 고칠 내용을 이어 붙인다
+    var text = base ? first + "\n\n## 이전 결과 (v" + base.n + ")\n```json\n" + JSON.stringify(base.output, null, 1) + "\n```\n\n## 고칠 내용\n" + DATA.refine + instruction : first;
+    return { p: p, key: key, g: g, doc: doc, base: base, scope: scope, cids: cids, rootText: rootText, input: input, text: text, instruction: instruction };
+  }
+  /** 결과를 새 버전으로 저장 */
+  function genSave(c, out, via) {
+    var g = c.g, doc = c.doc;
+    if (g.kind === "ds") out = normDsPatch(out, selectedDesign(c.p, g.target));
+    var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
+    var v = { n: n, scope: c.scope, scopeLabel: scopeInfo(c.scope).label, commentIds: c.cids, instruction: (c.instruction || (c.cids.length ? "댓글 " + c.cids.length + "개 반영" : "(1차 생성)")) + (via ? " · " + via : ""), from: c.base ? c.base.n : null, root: g.requiresInstruction ? c.rootText : null, output: out, at: new Date().toISOString() };
+    if (g.kind !== "ds") { delete v.scope; delete v.scopeLabel; delete v.commentIds; }
+    doc = Object.assign({}, doc, { versions: doc.versions.concat([v]).slice(-10), updatedAt: v.at });
+    layer.sel = doc.versions.length - 1;
+    layer.fresh = false;
+    layer.draft = "";
+    return saveOverlay(c.key, doc).then(function (saved) { layer.saved = saved; });
+  }
+  /** 붙여 넣은 글에서 JSON 꺼내기 (코드 블록·앞뒤 설명이 섞여도) */
+  function looseJson(text) {
+    var t = String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "");
+    var fence = /```(?:json)?\s*([\s\S]*?)```/gi, m, cands = [];
+    while ((m = fence.exec(t))) cands.push(m[1]);
+    cands.push(t);
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i], st = c.search(/[\[{]/);
+      if (st < 0) continue;
+      var open = c[st], close = open === "{" ? "}" : "]", depth = 0, inStr = false, esc2 = false;
+      for (var j = st; j < c.length; j++) {
+        var ch = c[j];
+        if (inStr) { if (esc2) esc2 = false; else if (ch === "\\") esc2 = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === open) depth++;
+        else if (ch === close && --depth === 0) { try { return JSON.parse(c.slice(st, j + 1).replace(/,\s*([}\]])/g, "$1")); } catch (e) { break; } }
+      }
+    }
+    throw new Error("붙여 넣은 글에서 JSON을 찾지 못했습니다. Claude 답의 JSON 전체(코드 블록 포함)를 그대로 복사해 붙여 넣으세요.");
+  }
+  function genPaste(text) {
+    var c = genInput((document.getElementById("gen-in") || {}).value ? document.getElementById("gen-in").value.trim() : "");
+    if (c.err) { layer.err = c.err; renderLayer(); return; }
+    var out;
+    try { out = looseJson(text); } catch (e) { layer.err = e.message; renderLayer(); return; }
+    if (c.g.kind === "sb") {
+      var r = normSbOut(out, c.base && !/삭제|제거|빼|없애|지워/.test(c.instruction || "") ? c.base.output : null);
+      if (!Array.isArray(r.out.components) || !r.out.components.length) { layer.err = "붙여 넣은 JSON에 components 배열이 없습니다. Claude에 ‘JSON 전체를 다시 출력해 줘’라고 요청한 뒤 다시 붙여 넣으세요."; renderLayer(); return; }
+      out = r.out;
+      if (r.note) toast(r.note);
+    }
+    layer.err = "";
+    layer.pasteOpen = false;
+    genSave(c, out, "claude.ai").then(function () { toast("Claude 결과를 v" + (c.doc.versions.length + 1) + "로 넣었습니다. 미리보기를 확인하고 적용하세요"); render(); renderLayer(); }, function (e) { layer.err = "저장하지 못했습니다: " + (e && e.message || e); renderLayer(); });
+  }
+  function genRun(instruction) {
+    var c = genInput(instruction);
+    if (c.err) { layer.err = c.err; renderLayer(); return; }
+    var p = c.p, g = c.g, base = c.base, scope = c.scope, input = c.input;
     layer.ctl = new AbortController();
     layer.busy = true; layer.err = ""; layer.stream = 0; layer.specEdit = false;
     startElapsed();
@@ -2337,18 +2394,9 @@
       return g.kind === "ds" && selectedDesign(p, g.target) ? dsAsk(input, p, g, scope, ctl, onText) : AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (o) { return { out: o }; });
     }, function (e) { if (!e.code) e.code = "server"; throw e; })
       .then(function (res) {
-        var out = res.out;
         if (res.retried) toast(g.kind === "sb" ? "처음 답에 components 배열이 없어 다시 받았습니다" : "처음 답은 반영될 것이 없어 이유를 알려 주고 다시 받았습니다");
         if (res.note) toast(res.note);
-        if (g.kind === "ds") out = normDsPatch(out, selectedDesign(p, g.target));
-        var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
-        var v = { n: n, scope: scope, scopeLabel: scopeInfo(scope).label, commentIds: cids, instruction: instruction || (cids.length ? "댓글 " + cids.length + "개 반영" : "(1차 생성)"), from: base ? base.n : null, root: g.requiresInstruction ? rootText : null, output: out, at: new Date().toISOString() };
-        if (g.kind !== "ds") { delete v.scope; delete v.scopeLabel; delete v.commentIds; }
-        doc = Object.assign({}, doc, { versions: doc.versions.concat([v]).slice(-10), updatedAt: v.at });
-        layer.sel = doc.versions.length - 1;
-        layer.fresh = false;
-        layer.draft = "";
-        return saveOverlay(key, doc).then(function (saved) { layer.saved = saved; });
+        return genSave(c, res.out);
       }, function (e) {
         layer.err = e && e.code === "cancelled" ? "" : e && e.code === "server" ? e.message : (SAMPLE_ERR[e && e.code] || "생성하지 못했습니다(" + (e && e.code) + "). 다시 눌러 주세요.");
       })
@@ -2553,8 +2601,10 @@
       (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유되고, 적용하면 저장소 모델이 바로 바뀝니다</span><span class="gen-ai"><label for="gen-ai-switch">AI</label>' + (aiCache.code === P().model.project.code ? aiSwitch("gen-ai-switch") : '<span class="hint">' + esc(effLabel(P().ai)) + "</span>") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
       (g.specs ? specSummary(g) : "") +
-      (canGen ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
-        '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "조정안 만들기" : "1차 생성") : "✦ 이 버전 고치기") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
+      (canGen || (SRV && canEdit()) ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
+        (canGen ? '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "조정안 만들기" : "1차 생성") : "✦ 이 버전 고치기") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
+          : '<div class="note warn"><b>AI 연결이 없습니다</b><p class="hint">아래 ‘Claude 구독으로 만들기’로 claude.ai에서 만들어 붙여 넣거나, AI 설정에서 Claude API 키 등 연결을 등록하세요.</p></div>') +
+        (SRV && canEdit() && !layer.busy ? claudeBox(sel) : "")
         : SRV ? '<div class="note warn"><b>AI 설정이 없습니다</b><p class="hint">운영자가 프로젝트 AI 설정을 등록하거나 내 계정에서 개인 설정을 등록하세요.</p></div>' : '<div class="note warn"><b>여기서는 생성할 수 없습니다</b><p class="hint">claude.ai에서 이 페이지를 열면 Claude로 바로 생성합니다. 지금은 아래 프롬프트를 복사해 Claude에 붙여 넣고, 받은 JSON을 <code>planning gen apply</code>로 반영하세요.</p><button class="btn-sm" data-gcopy>생성 프롬프트 복사</button></div>') +
       (isApplied ? '<div class="applied-note" role="status"><b>✓ 적용됨' + (appliedHist ? " (r" + appliedHist.rev + ")" : "") + "</b><span>" + (g.kind === "ds" ? "이 결과는 디자인 시스템에 반영돼 있습니다. 이 버전을 바탕으로 더 고치려면 위에 고칠 내용을 적고 ‘이 버전 고치기’를 누르세요." : "이 결과가 저장소에 반영돼 있습니다.") + "</span>" + (appliedHist && appliedHist.changes && appliedHist.changes.length ? '<ul class="changes">' + appliedHist.changes.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       (layer.err ? '<p class="gen-err" role="alert">' + esc(layer.err) + (SRV && canEdit() ? ' <button class="lnk" data-gotologs>호출 기록 보기</button>' : "") + "</p>" : "") +
@@ -2566,6 +2616,14 @@
       (sel && (g.kind === "ds" ? !(doc.history || []).some(function (h) { return h.n === sel.n; }) : sel.n !== doc.applied) ? '<button class="btn-primary" data-gapply' + (chk && chk.errs.length ? " disabled" : "") + ">v" + sel.n + " 적용</button>" : "") + "</footer>";
     return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 고치기</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="gen-body">' + left + right + "</div>" + foot;
+  }
+  /** Claude 구독(claude.ai)으로 만들기: 같은 프롬프트를 복사해 claude.ai에서 만들고, 답을 붙여 넣어 새 버전으로 */
+  function claudeBox(sel) {
+    return '<details class="gen-claude"' + (layer.pasteOpen ? " open" : "") + '><summary><span class="cl-logo" aria-hidden="true">✳</span> Claude 구독(claude.ai)으로 만들기</summary>' +
+      '<ol class="cl-steps"><li><button class="btn-sm" data-gclaude>① 프롬프트 복사 · claude.ai 열기</button><span class="hint">' + (sel ? "v" + sel.n + " 결과와 위 ‘고칠 내용’까지 함께 복사합니다" : "위 ‘추가 지시’와 기능 명세까지 함께 복사합니다") + "</span></li>" +
+      '<li><span class="hint">claude.ai 새 대화에 붙여 넣고 보냅니다. Opus 등 원하는 모델을 고를 수 있습니다.</span></li>' +
+      '<li><label class="gen-label" for="gen-paste">② Claude 답을 그대로 붙여 넣기</label><textarea id="gen-paste" rows="4" placeholder="Claude가 준 답 전체(```json … ``` 포함)를 붙여 넣으세요"></textarea><button class="btn-primary" data-gpaste>붙여 넣은 결과를 새 버전으로</button></li></ol>' +
+      '<p class="hint">Claude Pro·Max 구독 로그인을 다른 서비스에 연결하는 것은 Anthropic 정책상 허용되지 않아, 구독은 이렇게 복사·붙여넣기로 씁니다. 버튼 한 번으로 만들려면 AI 설정에 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
   }
   function copyText(text, btn, okLabel) {
     var old = btn.textContent;
@@ -3257,10 +3315,10 @@
     ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
     gemini: { label: "Gemini", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "AIza… (필수)", hint: "Google AI Studio(aistudio.google.com/apikey)에서 API 키를 발급받아 넣으세요. 무료 사용량이 있는 키도 발급됩니다. 구글 계정 로그인(OAuth)이나 Gemini 구독으로는 API를 호출할 수 없어 키 방식만 지원합니다." },
     "gemini-oauth": { label: "Gemini · Google OAuth", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", oauth: true, key: "", hint: "내 Google Cloud 프로젝트의 OAuth 클라이언트로 Google 계정에 로그인해 Gemini API를 호출합니다. 사용량과 요금은 그 Google Cloud 프로젝트 기준입니다(Gemini 구독 아님). 아래 준비 단계를 따라 하세요." },
-    anthropic: { label: "Anthropic", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API. 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude 구독(Pro·Max) 로그인은 Anthropic 정책상 다른 서비스에서 쓸 수 없어 지원하지 않습니다." },
+    anthropic: { label: "Claude (API 키)", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API로 바로 생성합니다(추론·스트리밍 사용, 기본 모델 claude-opus-5). 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude Pro·Max 구독 로그인은 Anthropic 정책상 다른 서비스에 연결할 수 없습니다 — 구독으로 만들려면 AI 생성 창의 ‘Claude 구독(claude.ai)으로 만들기’로 복사·붙여넣기 하세요." },
     custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
   };
-  var PRESET_ORDER = ["nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "anthropic", "custom"];
+  var PRESET_ORDER = ["anthropic", "nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "custom"];
   var GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
   function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
   function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
@@ -3786,6 +3844,16 @@
         var gin = document.getElementById("gen-in");
         if (lb.dataset.gsel != null) { layer.sel = Number(lb.dataset.gsel); layer.fresh = false; layer.specEdit = false; layer.err = ""; renderLayer(); return; }
         if (lb.hasAttribute("data-grun")) { genRun(gin ? gin.value.trim() : ""); return; }
+        if (lb.hasAttribute("data-gclaude")) {
+          var gc = genInput(gin ? gin.value.trim() : "");
+          if (gc.err) { layer.err = gc.err; renderLayer(); return; }
+          layer.draft = gin ? gin.value : ""; layer.pasteOpen = true;
+          saveSpecs(gc.g).catch(function () {});
+          copyText(gc.text, lb, "복사했습니다 · claude.ai에 붙여 넣으세요");
+          window.open("https://claude.ai/new", "_blank", "noopener");
+          return;
+        }
+        if (lb.hasAttribute("data-gpaste")) { var gpt = document.getElementById("gen-paste"); if (gpt && gpt.value.trim()) genPaste(gpt.value); else { layer.err = "Claude 답을 붙여 넣어 주세요."; renderLayer(); } return; }
         if (lb.hasAttribute("data-gnew")) { var cur0 = (overlayOf(layer.key) || { versions: [] }).versions[layer.sel]; if (cur0 && cur0.scope) { layer.scope = cur0.scope; layer.commentIds = cur0.commentIds; } layer.sel = null; layer.fresh = true; layer.err = ""; renderLayer(); return; }
         if (lb.hasAttribute("data-gstop")) { if (layer.ctl) layer.ctl.abort(); return; }
         if (lb.hasAttribute("data-gapply")) { genApply(true); return; }
@@ -3938,6 +4006,7 @@
     if (ev.target.getAttribute("id") === "fm" && layer && layer.kind === "form") { ev.preventDefault(); submitForm(ev.target); }
     else if (ev.target.id === "auth-form") { ev.preventDefault(); submitAuth(ev.target); }
   });
+  document.addEventListener("toggle", function (ev) { if (layer && ev.target.classList && ev.target.classList.contains("gen-claude")) layer.pasteOpen = ev.target.open; }, true);
   document.addEventListener("focusin", function (ev) { var k = ev.target && ev.target.getAttribute && ev.target.getAttribute("data-cell"); if (k) state.cellFocus = k; });
   document.addEventListener("keydown", function (ev) { var t = ev.target; if (ev.key === "Enter" && t && t.classList && t.classList.contains("cell") && t.tagName === "INPUT") { ev.preventDefault(); t.blur(); } });
   document.addEventListener("change", function (ev) {

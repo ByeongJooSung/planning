@@ -1153,3 +1153,12 @@ table.desc.dpanel .d-rules { margin-top: 6px; padding: 6px 8px; border-radius: 6
 table.desc.dpanel .d-rules p { margin: 0 0 2px; }
 table.desc.dpanel .d-rules .msg { color: var(--ink-2); }
 table.desc.dpanel .row-tools { margin-top: 6px; }
+/* Claude 구독(claude.ai)으로 만들기 */
+.gen-claude { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.gen-claude > summary { cursor: pointer; padding: 8px 10px; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.gen-claude .cl-logo { color: #d97757; font-size: 15px; }
+.gen-claude[open] > summary { border-bottom: 1px solid var(--line); }
+.gen-claude .cl-steps { margin: 8px 0 4px; padding: 0 10px 0 28px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.gen-claude .cl-steps li { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.gen-claude textarea { width: 100%; font: 12px var(--mono); }
+.gen-claude > p { margin: 0; padding: 4px 10px 10px; }
