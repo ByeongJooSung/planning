@@ -36,7 +36,7 @@
   };
   function icon(name, size) {
     var s = size || 16;
-    return '<svg class="wf-ic" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON_PATHS[name] || ICON_PATHS.info) + "</svg>";
+    return '<svg class="wf-ic" data-ic="' + esc(ICON_PATHS[name] ? name : "info") + '" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON_PATHS[name] || ICON_PATHS.info) + "</svg>";
   }
 
   var SAMPLE = {
@@ -233,13 +233,17 @@
 
   /** 컴포넌트 하나. data-cmp로 감싸 댓글 핀·번호 라벨이 어떤 컴포넌트인지 알 수 있게 한다 */
   function component(ds, id, props, ctx, link, spec) {
+    // 이 화면에서만 고친 모양(항목 프레임)이 있으면 그 모양 그대로
+    if (spec && spec.ui && spec.ui.tree && window.Frames) {
+      return '<div class="wf-c wf-frc" data-cmp="' + esc(id) + '" data-own="1"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(spec.ui.tree, { ds: ds, props: Object.assign({}, props || {}), comps: ds.components }) + "</div>";
+    }
     // 프레임 편집기로 그린 모양이 있으면 그 모양으로 (props는 텍스트 bind에 들어간다)
     var fc = (ds.components || []).find(function (c) { return c.id === id && c.tree; });
     if (fc && window.Frames) {
       var p2 = Object.assign({}, props || {});
       if (spec && spec.label) { if (p2.label == null) p2.label = spec.label; if (p2.title == null) p2.title = spec.label; }
       if (spec && spec.customer && p2.text == null) p2.text = spec.customer;
-      return '<div class="wf-c wf-fr" data-cmp="' + esc(id) + '"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(window.Frames.treeOf(fc, p2.variant) || fc.tree, { ds: ds, props: p2, comps: ds.components }) + "</div>";
+      return '<div class="wf-c wf-frc" data-cmp="' + esc(id) + '"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(window.Frames.treeOf(fc, p2.variant) || fc.tree, { ds: ds, props: p2, comps: ds.components }) + "</div>";
     }
     var fn = C[id];
     var html = fn && id !== "gnb" && id !== "footer" && id !== "breadcrumb" ? fn(ds, props || {}, ctx || {}, link, spec) : fn ? fn(ds, props || {}, ctx || {}) : generic(ds, id, props || {});
@@ -292,7 +296,7 @@
 
   /** 입력 항목: 이어서 나오면 실제 신청 화면처럼 왼쪽 항목명 · 오른쪽 입력칸 표(폼 테이블)로 묶는다 */
   var FIELD = { "text-input": 1, textarea: 1, select: 1, "radio-group": 1, "checkbox-group": 1, "date-range": 1, "file-upload": 1 };
-  function isField(c) { return c.ui && FIELD[c.ui.component] && !(c.ui.props && c.ui.props.stacked); }
+  function isField(c) { return c.ui && !c.ui.tree && FIELD[c.ui.component] && !(c.ui.props && c.ui.props.stacked); }
   function blocks(ds, comps, ctx) {
     var out = [], run = [];
     var flush = function () {

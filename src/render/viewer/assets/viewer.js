@@ -563,15 +563,31 @@
     if (/button/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: "hug", h: "hug", layout: { mode: "row", gap: 8, pad: [10, 18, 10, 18], align: "center", justify: "center", wrap: false }, fill: "primary", radius: "md", children: [Object.assign(label, { text: "확인", color: "onPrimary" })] };
     if (/badge/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: "hug", h: "hug", layout: { mode: "row", gap: 4, pad: [2, 10, 2, 10], align: "center", justify: "center", wrap: false }, fill: "surfaceAlt", stroke: "primary", strokeW: 1, radius: "full", children: [Object.assign(label, { text: "심사중", size: "small", color: "primary" })] };
     if (/input|select|textarea/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: 360, h: "hug", layout: { mode: "column", gap: 6, pad: [0, 0, 0, 0], align: "stretch", justify: "start", wrap: false }, children: [Object.assign(label, { text: "항목명", size: "small" }), { id: "f1", type: "frame", name: "입력칸", w: "fill", h: 44, layout: { mode: "row", gap: 8, pad: [0, 12, 0, 12], align: "center", justify: "between", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "sm", children: [{ id: "t2", type: "text", name: "안내 문구", text: "입력하세요", size: "small", color: "textMuted", bind: "placeholder" }] }] };
-    return { id: "root", type: "frame", name: c.name || "카드", w: 320, h: "hug", layout: { mode: "column", gap: 8, pad: [16, 16, 16, 16], align: "stretch", justify: "start", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "md", shadow: "soft", children: [Object.assign(label, { size: "h3", weight: 700, text: c.name || "제목", bind: "title" }), { id: "t2", type: "text", name: "본문", text: "설명을 적습니다.", size: "small", color: "textMuted", bind: "text" }] };
+    return { id: "root", type: "frame", name: c.name || "카드", w: 320, h: "hug", layout: { mode: "column", gap: 8, pad: [16, 16, 16, 16], align: "stretch", justify: "start", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "md", shadow: "soft", children: [Object.assign(label, { size: "h3", weight: 700, text: c.name || "제목", bind: "title" }), { id: "t2", type: "text", name: "본문", text: "설명을 적습니다.", w: "fill", size: "small", color: "textMuted", bind: "text" }] };
+  }
+  /** 지금 화면에 그려지는 기본 모양을 프레임 노드로 바꿔 편집 초안으로 쓴다 */
+  function compDraft(ds, c) {
+    if (!window.Frames || !Frames.fromHtml) return null;
+    try {
+      var props = SAMPLE_PROPS[c.id];
+      if (!props) { props = {}; P().model.storyboard.screens.forEach(function (s) { s.components.forEach(function (x) { if (x.ui && x.ui.component === c.id) props = x.ui.props; }); }); }
+      var w = WIDE.test(c.id) || !SAMPLE_PROPS[c.id] ? ds.tokens.grid.maxWidth : 560;
+      var tree = Frames.fromHtml(Wire.component(ds, c.id, props, wireCtx(P(), ds.systemCode)), { vars: Wire.vars(ds), width: w, select: ".wf-c", props: props, name: c.name });
+      if (!tree) return null;
+      // 폭이 넓은 컴포넌트는 채우기로 두고 미리보기 폭을 맞춘다
+      if (typeof tree.w === "number" && tree.w >= w - 2) tree.w = "fill";
+      return { tree: tree, w: w };
+    } catch (e) { return null; }
   }
   function openFrameEditor(code, id) {
     var p = P(), d = selectedDesign(p, code), s = sysOf(p, code);
     if (!d || !window.FrameEdit) return;
     var comp = id ? d.components.find(function (x) { return x.id === id; }) : null;
-    var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW, tree: comp.tree || frameStarter(comp), variantTrees: comp.variantTrees } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
+    var draft = comp && !comp.tree ? compDraft(d, comp) : null;
+    var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW || (draft && draft.w), tree: comp.tree || (draft && draft.tree) || frameStarter(comp), variantTrees: comp.variantTrees } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
     FrameEdit.open({
       ds: d, vars: Wire.vars(d), comp: start, comps: d.components,
+      note: draft ? "지금 그려지는 기본 모양을 옮긴 초안입니다. 저장하면 이 컴포넌트는 이 모양으로 그려지고, 화면설계서 항목 값은 ‘props 연결’한 글자에만 들어갑니다" + (/table|list|cards|stat|tabs|steps|step|pagination|search-panel|detail/.test(comp.id) ? " — 표·목록처럼 항목 데이터로 행·열을 채우던 부분은 그린 모양 그대로 고정됩니다(화면별 내용은 화면설계서에서 항목을 프레임으로 편집)." : ".") : "",
       categories: Object.keys(CATEGORY).map(function (k) { return [k, CATEGORY[k]]; }),
       editable: SRV && canEdit(), title: code + " " + (s ? s.name : ""),
       save: function (doc) {
@@ -665,7 +681,7 @@
       '<div class="wire-missing"><b>와이어프레임을 그릴 수 없습니다</b><p class="hint">' + esc(sb.systemCode) + " 디자인 시스템 컨셉이 " + (ds ? "아직 선택되지 않았습니다(제안 3종 검토 중)." : "아직 제안되지 않았습니다.") + " 오른쪽 설명만 글로 작성된 상태입니다.</p><button class=\"btn-sm\" data-page=\"design\" data-dsys=\"" + esc(sb.systemCode) + '">디자인 시스템 보기</button></div>';
     var n = sb.components.length;
     var desc = '<table class="desc dpanel"><thead><tr><th>No</th><th>항목</th><th>Description</th></tr></thead><tbody>' + (sb.components.map(function (c, i) {
-      var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
+      var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + (wire ? actBtn("sb-frame", "모양", sid + "|" + c.no) : "") + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
       return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
     }).join("") || '<tr><td colspan="3" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
     var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
@@ -724,7 +740,8 @@
   function sbCompForm(sid, c) {
     var p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === sid; });
     var ds = wireDesign(p, sb.systemCode), v = c.validation || {}, o = c.options || {};
-    var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name + (x.tree ? " ✎" : "")]; }) : [];
+    var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name + (x.tree ? " ✎" : "") + (c.ui && c.ui.tree && c.ui.component === x.id ? " — 이 화면에서 직접 그린 모양 유지" : "")]; }) : [];
+    if (c.ui && c.ui.tree && !comps.some(function (x) { return x[0] === c.ui.component; })) comps.unshift([c.ui.component, "직접 그린 모양 (유지)"]);
     var variantOpts = function (cid) { var fc = ds && ds.components.find(function (x) { return x.id === cid; }); return [["", "기본"]].concat(fc && fc.variantTrees ? fc.variantTrees.map(function (v) { return [v.name, v.name]; }) : []); };
     var frameProps = function (cc) { var fc = ds && cc.ui && ds.components.find(function (x) { return x.id === cc.ui.component && x.tree; }); if (!fc) return ""; var pr = cc.ui.props || {}; return Frames.binds(fc.tree).filter(function (k) { return pr[k] != null; }).map(function (k) { return k + " = " + pr[k]; }).join("\n"); };
     var screens = p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU" && n.systemCode === sb.systemCode; }).map(function (n) { return [n.id, n.id + " " + n.name]; });
@@ -758,8 +775,9 @@
         if (val.required || val.minLength != null || val.maxLength != null || val.format || val.timing.length || val.messages.length) input.validation = val;
         // 새로 고른 컴포넌트는 예시 데이터로 채워 와이어프레임에 바로 보이게 한다 (AI 생성·편집으로 바꿀 수 있음)
         if (f.component) input.ui = { component: f.component, props: c.ui && c.ui.component === f.component ? c.ui.props : JSON.parse(JSON.stringify(SAMPLE_PROPS[f.component] || {})), link: f.link || undefined };
+        if (c.ui && c.ui.tree && f.component === c.ui.component) input.ui.tree = c.ui.tree;
         var fc = f.component && ds && ds.components.find(function (x) { return x.id === f.component && x.tree; });
-        if (fc) {
+        if (fc && !input.ui.tree) {
           var pr = Object.assign({}, input.ui.props || {});
           Frames.binds(fc.tree).concat((fc.variantTrees || []).reduce(function (a, v) { return a.concat(Frames.binds(v.tree)); }, [])).forEach(function (k) { delete pr[k]; });
           f.fprops.split("\n").forEach(function (l) { var m = /^\s*([a-zA-Z][a-zA-Z0-9_]*)\s*=\s*(.*)$/.exec(l); if (m) pr[m[1]] = m[2].trim(); });
@@ -975,12 +993,14 @@
     var sid = opts.key || sb.screenId, wire = screenWire(p, sb, "pos"), z = state.sbZoom[sid] || 1;
     var movable = SRV && canEdit() && !opts.preview;
     var moved = sb.components.filter(function (c) { return c.marker; }).length;
-    return '<div class="wire-box sb-canvas" data-sbc="' + esc(sid) + '">' +
-      '<div class="sbc-tools">' + (isProvisional(p, sb.systemCode) ? '<span class="pill IN_DESIGN" title="디자인 시스템을 아직 고르지 않아 기본 컨셉으로 그렸습니다. 저장하면 이 컨셉으로 정해지고, 디자인 시스템 화면에서 바꿀 수 있습니다">임시 기본 디자인</span>' : "") + '<span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 해당 설명이 강조됩니다.") + '</span><span class="sp"></span>' +
+    return '<div class="wire-box sb-canvas' + (movable ? " edit" : "") + '" data-sbc="' + esc(sid) + '">' +
+      '<div class="sbc-tools">' + (isProvisional(p, sb.systemCode) ? '<span class="pill IN_DESIGN" title="디자인 시스템을 아직 고르지 않아 기본 컨셉으로 그렸습니다. 저장하면 이 컨셉으로 정해지고, 디자인 시스템 화면에서 바꿀 수 있습니다">임시 기본 디자인</span>' : "") +
+      (movable ? actBtn("sb-draw", "+ 새 항목 그리기", sid, "btn-sm btn-primary") : "") +
+      '<span class="hint">' + (movable ? "항목을 누르면 편집 도구 · 두 번 누르면 모양 편집 · 번호는 끌어 옮김" : "번호를 누르면 해당 설명이 강조됩니다.") + '</span><span class="sp"></span>' +
       '<button class="btn-sm" data-sbzoom="-1" aria-label="축소">−</button><span class="sbc-z">' + Math.round(z * 100) + '%</span><button class="btn-sm" data-sbzoom="1" aria-label="확대">+</button><button class="btn-sm" data-sbzoom="0">화면 맞춤</button>' +
       (movable && moved ? '<button class="btn-sm" data-sbreset="' + esc(sid) + '">번호 위치 초기화 (' + moved + ")</button>" : "") + "</div>" +
       '<div class="sbc-view"><div class="sbc-board"><div class="sbc-frame"><div class="sbc-inner" style="width:' + VW + 'px">' + wire + "</div></div>" +
-      '<svg class="sbc-lines" aria-hidden="true"></svg>' +
+      '<svg class="sbc-lines" aria-hidden="true"></svg>' + (movable ? '<div class="sbc-hov" hidden></div><div class="sbc-sel" hidden></div>' : "") +
       sb.components.map(function (c) {
         return '<button class="sbc-mk' + (c.marker ? " moved" : "") + (movable ? " drag" : "") + (state.sbHl === sid + "|" + c.no ? " hl" : "") + '" data-mk="' + c.no + '"' + (c.marker ? ' data-mx="' + c.marker.x + '" data-my="' + c.marker.y + '"' : "") + ' title="' + esc(c.no + ". " + c.label) + '" aria-label="' + esc(c.no + "번 " + c.label) + '">' + c.no + "</button>";
       }).join("") + "</div></div>" +
@@ -1027,6 +1047,7 @@
         if (el && mk.hasAttribute("data-mx") && Math.hypot(x - dx, y - dy) * z > 24) lines.push([x, y, dx, dy]);
       });
       drawLines(cv, lines, z, L);
+      drawSel(cv);
       var z0 = cv.querySelector(".sbc-z"); if (z0) z0.textContent = Math.round((state.sbZoom[sid] || 1) * 100) + "%";
       var cap = cv.querySelector(".stage-cap .pct"); if (cap) cap.textContent = "실제 크기의 " + Math.round(z * 1000) / 10 + "%";
     });
@@ -1070,14 +1091,209 @@
     layoutCanvases(d.cv.parentNode);
     cmd({ op: "sb.marker", screenId: sid, no: no, pos: { x: x, y: y } }).catch(function (e) { toast(e.message, "err"); render(); });
   });
-  function mkHighlight(sid, no) {
-    state.sbHl = state.sbHl === sid + "|" + no ? null : sid + "|" + no;
+  function mkHighlight(sid, no, keep) {
+    state.sbHl = state.sbHl === sid + "|" + no && !keep ? null : sid + "|" + no;
+    document.querySelectorAll(".sb-canvas.edit").forEach(drawSel);
     document.querySelectorAll(".sbc-mk.hl, tr[data-dno].hl").forEach(function (e) { e.classList.remove("hl"); });
     if (!state.sbHl) return;
     document.querySelectorAll('.sb-canvas[data-sbc="' + sid + '"] .sbc-mk[data-mk="' + no + '"]').forEach(function (e) { e.classList.add("hl"); });
     var row = document.querySelector('tr[data-dno="' + sid + "|" + no + '"]');
     if (row) { row.classList.add("hl"); row.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   }
+
+  // ── 화면설계서 캔버스 편집 도구: 항목 고르기 · 모양(프레임) 편집 · 내용(props) 편집 · 복제 · 순서 · 새 항목 그리기 ──
+  function sbOf(sid) { return P().model.storyboard.screens.find(function (x) { return x.screenId === sid; }); }
+  function sbItem(sid, no) { var sb = sbOf(sid); return sb ? sb.components.find(function (c) { return c.no === Number(no); }) : null; }
+  /** 화면 안 항목 상자 (보드 기준 좌표) */
+  function itemBoxes(cv) {
+    var board = cv.querySelector(".sbc-board"), br = board.getBoundingClientRect(), out = [];
+    cv.querySelectorAll(".sbc-inner [data-no]").forEach(function (e) {
+      var r = e.getBoundingClientRect();
+      if ((!r.width || !r.height) && e.firstElementChild) r = e.firstElementChild.getBoundingClientRect();
+      if (r.width && r.height) out.push({ no: Number(e.getAttribute("data-no")), x: r.left - br.left, y: r.top - br.top, w: r.width, h: r.height });
+    });
+    return out;
+  }
+  function hitItem(cv, ev) {
+    var br = cv.querySelector(".sbc-board").getBoundingClientRect(), x = ev.clientX - br.left, y = ev.clientY - br.top, best = null;
+    itemBoxes(cv).forEach(function (b) { if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h && (!best || b.w * b.h < best.w * best.h)) best = b; });
+    return best;
+  }
+  function boxCss(b) { return "left:" + Math.round(b.x) + "px;top:" + Math.round(b.y) + "px;width:" + Math.round(b.w) + "px;height:" + Math.round(b.h) + "px"; }
+  function drawSel(cv) {
+    var sel = cv.querySelector(".sbc-sel");
+    if (!sel) return;
+    var sid = cv.getAttribute("data-sbc"), hl = state.sbHl && state.sbHl.split("|"), b = null;
+    if (hl && hl[0] === sid) b = itemBoxes(cv).find(function (x) { return x.no === Number(hl[1]); });
+    var c = b && sbItem(sid, b.no);
+    if (!b || !c) { sel.hidden = true; return; }
+    var own = c.ui && c.ui.tree, n = sbOf(sid).components.length, a = sid + "|" + c.no;
+    sel.hidden = false;
+    sel.setAttribute("style", boxCss(b));
+    sel.innerHTML = '<div class="sbc-bar' + (b.y < 44 ? " below" : "") + '" role="toolbar" aria-label="' + esc(c.no + "번 " + c.label + " 편집") + '"><b>' + c.no + ". " + esc(c.label) + "</b>" +
+      actBtn("sb-frame", "✎ 모양 편집", a, "btn-sm btn-primary") + (c.ui && !own ? actBtn("sb-props", "내용", a) : "") + actBtn("sb-edit", "설명·컴포넌트", a) +
+      (c.no > 1 ? actBtn("sb-up", "↑", a) : "") + (c.no < n ? actBtn("sb-down", "↓", a) : "") + actBtn("sb-dup", "복제", a) +
+      (own && c.ui.component !== "frame" ? actBtn("sb-frame-reset", "기본 모양으로", a) : "") + actBtn("sb-rm", "삭제", a, "btn-sm danger") + "</div>" +
+      (own ? '<span class="sbc-own">직접 그린 모양</span>' : "");
+  }
+  document.addEventListener("pointermove", function (ev) {
+    var cv = ev.target.closest && ev.target.closest(".sb-canvas.edit");
+    document.querySelectorAll(".sbc-hov:not([hidden])").forEach(function (h) { if (!cv || !cv.contains(h)) h.hidden = true; });
+    if (!cv || mkDrag || ev.target.closest(".sbc-mk, .sbc-bar, .sbc-tools")) { if (cv) cv.querySelector(".sbc-hov").hidden = true; return; }
+    var b = hitItem(cv, ev), hov = cv.querySelector(".sbc-hov");
+    if (!b) { hov.hidden = true; return; }
+    hov.hidden = false; hov.setAttribute("style", boxCss(b));
+  });
+  document.addEventListener("click", function (ev) {
+    var cv = ev.target.closest && ev.target.closest(".sb-canvas.edit");
+    if (!cv || !ev.target.closest(".sbc-board") || ev.target.closest(".sbc-mk, .sbc-bar")) return;
+    var b = hitItem(cv, ev), sid = cv.getAttribute("data-sbc");
+    if (b) mkHighlight(sid, b.no, true);
+    else if (state.sbHl && state.sbHl.split("|")[0] === sid) mkHighlight(sid, Number(state.sbHl.split("|")[1]));
+  });
+  document.addEventListener("dblclick", function (ev) {
+    var cv = ev.target.closest && ev.target.closest(".sb-canvas.edit");
+    if (!cv || ev.target.closest(".sbc-mk, .sbc-bar")) return;
+    var b = hitItem(cv, ev);
+    if (b) openItemFrame(cv.getAttribute("data-sbc"), b.no);
+  });
+
+  /** 화면에 그려진 항목 모양 → 프레임 노드 초안 (주변 CSS 문맥을 그대로 감싸 재므로 실제 모양과 같다) */
+  function itemDraft(sid, c) {
+    var el = document.querySelector('.sb-canvas[data-sbc="' + sid + '"] .sbc-inner [data-no="' + c.no + '"]');
+    if (!el || !window.Frames || !Frames.fromHtml) return null;
+    var root = el.closest(".wf");
+    if (!root) return null;
+    var tag = function (a) { return a.tagName.toLowerCase(); };
+    var html = el.outerHTML.replace(/^<([a-zA-Z0-9]+)/, '<$1 data-pick="1"');
+    for (var a = el.parentElement; a && a !== root; a = a.parentElement) html = "<" + tag(a) + ' class="' + esc(a.getAttribute("class") || "") + '"' + (a.getAttribute("style") ? ' style="' + esc(a.getAttribute("style")) + '"' : "") + ">" + html + "</" + tag(a) + ">";
+    try {
+      var tree = Frames.fromHtml(html, { vars: root.getAttribute("style"), cls: root.getAttribute("class"), width: root.offsetWidth, select: "[data-pick]", props: {}, name: c.label }); // 항목 모양은 글자를 그대로 고정 (편집기에서 바로 고친다)
+      if (!tree) return null;
+      var pw = el.parentElement ? el.parentElement.clientWidth : 0;
+      if (typeof tree.w === "number" && pw && Math.abs(el.offsetWidth - pw) < 3) tree.w = "fill";
+      return { tree: tree, w: el.offsetWidth };
+    } catch (e) { return null; }
+  }
+  function itemInput(c, ui) {
+    return { label: c.label, kind: c.kind, planner: c.planner || "", customer: c.customer || "", options: c.options, validation: c.validation, ui: ui };
+  }
+  function openItemFrame(sid, no) {
+    var p = P(), sb = sbOf(sid), c = sbItem(sid, no);
+    if (!sb || !c || !window.FrameEdit) return;
+    var ds = wireDesign(p, sb.systemCode);
+    if (!ds) return toast("디자인 시스템이 없어 모양을 편집할 수 없습니다", "err");
+    var el = document.querySelector('.sb-canvas[data-sbc="' + sid + '"] .sbc-inner [data-no="' + c.no + '"]');
+    var draft = c.ui && c.ui.tree ? null : itemDraft(sid, c);
+    var tree = c.ui && c.ui.tree ? JSON.parse(JSON.stringify(c.ui.tree)) : draft ? draft.tree : frameStarter({ id: "", name: c.label });
+    var cur = c.no;
+    FrameEdit.open({
+      mode: "item", ds: ds, vars: Wire.vars(ds), comps: ds.components, editable: SRV && canEdit(), title: sid + " · " + c.no + "번",
+      comp: { id: "", name: c.label, category: "content", frameW: draft ? draft.w : el ? el.offsetWidth : 960, tree: tree },
+      note: draft ? "지금 화면에 그려진 모양을 옮긴 초안입니다. 저장하면 이 화면의 이 항목만 이 모양으로 바뀝니다(디자인 시스템은 그대로)." : "",
+      aiContext: "[화면설계서 문맥] " + sid + " " + (sb.title || "") + " 화면의 " + c.no + "번 항목 ‘" + c.label + "’" + (c.customer ? " · 고객에게 보이는 것: " + c.customer : "") + (c.planner ? " · 정책: " + c.planner : ""),
+      save: function (doc) {
+        var now = sbItem(sid, cur) || c;
+        return cmd({ op: "sb.component", screenId: sid, no: now.no, input: Object.assign(itemInput(now, { component: now.ui ? now.ui.component : "frame", props: now.ui ? now.ui.props : {}, link: now.ui && now.ui.link || undefined, tree: doc.tree }), { label: doc.name || now.label }) }).then(function () { return "item"; });
+      },
+      ai: { available: !!(AI.sample && p.ai), label: p.ai ? effLabel(p.ai) : "", run: function (input, signal) { return AI.sample.json(input, { signal: signal, cache: false }); } },
+      parse: looseJson, toast: toast,
+      onClose: function () { render(); }
+    });
+  }
+  ACTIONS_LATE["sb-frame"] = function (arg) { var a = arg.split("|"); openItemFrame(a[0], Number(a[1])); };
+  ACTIONS_LATE["sb-frame-reset"] = function (arg) {
+    var a = arg.split("|"), c = sbItem(a[0], a[1]);
+    if (!c || !c.ui) return;
+    confirmAct("기본 모양으로", a[1] + "번 ‘" + c.label + "’을(를) 직접 그린 모양 대신 디자인 시스템 컴포넌트(" + c.ui.component + ") 모양으로 되돌릴까요?", "되돌리기", function () {
+      return cmd({ op: "sb.component", screenId: a[0], no: c.no, input: itemInput(c, { component: c.ui.component, props: c.ui.props || {}, link: c.ui.link || undefined }) });
+    });
+  };
+  ACTIONS_LATE["sb-dup"] = function (arg) {
+    var a = arg.split("|");
+    cmd({ op: "sb.dup", screenId: a[0], no: Number(a[1]) }).then(function (r) { if (r.detail && r.detail.no) { state.sbHl = a[0] + "|" + r.detail.no; render(); } }).catch(function (e) { toast(e.message, "err"); });
+  };
+  ACTIONS_LATE["sb-draw"] = function (sid) {
+    var p = P(), sb = sbOf(sid);
+    if (!sb || !window.FrameEdit) return;
+    var ds = wireDesign(p, sb.systemCode);
+    if (!ds) return toast("디자인 시스템이 없어 그릴 수 없습니다", "err");
+    var cur = null;
+    FrameEdit.open({
+      mode: "item", ds: ds, vars: Wire.vars(ds), comps: ds.components, editable: true, title: sid + " · 새 항목",
+      comp: { id: "", name: "", category: "content", frameW: 960, tree: { id: "root", type: "frame", name: "새 항목", w: "fill", h: "hug", layout: { mode: "column", gap: 12, pad: [20, 20, 20, 20], align: "stretch", justify: "start", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "md", children: [{ id: "t1", type: "text", name: "제목", text: "제목", size: "h3", weight: 700 }, { id: "t2", type: "text", name: "본문", text: "내용을 적습니다.", w: "fill", size: "small", color: "textMuted" }] } },
+      aiContext: "[화면설계서 문맥] " + sid + " " + (sb.title || "") + " 화면에 새로 넣을 항목",
+      save: function (doc) {
+        var now = cur != null ? sbItem(sid, cur) : null;
+        var input = now ? Object.assign(itemInput(now, { component: now.ui ? now.ui.component : "frame", props: now.ui ? now.ui.props : {}, link: now.ui && now.ui.link || undefined, tree: doc.tree }), { label: doc.name }) :
+          { label: doc.name, kind: "frame", planner: "", customer: "", ui: { component: "frame", props: {}, tree: doc.tree } };
+        return cmd({ op: "sb.component", screenId: sid, no: now ? now.no : undefined, input: input }).then(function () { if (cur == null) cur = sbOf(sid).components.length; state.sbHl = sid + "|" + cur; return "item"; });
+      },
+      ai: { available: !!(AI.sample && p.ai), label: p.ai ? effLabel(p.ai) : "", run: function (input, signal) { return AI.sample.json(input, { signal: signal, cache: false }); } },
+      parse: looseJson, toast: toast,
+      onClose: function () { render(); }
+    });
+  };
+
+  /** 항목 내용(props) 편집 — 표의 열·행, 탭·버튼·선택지 같은 값을 줄 단위로 */
+  var PROP_LABEL = { label: "라벨", placeholder: "안내 문구", columns: "열 이름", rows: "행 데이터", items: "항목", options: "선택지", buttons: "버튼", title: "제목", total: "전체 건수", active: "선택된 탭(0부터)", steps: "단계", current: "현재 단계(0부터)", message: "메시지", text: "본문", hint: "도움말", fields: "조건 항목", files: "파일", value: "선택값", values: "선택값들", variant: "변형", required: "필수", badgeColumn: "상태 뱃지 열(0부터)", view: "보기 방식(table·card)", placement: "위치", tone: "톤", confirm: "확인 버튼", cancel: "취소 버튼", stacked: "위아래로 배치" };
+  function propKind(v) {
+    if (typeof v === "boolean") return "bool";
+    if (typeof v === "number") return "num";
+    if (Array.isArray(v)) {
+      if (v.every(function (x) { return x == null || typeof x !== "object"; })) return "lines";
+      if (v.every(function (x) { return Array.isArray(x); })) return "grid";
+      if (v.every(function (x) { return x && typeof x === "object" && !Array.isArray(x); })) return "objs";
+      return "json";
+    }
+    if (v && typeof v === "object") return "json";
+    return "str";
+  }
+  ACTIONS_LATE["sb-props"] = function (arg) {
+    var a = arg.split("|"), c = sbItem(a[0], a[1]);
+    if (!c || !c.ui) return;
+    var props = c.ui.props || {}, base = SAMPLE_PROPS[c.ui.component] || {}, keys = Object.keys(props);
+    Object.keys(base).forEach(function (k) { if (keys.indexOf(k) < 0 && k !== "body") keys.push(k); });
+    var specs = keys.map(function (k, i) {
+      var v = props[k] !== undefined ? props[k] : undefined, kind = propKind(v !== undefined ? v : base[k]), cols = null, val = "";
+      if (kind === "objs") { cols = []; (v || base[k] || []).forEach(function (o) { Object.keys(o).forEach(function (kk) { if (cols.indexOf(kk) < 0) cols.push(kk); }); }); }
+      if (v !== undefined) {
+        if (kind === "lines") val = v.join("\n");
+        else if (kind === "grid") val = v.map(function (r) { return r.join(" | "); }).join("\n");
+        else if (kind === "objs") val = v.map(function (o) { return cols.map(function (kk) { return o[kk] == null ? "" : typeof o[kk] === "object" ? JSON.stringify(o[kk]) : String(o[kk]); }).join(" | "); }).join("\n");
+        else if (kind === "json") val = JSON.stringify(v, null, 1);
+        else if (kind === "bool") val = !!v;
+        else val = String(v);
+      }
+      var hint = { lines: "한 줄에 하나", grid: "한 줄에 한 행 · 칸은 | 로 구분", objs: "한 줄에 하나 · " + (cols || []).join(" | "), json: "JSON" }[kind] || "";
+      var ph = base[k] !== undefined && v === undefined ? (kind === "lines" ? base[k].join(", ") : kind === "str" || kind === "num" ? String(base[k]) : "") : "";
+      return { k: k, kind: kind, cols: cols, field: { name: "p" + i, label: (PROP_LABEL[k] || k) + " (" + k + ")", type: kind === "bool" ? "checkbox" : kind === "num" ? "number" : kind === "str" && String(val).length < 80 ? undefined : "textarea", rows: kind === "str" ? 2 : 4, value: val, hint: hint, placeholder: ph ? "예: " + ph : "" } };
+    });
+    openForm({
+      eyebrow: a[0] + " · " + c.no + "번 " + c.label, title: "내용 편집 — " + c.ui.component, submit: "저장",
+      intro: c.ui.tree ? "이 항목은 직접 그린 모양이라 ‘props 연결’한 글자만 이 값으로 바뀝니다. 표·목록 모양은 ‘✎ 모양 편집’에서 고치세요." : "와이어프레임에 보이는 값입니다. 비워 두면 기본 예시 값으로 그립니다.",
+      fields: specs.map(function (x) { return x.field; }).concat([{ name: "px_new", label: "새 속성 추가 (‘이름 = 값’, 한 줄에 하나)", type: "textarea", rows: 2, value: "", placeholder: "예: note = 최근 3개월만 표시" }]),
+      onSubmit: function (f) {
+        var out = {};
+        try {
+          specs.forEach(function (x) {
+            var raw = f[x.field.name];
+            if (x.kind === "bool") { if (raw || props[x.k] !== undefined) out[x.k] = !!raw; return; }
+            if (raw == null || String(raw).trim() === "") return;
+            var lines = String(raw).split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+            if (x.kind === "num") out[x.k] = Number(raw);
+            else if (x.kind === "lines") out[x.k] = lines;
+            else if (x.kind === "grid") out[x.k] = lines.map(function (l) { return l.split("|").map(function (y) { return y.trim(); }); });
+            else if (x.kind === "objs") out[x.k] = lines.map(function (l) { var cells = l.split("|").map(function (y) { return y.trim(); }), o = {}; x.cols.forEach(function (kk, j) { var cv = cells[j]; if (cv == null || cv === "") return; o[kk] = /^[\[{]/.test(cv) ? JSON.parse(cv) : cv; }); return o; });
+            else if (x.kind === "json") out[x.k] = JSON.parse(raw);
+            else out[x.k] = String(raw);
+          });
+        } catch (e) { return Promise.reject(new Error("JSON 형식이 맞지 않습니다: " + e.message)); }
+        String(f.px_new || "").split("\n").forEach(function (l) { var m = /^\s*([a-zA-Z][a-zA-Z0-9_]*)\s*=\s*(.*)$/.exec(l); if (m) out[m[1]] = m[2].trim(); });
+        return cmd({ op: "sb.component", screenId: a[0], no: c.no, input: itemInput(c, Object.assign({}, c.ui, { props: out })) });
+      }
+    });
+  };
 
   // ── 프로토타입 ──────────────────────────────────
   /** 프로토타입 문맥: Task 탭(그 Task 화면 + 이동 화면) 또는 시스템 통합본(시스템 전체 화면, 메뉴 순서) */

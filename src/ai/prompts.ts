@@ -165,7 +165,7 @@ export function tokensBlock(d: SystemDesign | undefined, code: string): string {
 export function componentLines(sb: StoryboardScreen): string {
   return sb.components
     .map((comp) => {
-      const lines = [`${comp.no}. ${comp.label} — ${comp.ui ? `컴포넌트 \`${comp.ui.component}\`` : `(와이어프레임 미작성, 유형 ${comp.kind})`}${comp.ui?.link ? ` → 이동: ${comp.ui.link}` : ""}`];
+      const lines = [`${comp.no}. ${comp.label} — ${comp.ui ? (comp.ui.tree ? `직접 그린 프레임(기반 \`${comp.ui.component}\`)` : `컴포넌트 \`${comp.ui.component}\``) : `(와이어프레임 미작성, 유형 ${comp.kind})`}${comp.ui?.link ? ` → 이동: ${comp.ui.link}` : ""}`];
       if (comp.ui && Object.keys(comp.ui.props).length) lines.push(`   - 속성: ${JSON.stringify(comp.ui.props)}`);
       if (comp.planner) lines.push(`   - 기획자 관점: ${comp.planner}`);
       if (comp.customer) lines.push(`   - 고객 관점: ${comp.customer}`);

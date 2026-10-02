@@ -47,7 +47,7 @@
     el.className = "fe fx";
     el.setAttribute("role", "dialog");
     el.setAttribute("aria-modal", "true");
-    el.setAttribute("aria-label", "디자인 시스템 프레임 편집기");
+    el.setAttribute("aria-label", o.mode === "item" ? "화면설계서 항목 프레임 편집기" : "디자인 시스템 프레임 편집기");
     el.innerHTML = frame();
     document.body.appendChild(el);
     document.documentElement.classList.add("fe-open");
@@ -109,8 +109,9 @@
   function frame() {
     var o = S.o, ed = o.editable !== false;
     var tools = TOOLS.map(function (t) { return '<button class="fe-t" data-fx-tool="' + t[0] + '" title="' + t[1] + " (" + t[2] + ')">' + svg(t[0]) + "<span>" + t[1] + "</span></button>"; }).join("");
-    return '<header class="fe-h"><div class="fe-title"><span class="fe-eyebrow">디자인 시스템 · 프레임 편집기 ' + esc(o.title || "") + "</span>" +
-      (ed ? '<input class="fe-title-in" data-fx-doc="name" aria-label="컴포넌트 이름" placeholder="컴포넌트 이름 (예: 기본 버튼)" value="' + esc(S.doc.name) + '">' : "<b>" + esc(S.doc.name) + "</b>") +
+    var item = o.mode === "item";
+    return '<header class="fe-h"><div class="fe-title"><span class="fe-eyebrow">' + (item ? "화면설계서 항목" : "디자인 시스템") + " · 프레임 편집기 " + esc(o.title || "") + "</span>" +
+      (ed ? '<input class="fe-title-in" data-fx-doc="name" aria-label="' + (item ? "항목명" : "컴포넌트 이름") + '" placeholder="' + (item ? "항목명 (예: 신청 목록)" : "컴포넌트 이름 (예: 기본 버튼)") + '" value="' + esc(S.doc.name) + '">' : "<b>" + esc(S.doc.name) + "</b>") +
       '</div><span class="fe-state" id="fx-state"></span><span class="fe-sp"></span>' +
       (ed ? '<button class="fe-b" data-fx-act="undo" title="되돌리기 (Ctrl+Z)">↶</button><button class="fe-b" data-fx-act="redo" title="다시 (Ctrl+Shift+Z)">↷</button><span class="fe-sep"></span>' : "") +
       '<button class="fe-b" data-fx-act="zout" title="축소">−</button><button class="fe-b fx-zv" data-fx-act="z100">100%</button><button class="fe-b" data-fx-act="zin" title="확대">+</button><button class="fe-b" data-fx-act="fit">맞춤</button>' +
@@ -124,6 +125,7 @@
   }
   function renderVbar() {
     var b = S.el.querySelector(".fx-vbar"), ed = S.o.editable !== false;
+    if (S.o.mode === "item") { b.hidden = true; return; }
     b.innerHTML = '<span class="fx-vl">변형</span>' + S.doc.vars.map(function (v, i) { return '<button class="fx-vt" data-fx-v="' + i + '" aria-pressed="' + (i === S.vi) + '">' + esc(v.name) + "</button>"; }).join("") +
       (ed ? '<button class="fx-vt add" data-fx-act="vadd" title="지금 변형을 복제해 새 변형 만들기">+ 변형</button>' : "") +
       (ed && S.vi > 0 ? '<span class="fx-vedit"><input data-fx-vname value="' + esc(S.doc.vars[S.vi].name) + '" aria-label="변형 이름" maxlength="40"><button class="fe-b danger" data-fx-act="vdel">이 변형 삭제</button></span>' : "") +
@@ -189,10 +191,11 @@
   }
   function fit() {
     if (!S) return;
-    var wf = S.el.querySelector(".fx-wf"), v = S.view;
-    if (!wf) return;
+    var v = S.view;
     S.z = 1;
     renderCanvas();
+    var wf = S.el.querySelector(".fx-wf"); // 다시 그린 뒤의 요소로 재야 한다
+    if (!wf) return;
     var z = Math.min(2, (v.clientWidth - 200) / Math.max(1, wf.offsetWidth), (v.clientHeight - 200) / Math.max(1, wf.offsetHeight));
     S.z = Math.max(0.25, Math.round(z * 20) / 20);
     renderCanvas();
@@ -308,10 +311,16 @@
       (A.err ? '<p class="fe-err" role="alert">' + esc(A.err) + "</p>" : "") +
       (ed ? '<details class="gen-claude"><summary><span class="cl-logo">✳</span> Claude 구독(claude.ai)으로 만들기</summary><ol class="cl-steps"><li><button class="fe-b" data-fx-act="ai-copy">① 프롬프트 복사 · claude.ai 열기</button></li><li><label>② Claude 답 붙여 넣기<textarea rows="4" class="fx-paste" placeholder="Claude가 준 JSON(코드 블록 포함) 그대로"></textarea></label><button class="fe-b" data-fx-act="ai-paste">붙여 넣은 결과 적용</button></li></ol></details>' : "");
   }
+  function itemPanel() {
+    return (S.o.note ? '<p class="fe-note fx-warn">' + esc(S.o.note) + "</p>" : "") +
+      '<div class="fx-sec"><b>화면설계서 항목</b>' + (T().w === "fill" ? '<label>미리보기 폭(px)<input type="number" min="40" max="1920" data-fx-doc="frameW" value="' + S.doc.frameW + '"></label>' : "") +
+      '<div class="fe-help"><b>쓰는 법</b><ol><li>이 화면의 이 항목 모양만 바뀝니다. 디자인 시스템 컴포넌트는 그대로입니다.</li><li>글자는 두 번 눌러 바로 고치고, 표·목록의 행·열은 프레임을 복제(Ctrl+D)하거나 지워 늘리고 줄입니다.</li><li>‘인스턴스’ 도구로 디자인 시스템 컴포넌트(버튼·뱃지 등)를 넣을 수 있습니다.</li><li>저장하면 화면설계서·프로토타입에 바로 반영되고, 설명 번호·Description은 그대로 남습니다.</li></ol></div></div>';
+  }
   function docPanel() {
+    if (S.o.mode === "item") return itemPanel();
     var d = S.doc, binds = [];
     S.doc.vars.forEach(function (v) { F.walk(v.tree, function (n) { if (n.bind && binds.indexOf(n.bind) < 0) binds.push(n.bind); }); });
-    return '<div class="fx-sec"><b>컴포넌트</b><label>분류<select data-fx-doc="category">' + (S.o.categories || []).map(function (c) { return opt(c[0], c[1], d.category); }).join("") + "</select></label>" +
+    return (S.o.note ? '<p class="fe-note fx-warn">' + esc(S.o.note) + "</p>" : "") + '<div class="fx-sec"><b>컴포넌트</b><label>분류<select data-fx-doc="category">' + (S.o.categories || []).map(function (c) { return opt(c[0], c[1], d.category); }).join("") + "</select></label>" +
       '<label>설명<textarea rows="2" data-fx-doc="description" placeholder="언제 쓰는 컴포넌트인지">' + esc(d.description) + "</textarea></label>" +
       (T().w === "fill" ? '<label>미리보기 폭(px)<input type="number" min="40" max="1920" data-fx-doc="frameW" value="' + d.frameW + '"></label>' : "") +
       '<p class="fe-note">ID: <span class="mono">' + esc(d.id || "(저장하면 정해짐)") + "</span>" + (binds.length ? " · props: " + binds.map(function (b) { return "<code>" + esc(b) + "</code>"; }).join(" ") : " · props 연결 없음") + "</p>" +
@@ -593,6 +602,10 @@
     var id = pickId(ev.target);
     if (!id) { S.drag = { kind: "pan", x: ev.clientX, y: ev.clientY, l: S.view.scrollLeft, t: S.view.scrollTop }; return; }
     if (S.tool !== "select") { S.sel = id; addNode(S.tool); S.tool = "select"; render(); return; }
+    // 두 번 누르기: 누를 때마다 캔버스를 다시 그려 브라우저 dblclick이 안 오므로 직접 잰다
+    var tnow = Date.now(), ld = S.lastDown;
+    S.lastDown = { t: tnow, x: ev.clientX, y: ev.clientY };
+    if (ld && tnow - ld.t < 450 && Math.abs(ev.clientX - ld.x) < 6 && Math.abs(ev.clientY - ld.y) < 6) { S.lastDown = null; ev.preventDefault(); dblAt(id); return; }
     // 이미 선택한 요소의 자식을 누르면 한 단계씩 안으로 (피그마처럼): 선택이 없거나 다른 가지면 가장 바깥 자식부터
     var pick = deepestUnder(id);
     if (ev.shiftKey && S.sel && pick !== S.sel) { var mi = S.multi.indexOf(pick); if (mi >= 0) S.multi.splice(mi, 1); else S.multi.push(pick); S.forceSide = true; render(); ev.preventDefault(); return; }
@@ -672,12 +685,16 @@
     zoomTo(S.z * (ev.deltaY < 0 ? 1.1 : 1 / 1.1));
   }
   function onDbl(ev) {
-    if (!S || S.o.editable === false) return;
+    if (!S || S.o.editable === false || S.inline) return;
     var id = pickId(ev.target);
-    if (!id) return;
+    if (id) dblAt(id);
+  }
+  function dblAt(id) {
+    if (!S || S.o.editable === false) return;
     var f = F.find(T(), id);
     if (f && f.node.type === "text") { S.sel = id; render(); startInline(id); }
-    else if (f && f.node.type === "frame" && (f.node.children || []).length) { S.sel = f.node.children[0].id; S.forceSide = true; render(); }
+    else if (f && S.sel === id && f.node.type === "frame" && (f.node.children || []).length) { S.sel = f.node.children[0].id; S.forceSide = true; render(); }
+    else if (f) { S.sel = id; S.multi = []; S.forceSide = true; render(); }
   }
   function startInline(id) {
     var f = F.find(T(), id), b = boxOf(id), ta = S.el.querySelector(".fx-inline");
@@ -750,7 +767,7 @@
   // ── 저장 · 내보내기 ─────────────────────────
   function save() {
     if (!S.o.save || S.o.editable === false) return;
-    if (!String(S.doc.name || "").trim()) { S.o.toast && S.o.toast("컴포넌트 이름을 입력하세요", "err"); var ni = S.el.querySelector('[data-fx-doc="name"]'); if (ni) ni.focus(); return; }
+    if (!String(S.doc.name || "").trim()) { S.o.toast && S.o.toast(S.o.mode === "item" ? "항목명을 입력하세요" : "컴포넌트 이름을 입력하세요", "err"); var ni = S.el.querySelector('[data-fx-doc="name"]'); if (ni) ni.focus(); return; }
     var btn = S.el.querySelector('[data-fx-act="save"]');
     if (btn) { btn.disabled = true; btn.textContent = "저장 중…"; }
     var doc = { id: S.doc.id, name: S.doc.name, category: S.doc.category, description: S.doc.description, frameW: S.doc.frameW, tree: clone(S.doc.vars[0].tree), variantTrees: S.doc.vars.slice(1).map(clone) };
@@ -758,7 +775,7 @@
       if (!S) return;
       if (id) S.doc.id = id;
       S.saved = JSON.stringify(S.doc);
-      S.o.toast && S.o.toast("컴포넌트를 저장했습니다. 화면설계서에서 고를 수 있습니다");
+      S.o.toast && S.o.toast(S.o.mode === "item" ? "항목 모양을 저장했습니다. 화면설계서에 반영됐습니다" : "컴포넌트를 저장했습니다. 화면설계서에서 고를 수 있습니다");
       S.forceSide = true; render();
     }, function (e) { S && S.o.toast && S.o.toast("저장하지 못했습니다: " + (e && e.message || e), "err"); }).then(function () {
       var b2 = S && S.el.querySelector('[data-fx-act="save"]');
@@ -791,7 +808,7 @@
     S.ai.draft = ins;
     if (!ins && S.ai.mode === "new") { S.ai.err = "무엇을 그릴지 적어 주세요."; S.forceSide = true; renderSide(); return null; }
     var current = S.ai.mode === "new" ? null : { name: S.doc.name, tree: S.doc.vars[0].tree, variants: S.doc.vars.slice(1) };
-    return F.aiPrompt(S.o.ds, (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; }), { instruction: ins, current: current, name: S.doc.name, system: S.o.title });
+    return F.aiPrompt(S.o.ds, (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; }), { instruction: ins + (S.o.aiContext ? "\n\n" + S.o.aiContext : ""), current: current, name: S.doc.name, system: S.o.title });
   }
   /** AI 결과 넣기: {name, category, description, tree, variants:[{name, tree}]} */
   function applyAi(out) {
@@ -801,7 +818,7 @@
     if (!tree) throw new Error("AI 결과에 tree(프레임 노드)가 없습니다");
     tree.id = "root";
     var vars = [{ name: "기본", tree: tree }];
-    (Array.isArray(o.variants) ? o.variants : Array.isArray(o.variantTrees) ? o.variantTrees : []).slice(0, 19).forEach(function (v, i) {
+    (S.o.mode === "item" ? [] : Array.isArray(o.variants) ? o.variants : Array.isArray(o.variantTrees) ? o.variantTrees : []).slice(0, 19).forEach(function (v, i) {
       var t = v && F.sanitize(v.tree, comps);
       if (!t) return;
       t.id = "root";
@@ -812,12 +829,12 @@
     snap();
     S.doc.vars = vars;
     S.vi = 0; S.sel = "root"; S.multi = [];
-    if (o.name && (!S.doc.name || S.ai.mode === "new")) S.doc.name = String(o.name).slice(0, 60);
+    if (o.name && (!S.doc.name || S.ai.mode === "new" && S.o.mode !== "item")) S.doc.name = String(o.name).slice(0, 60);
     if (o.category && (S.o.categories || []).some(function (c) { return c[0] === o.category; })) S.doc.category = o.category;
     if (o.description && !S.doc.description) S.doc.description = String(o.description).slice(0, 300);
     var ni = S.el.querySelector('[data-fx-doc="name"]'); if (ni) ni.value = S.doc.name;
     S.forceSide = true; render(); fit();
-    S.o.toast && S.o.toast("AI 결과를 캔버스에 넣었습니다 (변형 " + vars.length + "개). 확인 후 저장하세요 — 되돌리기 가능");
+    S.o.toast && S.o.toast("AI 결과를 캔버스에 넣었습니다" + (S.o.mode === "item" ? "" : " (변형 " + vars.length + "개)") + ". 확인 후 저장하세요 — 되돌리기 가능");
   }
   function aiRun() {
     var ai = S.o.ai;

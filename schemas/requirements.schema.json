@@ -77,6 +77,10 @@
             "default": false,
             "type": "boolean"
           },
+          "spec": {
+            "type": "string",
+            "maxLength": 20000
+          },
           "tasks": {
             "default": [],
             "type": "array",

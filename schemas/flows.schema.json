@@ -94,6 +94,12 @@
                     "DELETED",
                     "KEPT"
                   ]
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
                 }
               },
               "required": [

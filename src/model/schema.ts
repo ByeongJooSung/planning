@@ -351,6 +351,8 @@ export const ComponentSpec = z.object({
       component: z.string(),
       props: z.record(z.string(), z.unknown()).default({}),
       link: z.string().optional(),
+      /** 이 화면에서만 쓰는 모양: 프레임 편집기로 고친 노드 트리 (있으면 디자인 시스템 컴포넌트 대신 이 모양으로 그린다) */
+      tree: z.lazy(() => FNode).optional(),
     })
     .optional(),
 });

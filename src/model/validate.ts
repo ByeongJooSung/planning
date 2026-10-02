@@ -111,7 +111,7 @@ export function validateModel(m: Model): Issue[] {
       if (!c.ui) continue;
       if (d?.status !== "SELECTED")
         err("NO_DESIGN_SYSTEM", `${s.screenId} 와이어프레임을 그리려면 ${s.systemCode} 디자인 시스템 컨셉을 먼저 선택해야 합니다`, s.screenId);
-      else if (!known.has(c.ui.component))
+      else if (!c.ui.tree && !known.has(c.ui.component))
         err("UNKNOWN_COMPONENT", `${s.screenId} #${c.no} "${c.ui.component}"는 ${s.systemCode} 디자인 시스템에 없습니다. 먼저 디자인 시스템에 추가하세요`, s.screenId);
       if (c.ui.link && !iaIds.has(c.ui.link)) err("UNKNOWN_SCREEN", `${s.screenId} #${c.no}의 이동 화면 ${c.ui.link}가 IA에 없습니다`, s.screenId);
     }

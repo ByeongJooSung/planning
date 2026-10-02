@@ -39,6 +39,41 @@
         "type": "string"
       }
     },
+    "work": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "IN_PROGRESS",
+              "DONE",
+              "NEEDS_REVIEW"
+            ]
+          },
+          "at": {
+            "type": "string"
+          },
+          "by": {
+            "default": "",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "at"
+        ]
+      }
+    },
     "history": {
       "default": [],
       "type": "array",

@@ -965,6 +965,7 @@ html.fe-open, html.fe-open body { overflow: hidden; }
 .fe-panel hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; width: 100%; }
 .fe-note { margin: 0; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
 .fe-note.warn, .fe-err { color: var(--crit); }
+.fe-note.fx-warn { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--ink-2); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
 .fe-err { margin: 0; font-size: 12px; }
 .fe-row b { font-size: 12px; color: var(--ink-2); }
 .fe-mini { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
@@ -1244,3 +1245,15 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .fx .fe-panel .fx-sub { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
 .fx-pad4 input { min-width: 0; width: 100%; box-sizing: border-box; padding: 6px 4px; }
 .fx-row2 input, .fx-row2 select, .fx-size input, .fx-size select { min-width: 0; box-sizing: border-box; }
+
+/* 화면설계서 캔버스 편집 도구 */
+.sb-canvas.edit .sbc-board { cursor: default; }
+.sbc-hov, .sbc-sel { position: absolute; pointer-events: none; border-radius: 3px; z-index: 1; }
+.sbc-hov { outline: 1.5px dashed var(--accent); outline-offset: 2px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.sbc-sel { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 4; }
+.sbc-bar { position: absolute; left: -4px; bottom: 100%; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; padding: 4px 6px; background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 18px rgba(15, 23, 42, .16); pointer-events: auto; flex-wrap: wrap; width: max-content; max-width: 640px; z-index: 5; }
+.sbc-bar.below { bottom: auto; top: 100%; margin: 8px 0 0; }
+.sbc-bar > b { font-size: 12px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; color: var(--ink-2); }
+.sbc-bar .btn-sm { padding: 3px 8px; font-size: 12px; white-space: nowrap; }
+.sbc-own { position: absolute; right: -2px; top: -2px; transform: translateY(-100%); font-size: 11px; padding: 1px 6px; border-radius: 6px 6px 0 0; background: var(--accent); color: #fff; }
+.sbc-bar:not(.below) ~ .sbc-own { display: none; }

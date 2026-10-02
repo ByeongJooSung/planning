@@ -52,6 +52,27 @@ describe("서비스 코어", () => {
     expect(comps.map((c) => c.ui?.component)).toEqual(["data-table", "text-input", undefined]);
   });
 
+  it("화면설계서 항목은 이 화면에서만 쓰는 프레임 모양(ui.tree)을 가질 수 있고, 복제·AI 재생성에도 유지된다", () => {
+    let r = execute(base(), { op: "screen.add", systemCode: "PUB", name: "공지 목록" }, now);
+    const id = r.state.model.ia.nodes.find((n) => n.name === "공지 목록")!.id;
+    r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output: { components: [{ no: 1, label: "목록", kind: "data-table", ui: { component: "data-table", props: {} } }] } }, now);
+    const tree = { id: "root", type: "frame", w: "fill", h: "hug", layout: { mode: "column", gap: 8, pad: [8, 8, 8, 8], align: "start", justify: "start", wrap: false }, children: [{ id: "t1", type: "text", text: "직접 그린 표" }] };
+    r = execute(r.state, { op: "sb.component", screenId: id, no: 1, input: { label: "목록", kind: "data-table", planner: "", customer: "", ui: { component: "data-table", props: {}, tree } } }, now);
+    const sbOf = (st: typeof r.state) => st.model.storyboard.screens.find((x) => x.screenId === id)!;
+    expect(sbOf(r.state).components[0]!.ui!.tree).toMatchObject({ id: "root", children: [{ text: "직접 그린 표" }] });
+    // 새로 그린 항목: 디자인 시스템에 없는 component("frame")여도 모양이 있으면 통과
+    r = execute(r.state, { op: "sb.component", screenId: id, input: { label: "안내 박스", kind: "frame", planner: "", customer: "", ui: { component: "frame", props: {}, tree } } }, now);
+    expect(sbOf(r.state).components.map((c) => c.ui?.component)).toEqual(["data-table", "frame"]);
+    expect(() => execute(r.state, { op: "sb.component", screenId: id, no: 2, input: { label: "안내 박스", kind: "frame", planner: "", customer: "", ui: { component: "frame", props: {} } } }, now)).toThrow(/디자인 시스템에 없습니다|UNKNOWN_COMPONENT|frame/);
+    // 복제: 바로 뒤에 들어가고 번호가 다시 매겨진다
+    r = execute(r.state, { op: "sb.dup", screenId: id, no: 1 }, now);
+    expect(sbOf(r.state).components.map((c) => `${c.no}:${c.label}`)).toEqual(["1:목록", "2:목록 복사", "3:안내 박스"]);
+    expect(sbOf(r.state).components[1]!.ui!.tree).toBeTruthy();
+    // AI가 같은 항목을 다시 만들어도 직접 그린 모양은 남는다
+    r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output: { components: [{ no: 1, label: "목록", kind: "data-table", planner: "최신순", ui: { component: "data-table", props: { columns: ["번호"] } } }] } }, now);
+    expect(sbOf(r.state).components[0]).toMatchObject({ planner: "최신순", ui: { component: "data-table", tree: { id: "root" } } });
+  });
+
   it("디자인 미세조정 적용 후 되돌리기", () => {
     let s = execute(base(), { op: "design.select", systemCode: "PUB", conceptId: "A" }, now).state;
     const before = structuredClone(s.model.design.systems.find((d) => d.systemCode === "PUB")!);

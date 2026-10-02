@@ -125,6 +125,7 @@ export type Command =
   /** 빈 화면설계서 만들기 · 항목 순서 바꾸기 · 화면설계서 지우기 */
   | { op: "sb.create"; screenId: string; template?: string }
   | { op: "sb.reorder"; screenId: string; order: number[] }
+  | { op: "sb.dup"; screenId: string; no: number }
   | { op: "sb.delete"; screenId: string }
   /** 프로세스 플로우 저장 (캔버스에서 직접 편집한 결과 — 옮긴 위치 포함) */
   | { op: "flow.save"; requirementId: string; flow: unknown }
@@ -414,6 +415,19 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       sb.components = order.map((no, i) => ({ ...sb.components.find((c) => c.no === no)!, no: i + 1 }));
       touchStoryboard(m, sb.screenId, now);
       message = `${cmd.screenId} 항목 순서를 바꿨습니다`;
+      break;
+    }
+    case "sb.dup": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      const i = sb.components.findIndex((x) => x.no === cmd.no);
+      if (i < 0) throw new Error(`${cmd.no}번 항목이 없습니다`);
+      const { marker: _m, ...copy } = structuredClone(sb.components[i]!);
+      sb.components.splice(i + 1, 0, { ...copy, label: `${copy.label} 복사` });
+      sb.components.forEach((x, k) => (x.no = k + 1));
+      touchStoryboard(m, sb.screenId, now);
+      message = `${cmd.screenId} ${cmd.no}번 항목을 복제했습니다 (${cmd.no + 1}번)`;
+      detail = { no: cmd.no + 1 };
       break;
     }
     case "sb.delete": {

@@ -77,7 +77,9 @@
       inner = (n.children || []).map(function (c) { return node(c, o, { mode: L.mode }, depth + 1); }).join("");
     } else if (n.type === "text") {
       var txt = n.bind && o.props && o.props[n.bind] != null ? String(o.props[n.bind]) : n.text || "";
-      st.push("font-size:" + fsize(n.size), "font-weight:" + (n.weight || 400), "color:" + color(n.color, "var(--w-text)"), "white-space:pre-wrap", "line-height:1.45", "margin:0");
+      st.push("font-size:" + fsize(n.size), "font-weight:" + (n.weight || 400), "color:" + color(n.color, "var(--w-text)"), "white-space:" + (w == null || w === "hug" ? "pre" : "pre-wrap"), "line-height:1.45", "margin:0");
+      // 내용에 맞춤(hug) 글자는 피그마 Auto width처럼 줄바꿈하지 않는다. 긴 본문은 w를 fill·숫자로
+      if (w == null || w === "hug") st.push("flex-shrink:0");
       if (n.talign) st.push("text-align:" + n.talign);
       inner = esc(txt);
     } else if (n.type === "line") {
@@ -422,7 +424,7 @@
       "- text: text, size(토큰 이름 또는 px), weight(400·500·600·700), color, talign: left|center|right, bind(화면설계서 props와 연결할 이름: label·title·text·placeholder·count 등)",
       "- rect·ellipse: w·h·fill·radius · line: w(fill), stroke · icon: icon(" + icons.join(", ") + "), w, color",
       "- instance: ref(아래 컴포넌트 ID), variant, props{bind 이름: 글자}",
-      "- 크기 w·h: 숫자(px) · hug(내용에 맞춤) · fill(남은 공간 채우기)",
+      "- 크기 w·h: 숫자(px) · hug(내용에 맞춤) · fill(남은 공간 채우기). text는 w가 없거나 hug면 한 줄(줄바꿈 안 함) — 여러 줄 본문은 w를 fill이나 숫자로",
       "- hidden: true 면 숨김 (변형마다 보이고 숨길 때)",
       "",
       "## 인스턴스로 쓸 수 있는 컴포넌트",
@@ -471,5 +473,236 @@
     ].join("\n");
   }
 
-  root.Frames = { aiPrompt: aiPrompt, figmaExportScript: figmaExportScript, ordered: ordered, treeOf: treeOf, binds: binds, sanitize: sanitize, html: html, node: node, walk: walk, find: find, nextId: nextId, tokensJson: tokensJson, figmaScript: figmaScript, figmaPlugin: figmaPlugin, figmaPrompt: figmaPrompt, COLOR_VAR: COLOR_VAR, COLOR_LABEL: COLOR_LABEL, SIZE_VAR: SIZE_VAR, color: color, fontName: fontName };
+  // ── 화면(HTML) → 프레임 노드 ─────────────────────
+  // 지금 그려진 모양을 편집 초안으로: 요소 상자 위치로 오토 레이아웃(가로·세로·간격·패딩·정렬)을 추정하고,
+  // 색·글자 크기·모서리는 디자인 토큰 값과 같으면 토큰 이름으로 되돌린다. 겹쳐 놓인 요소는 위치 지정으로.
+  function rgbHex(c) {
+    var m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/.exec(c || "");
+    if (!m) return null;
+    var a = m[4] == null ? 1 : /%$/.test(m[4]) ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    if (a < 0.05) return null;
+    var ch = [m[1], m[2], m[3]].map(function (x) { var v = Math.round(parseFloat(x) * a + 255 * (1 - a)); return ("0" + Math.max(0, Math.min(255, v)).toString(16)).slice(-2); });
+    return "#" + ch.join("").toUpperCase();
+  }
+  function fromHtml(html, o) {
+    o = o || {};
+    var host = document.createElement("div");
+    host.className = (o.cls || "wf") + " fr-probe";
+    host.setAttribute("style", (o.vars || "") + ";position:fixed;left:-20000px;top:0;width:" + (o.width || 1200) + "px;pointer-events:none");
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    try {
+      var el = o.select ? host.querySelector(o.select) : host;
+      // 꾸밈 없는 감싸개 한 겹짜리는 벗겨 실제 모양부터 시작한다
+      while (el && el.children.length === 1 && !Array.prototype.some.call(el.childNodes, function (c) { return c.nodeType === 3 && c.nodeValue.trim(); })) {
+        var cs = getComputedStyle(el);
+        if (rgbHex(cs.backgroundColor) || parseFloat(cs.borderTopWidth) || parseFloat(cs.borderBottomWidth) || parseFloat(cs.paddingTop) || parseFloat(cs.paddingLeft) || (cs.boxShadow && cs.boxShadow !== "none")) break;
+        el = el.children[0];
+      }
+      return el ? fromDom(el, Object.assign({}, o, { host: host })) : null;
+    } finally { host.parentNode.removeChild(host); }
+  }
+  function fromDom(rootEl, o) {
+    o = o || {};
+    var host = o.host || rootEl;
+    var probe = document.createElement("i");
+    probe.style.cssText = "position:absolute;visibility:hidden";
+    host.appendChild(probe);
+    var colorTok = {}, sizeTok = [], radTok = [];
+    Object.keys(COLOR_VAR).forEach(function (k) { probe.style.color = "var(" + COLOR_VAR[k] + ")"; var hx = rgbHex(getComputedStyle(probe).color); if (hx && !colorTok[hx]) colorTok[hx] = k; });
+    Object.keys(SIZE_VAR).forEach(function (k) { probe.style.fontSize = "var(" + SIZE_VAR[k] + ")"; sizeTok.push([k, parseFloat(getComputedStyle(probe).fontSize)]); });
+    Object.keys(RADIUS_VAR).forEach(function (k) { probe.style.borderRadius = "var(" + RADIUS_VAR[k] + ")"; var v = parseFloat(getComputedStyle(probe).borderTopLeftRadius); if (isFinite(v)) radTok.push([k, v]); });
+    host.removeChild(probe);
+    var seq = 0, used = {};
+    function nid(p) { var id; do { id = p + (++seq); } while (used[id]); used[id] = true; return id; }
+    function col(c) { var hx = rgbHex(c); return hx ? colorTok[hx] || hx : null; }
+    function fsz(px) { var t = sizeTok.find(function (x) { return Math.abs(x[1] - px) < 0.6; }); return t ? t[0] : Math.max(6, Math.min(200, Math.round(px))); }
+    function rad(px, w, h) { if (!px) return undefined; if (px >= Math.min(w, h) / 2 - 0.5 && px >= 8) return "full"; var t = radTok.find(function (x) { return Math.abs(x[1] - px) < 0.6; }); return t ? t[0] : Math.round(px); }
+    function px(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+    function clampP(v) { return Math.max(0, Math.min(400, Math.round(v))); }
+    var TAGN = { table: "표", thead: "머리글", tbody: "본문 행", tr: "행", th: "머리글 칸", td: "칸", ul: "목록", ol: "목록", li: "항목", button: "버튼", input: "입력칸", select: "선택칸", textarea: "입력칸", label: "라벨", nav: "메뉴", header: "머리", footer: "바닥", form: "양식", a: "링크", p: "문단", h1: "제목", h2: "제목", h3: "제목", h4: "제목" };
+    var W = function (re) { return new RegExp("(^|-)(" + re + ")($|-)"); };
+    var CLSN = [[W("btn|button|btns"), "버튼"], [W("badge|chip|tag"), "뱃지"], [W("card|cards"), "카드"], [W("tab|tabs"), "탭"], [W("dtable|table|grid"), "표"], [W("inp|input|field|txt|textarea"), "입력칸"], [W("sel|select"), "선택칸"], [W("chk|check|checkbox"), "체크박스"], [W("radio|rd"), "라디오"], [W("lbl|label"), "라벨"], [W("pg|pagination|pager"), "페이지"], [W("step|steps"), "단계"], [W("search|srch|sf"), "검색"], [W("file|files|upload|drop"), "파일"], [W("stat|stats"), "통계"], [W("head|hd|header"), "머리"], [W("foot|footer"), "바닥"], [W("row|fr"), "행"], [W("list|ul"), "목록"], [W("ic|icon"), "아이콘"], [W("title|tit"), "제목"], [W("meta|desc"), "설명"], [W("total|count"), "건수"]];
+    function nameOf(el) {
+      var cls = (el.getAttribute("class") || "").split(/\s+/).filter(Boolean).map(function (c) { return c.replace(/^(wf|fr)-/, ""); });
+      for (var i = 0; i < cls.length; i++) for (var j = 0; j < CLSN.length; j++) if (CLSN[j][0].test(cls[i])) return CLSN[j][1];
+      return TAGN[el.tagName.toLowerCase()] || (cls[0] ? cls[0].slice(0, 40) : "프레임");
+    }
+    var bindLeft = {};
+    Object.keys(o.props || {}).forEach(function (k) { var v = o.props[k]; if ((typeof v === "string" || typeof v === "number") && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(k) && k !== "variant") bindLeft[k] = String(v).trim(); });
+    function bindOf(text) { for (var k in bindLeft) if (bindLeft[k] && bindLeft[k] === text) { delete bindLeft[k]; return k; } return undefined; }
+
+    function textItem(tn, cs) {
+      var raw = tn.nodeValue || "";
+      var pre = /pre/.test(cs.whiteSpace);
+      var t = pre ? raw.replace(/^\n+|\s+$/g, "") : raw.replace(/\s+/g, " ").trim();
+      if (!t) return null;
+      var rg = document.createRange(); rg.selectNodeContents(tn);
+      var rs = Array.prototype.filter.call(rg.getClientRects(), function (r) { return r.width > 0 && r.height > 0; });
+      if (!rs.length) return null;
+      var b = rg.getBoundingClientRect();
+      var fpx = px(cs.fontSize), lines = 0, lastTop = -1e9;
+      rs.forEach(function (r) { if (r.top > lastTop + fpx * 0.5) { lines++; lastTop = r.top; } });
+      var n = { id: nid("t"), type: "text", name: t.slice(0, 24), text: t.slice(0, 2000), size: fsz(fpx), weight: Math.max(100, Math.min(900, Math.round(px(cs.fontWeight) / 100) * 100 || 400)) };
+      var c = col(cs.color); if (c && c !== "text") n.color = c;
+      if (cs.textAlign === "center" || cs.textAlign === "right") n.talign = cs.textAlign;
+      if (lines > 1) n.w = Math.ceil(b.width) + 1;
+      // 줄 상자 높이로 (렌더러는 line-height 1.45)
+      var lh = lines === 1 ? fpx * 1.45 : 0;
+      if (lh > b.height) b = { left: b.left, width: b.width, top: b.top - (lh - b.height) / 2, height: lh, right: b.right, bottom: b.top - (lh - b.height) / 2 + lh };
+      var bd = bindOf(t); if (bd) n.bind = bd;
+      return { node: n, r: b };
+    }
+    function visuals(el, cs, r) {
+      var v = {};
+      var bg = cs.backgroundColor && col(cs.backgroundColor); if (bg) v.fill = bg;
+      var bw = ["Top", "Right", "Bottom", "Left"].map(function (s) { return cs["border" + s + "Style"] === "none" ? 0 : px(cs["border" + s + "Width"]); });
+      var bc = ["Top", "Right", "Bottom", "Left"].map(function (s) { return col(cs["border" + s + "Color"]); });
+      if (bw[0] && bw[0] === bw[1] && bw[1] === bw[2] && bw[2] === bw[3] && bc[0]) { v.stroke = bc[0]; v.strokeW = Math.min(20, Math.round(bw[0])); }
+      else { if (bw[2] && bc[2]) v.lineBottom = { c: bc[2], w: Math.round(bw[2]) }; if (bw[0] && bc[0]) v.lineTop = { c: bc[0], w: Math.round(bw[0]) }; if (bw[3] && bc[3] && !bw[1]) v.lineLeft = { c: bc[3], w: Math.round(bw[3]) }; }
+      var rr = rad(px(cs.borderTopLeftRadius), r.width, r.height); if (rr != null && (v.fill || v.stroke)) v.radius = rr;
+      var ins = /^(rgba?\([^)]*\))\s+0px\s+(-?\d+(?:\.\d+)?)px\s+0px(?:\s+0px)?\s+inset$/.exec(cs.boxShadow || "");
+      if (ins) { var ic2 = col(ins[1]), iw = Math.round(Math.abs(parseFloat(ins[2]))); if (ic2 && iw) { if (parseFloat(ins[2]) < 0) v.lineBottom = { c: ic2, w: iw }; else v.lineTop = { c: ic2, w: iw }; } }
+      else if (cs.boxShadow && cs.boxShadow !== "none") v.shadow = /(\d{2,})px/.test(cs.boxShadow) ? "strong" : "soft";
+      if (cs.overflow === "hidden" && (v.fill || v.stroke)) v.clip = true;
+      var op = px(cs.opacity); if (cs.opacity !== "" && op < 1) v.opacity = Math.round(op * 100) / 100;
+      return v;
+    }
+    function median(a) { var b = a.slice().sort(function (x, y) { return x - y; }); return b.length ? b[Math.floor(b.length / 2)] : 0; }
+
+    function conv(el, depth) {
+      var cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") return null;
+      var r = el.getBoundingClientRect(), tag = el.tagName.toLowerCase();
+      if (tag === "svg") {
+        if (!r.width) return null;
+        var ic = { id: nid("i"), type: "icon", name: "아이콘", icon: el.getAttribute("data-ic") || "info", w: Math.round(r.width), h: Math.round(r.height) };
+        var icc = col(cs.color); if (icc && icc !== "text") ic.color = icc;
+        return { node: ic, r: r };
+      }
+      if (tag === "img" || tag === "canvas" || tag === "video") return r.width ? { node: { id: nid("r"), type: "rect", name: "이미지", w: Math.round(r.width), h: Math.round(r.height), fill: "surfaceAlt" }, r: r } : null;
+      if (/^(script|style|template|br|wbr)$/.test(tag)) return null;
+      var v = visuals(el, cs, r);
+      var items = [];
+      if (tag === "input" || tag === "textarea" || tag === "select") {
+        var tv = tag === "select" ? (el.options[el.selectedIndex] || {}).text : el.value || el.getAttribute("placeholder") || "";
+        if (tv) { var tn = { id: nid("t"), type: "text", name: "값", text: String(tv).slice(0, 200), size: fsz(px(cs.fontSize)), color: el.value ? "text" : "textMuted" }; items.push({ node: tn, r: { left: r.left + px(cs.paddingLeft) + px(cs.borderLeftWidth), top: r.top + r.height / 2 - px(cs.fontSize) * 0.7, width: 10, height: px(cs.fontSize) * 1.4, right: r.left + 10, bottom: r.top + r.height / 2 } }); }
+      } else if (depth >= 12) {
+        var tx = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (tx) items.push({ node: { id: nid("t"), type: "text", name: tx.slice(0, 24), text: tx.slice(0, 2000), size: fsz(px(cs.fontSize)) }, r: r });
+      } else {
+        Array.prototype.forEach.call(el.childNodes, function (ch) {
+          if (ch.nodeType === 3) { var ti = textItem(ch, cs); if (ti) items.push(ti); }
+          else if (ch.nodeType === 1 && ch !== o.skip) { var ci = conv(ch, depth + 1); if (ci) items.push(ci); }
+        });
+      }
+      var hasBox = v.fill || v.stroke || v.shadow || v.lineBottom || v.lineTop || v.lineLeft;
+      var padRaw = [px(cs.paddingTop), px(cs.paddingRight), px(cs.paddingBottom), px(cs.paddingLeft)];
+      var isRoot = el === rootEl;
+      if (!items.length) {
+        if (!hasBox || r.width < 1 || r.height < 1) return null;
+        var shape = { id: nid("r"), type: v.radius === "full" && Math.abs(r.width - r.height) < 2 ? "ellipse" : "rect", name: nameOf(el), w: Math.round(r.width), h: Math.round(r.height) };
+        ["fill", "stroke", "strokeW", "radius", "shadow", "opacity"].forEach(function (k) { if (v[k] != null) shape[k] = v[k]; });
+        if (shape.type === "ellipse") delete shape.radius;
+        if (!shape.fill && !shape.stroke) { var ln = v.lineBottom || v.lineTop || v.lineLeft; shape.stroke = ln.c; shape.strokeW = ln.w; }
+        return { node: shape, r: r };
+      }
+      // 꾸밈 없는 감싸개는 벗긴다
+      if (!isRoot && !hasBox && items.length === 1 && padRaw.every(function (x) { return x < 1; })) return items[0];
+      var f = { id: isRoot ? "root" : nid("f"), type: "frame", name: nameOf(el) };
+      ["fill", "stroke", "strokeW", "radius", "shadow", "clip", "opacity"].forEach(function (k) { if (v[k] != null) f[k] = v[k]; });
+      var bl = px(cs.borderLeftWidth), bt = px(cs.borderTopWidth), br = px(cs.borderRightWidth), bb = px(cs.borderBottomWidth);
+      var cL = r.left + bl, cT = r.top + bt, cR = r.right - br, cB = r.bottom - bb;
+      var rs = items.map(function (it) { return it.r; });
+      var minL = Math.min.apply(null, rs.map(function (q) { return q.left; })), maxR = Math.max.apply(null, rs.map(function (q) { return q.left + q.width; }));
+      var minT = Math.min.apply(null, rs.map(function (q) { return q.top; })), maxB = Math.max.apply(null, rs.map(function (q) { return q.top + q.height; }));
+      var flex = /flex/.test(cs.display), dir = flex ? (/column/.test(cs.flexDirection) ? "column" : "row") : null;
+      var vert = true, horiz = true;
+      for (var i = 1; i < rs.length; i++) {
+        if (rs[i].top < rs[i - 1].top + rs[i - 1].height - 2) vert = false;
+        if (rs[i].left < rs[i - 1].left + rs[i - 1].width - 2 || rs[i].top >= rs[i - 1].top + rs[i - 1].height - 2) horiz = false;
+      }
+      var wrapRow = flex && dir === "row" && cs.flexWrap === "wrap" && !horiz;
+      var mode = rs.length === 1 ? (dir || "column") : dir === "row" && (horiz || wrapRow) ? "row" : dir === "column" && vert ? "column" : horiz ? "row" : vert ? "column" : "none";
+      if (/grid/.test(cs.display) && mode === "none") { mode = "row"; wrapRow = true; }
+      var gaps = [];
+      for (var j = 1; j < rs.length; j++) gaps.push(mode === "row" ? rs[j].left - (rs[j - 1].left + rs[j - 1].width) : rs[j].top - (rs[j - 1].top + rs[j - 1].height));
+      if (wrapRow) gaps = [px(cs.columnGap) || 0];
+      if (mode !== "none" && gaps.length > 1 && !wrapRow) { var g0 = gaps.filter(function (g) { return g >= 0; }); if (Math.max.apply(null, g0.concat([0])) - Math.min.apply(null, g0.concat([0])) > 8) mode = "none"; }
+      var Wd = Math.round(r.width), Hd = Math.round(r.height);
+      if (mode === "none") {
+        f.layout = { mode: "none", gap: 0, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false };
+        f.w = Wd; f.h = Hd;
+        f.children = items.map(function (it) { var n = it.node; n.x = Math.round(it.r.left - cL); n.y = Math.round(it.r.top - cT); if (n.type === "text" && n.w == null) n.w = Math.ceil(it.r.width) + 1; return n; });
+      } else {
+        var gap = clampP(wrapRow ? gaps[0] : median(gaps.filter(function (g) { return g >= 0; })));
+        var cw = cR - cL, ch = cB - cT;
+        // 내용 둘레 여백(slack)과 CSS 패딩을 비교: 같으면 내용에 맞춤, 더 크면 고정 크기 + 정렬로 나타낸다
+        var gL = minL - cL, gR = cR - maxR, gT = minT - cT, gB = cB - maxB;
+        var hcen = Math.abs(gL - gR) < 2.5 && gL > padRaw[3] + 2, vcen = Math.abs(gT - gB) < 2.5 && gT > padRaw[0] + 2;
+        var slackW = gR > padRaw[1] + 2 || hcen || gL > padRaw[3] + 2, slackH = gB > padRaw[2] + 2 || vcen || gT > padRaw[0] + 2;
+        var pad = [vcen ? padRaw[0] : gT, slackW ? padRaw[1] : gR, slackH ? padRaw[2] : gB, hcen ? padRaw[3] : gL].map(clampP);
+        if (!hcen && gL > padRaw[3] + 2 && gR <= padRaw[1] + 2) pad[3] = clampP(padRaw[3]); // 오른쪽 정렬
+        if (!vcen && gT > padRaw[0] + 2 && gB <= padRaw[2] + 2) pad[0] = clampP(padRaw[0]); // 아래 정렬
+        var endH = !hcen && gL > padRaw[3] + 2 && gR <= padRaw[1] + 2, endV = !vcen && gT > padRaw[0] + 2 && gB <= padRaw[2] + 2;
+        var align = "start", justify = "start";
+        if (mode === "row") {
+          var cent = rs.length > 1 && rs.every(function (q) { return Math.abs(q.top + q.height / 2 - (minT + maxB) / 2) < 2; }) && !rs.every(function (q) { return Math.abs(q.top - minT) < 2; });
+          align = vcen || cent ? "center" : endV ? "end" : "start";
+          if (flex && cs.alignItems === "center") align = "center";
+          justify = hcen ? "center" : endH ? "end" : "start";
+          if (flex && cs.justifyContent === "space-between" && rs.length > 1) { justify = "between"; pad[1] = clampP(padRaw[1]); pad[3] = clampP(padRaw[3]); }
+          if (align === "center" && !vcen) { pad[0] = pad[2] = clampP(Math.min(gT, gB)); }
+        } else {
+          var cen = rs.length > 1 && rs.every(function (q) { return Math.abs(q.left + q.width / 2 - (cL + cR) / 2) < 2; }) && !rs.every(function (q) { return Math.abs(q.left - minL) < 2; });
+          align = hcen || cen ? "center" : endH ? "end" : "start";
+          if (flex && cs.alignItems === "center") align = "center";
+          if (align === "center" && !hcen) { pad[1] = pad[3] = clampP(Math.min(gL, gR)); }
+          justify = vcen ? "center" : endV ? "end" : "start";
+          if (flex && cs.justifyContent === "space-between" && rs.length > 1) { justify = "between"; pad[0] = clampP(padRaw[0]); pad[2] = clampP(padRaw[2]); }
+        }
+        f.layout = { mode: mode, gap: gap, pad: pad, align: align, justify: justify, wrap: !!wrapRow };
+        var inW = cw - pad[1] - pad[3];
+        f.children = items.map(function (it) {
+          var n = it.node, q = it.r;
+          if (n.type === "frame" && mode === "column" && Math.abs(q.width - inW) < 2) n.w = "fill";
+          if (n.type === "text" && mode === "column" && n.w != null && Math.abs(q.width - inW) < 3) n.w = "fill";
+          return n;
+        });
+        // 한 줄을 꽉 채운 칸들(표의 행·통계 카드 등): 폭이 같으면 모두 채우기, 다르면 가장 넓은 칸만 채우기 → 폭이 바뀌어도 맞춰진다
+        if (mode === "row" && !wrapRow && rs.length > 1 && f.children.every(function (n) { return n.type === "frame"; }) &&
+          Math.abs(rs.reduce(function (a, q) { return a + q.width; }, 0) + gap * (rs.length - 1) - inW) < 3) {
+          var ws = rs.map(function (q) { return q.width; }), mx = Math.max.apply(null, ws);
+          if (mx - Math.min.apply(null, ws) < 2) f.children.forEach(function (n) { n.w = "fill"; });
+          else f.children[ws.indexOf(mx)].w = "fill";
+        }
+        var spread = justify === "between";
+        f.w = isRoot || wrapRow || slackW || spread && mode === "row" ? Wd : "hug";
+        f.h = !wrapRow && (slackH || spread && mode === "column") ? Hd : "hug";
+      }
+      // 한쪽 테두리(표의 줄·탭 밑줄 등) → 위·아래 선
+      if (v.lineBottom || v.lineTop) {
+        var outer = { id: nid("f"), type: "frame", name: f.name, w: f.w === "hug" ? "hug" : typeof f.w === "number" ? f.w : f.w, h: "hug", layout: { mode: "column", gap: 0, pad: [0, 0, 0, 0], align: "stretch", justify: "start", wrap: false }, children: [] };
+        if (isRoot) { outer.id = "root"; f.id = nid("f"); }
+        f.w = "fill";
+        if (typeof f.h === "number") f.h = Math.max(0, f.h - (v.lineTop ? v.lineTop.w : 0) - (v.lineBottom ? v.lineBottom.w : 0));
+        if (v.lineTop) outer.children.push({ id: nid("l"), type: "line", name: "선", stroke: v.lineTop.c, strokeW: v.lineTop.w });
+        outer.children.push(f);
+        if (v.lineBottom) outer.children.push({ id: nid("l"), type: "line", name: "선", stroke: v.lineBottom.c, strokeW: v.lineBottom.w });
+        return { node: outer, r: r };
+      }
+      return { node: f, r: r };
+    }
+    var res = conv(rootEl, 0);
+    if (!res) return null;
+    var t = res.node;
+    if (t.type !== "frame") t = { id: "root", type: "frame", name: o.name || "컴포넌트", w: "hug", h: "hug", layout: { mode: "column", gap: 0, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false }, children: [t] };
+    t.id = "root"; delete t.x; delete t.y;
+    if (o.name) t.name = o.name;
+    // 렌더러 깊이 한도(14)를 넘지 않게 + 자식 수 한도
+    (function trim(n, d) { if (n.children) { if (n.children.length > 200) n.children = n.children.slice(0, 200); if (d >= 13) delete n.children; else n.children.forEach(function (c) { trim(c, d + 1); }); } })(t, 0);
+    return t;
+  }
+
+  root.Frames = { fromHtml: fromHtml, fromDom: fromDom, aiPrompt: aiPrompt, figmaExportScript: figmaExportScript, ordered: ordered, treeOf: treeOf, binds: binds, sanitize: sanitize, html: html, node: node, walk: walk, find: find, nextId: nextId, tokensJson: tokensJson, figmaScript: figmaScript, figmaPlugin: figmaPlugin, figmaPrompt: figmaPrompt, COLOR_VAR: COLOR_VAR, COLOR_LABEL: COLOR_LABEL, SIZE_VAR: SIZE_VAR, color: color, fontName: fontName };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -148,7 +148,10 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
     components: out.components.map((c0) => {
       const c = ds?.status === "SELECTED" ? fitUi(c0, ds) : c0;
       const was = prev?.components.find((x) => x.no === c.no && x.label === c.label);
-      return was?.marker && !c.marker ? { ...c, marker: was.marker } : c;
+      let out = was?.marker && !c.marker ? { ...c, marker: was.marker } : c;
+      // 화면에서 직접 그린 모양(프레임)은 같은 항목·같은 컴포넌트면 유지
+      if (was?.ui?.tree && (!out.ui || out.ui.component === was.ui.component)) out = { ...out, ui: { ...(out.ui ?? was.ui), tree: was.ui.tree } };
+      return out;
     }),
     status: "DRAFT",
     designRevision: ds?.status === "SELECTED" ? ds.revision : undefined,
@@ -175,7 +178,8 @@ const ALIAS: Record<string, string> = {
  * 디자인 시스템에 없는 컴포넌트 이름이 오면 가까운 컴포넌트로 바꾼다 — 한 항목 때문에 화면 전체 반영이 막히지 않게.
  * 대소문자·구분자 차이, 흔한 다른 이름, 이름(한글) 일치, 유형(kind) 순으로 찾고, 없으면 와이어프레임만 비운다.
  */
-function fitUi<T extends { kind: string; label: string; ui?: { component: string; props: Record<string, unknown>; link?: string } }>(c: T, ds: { components: { id: string; name: string }[] }): T {
+function fitUi<T extends { kind: string; label: string; ui?: { component: string; props: Record<string, unknown>; link?: string; tree?: unknown } }>(c: T, ds: { components: { id: string; name: string }[] }): T {
+  if (c.ui?.tree) return c;
   if (!c.ui) {
     const k = ds.components.find((x) => x.id === c.kind);
     return k ? { ...c, ui: { component: k.id, props: {} } } : c;
@@ -261,7 +265,7 @@ function normUi(v: unknown, kind: string | undefined): Obj | undefined {
   const component = str(v.component ?? v.id ?? v.type) ?? kind;
   if (!component) return undefined;
   const link = str(v.link);
-  return { component, props: isObj(v.props) ? v.props : {}, ...(link && link.trim() ? { link: link.trim() } : {}) };
+  return { component, props: isObj(v.props) ? v.props : {}, ...(link && link.trim() ? { link: link.trim() } : {}), ...(isObj(v.tree) ? { tree: v.tree } : {}) };
 }
 
 /** 화면설계서 결과 보정 — options 가 배열·값 없이 오거나, 번호가 글자로 오는 경우 등 */
