@@ -109,3 +109,28 @@ describe("Task·요구사항 고치기", () => {
     expect(() => execute(s, { op: "req.edit", id: "SFR-002", input: { title: "" } }, now)).toThrow(/제목/);
   });
 });
+
+describe("Task 없이 만들기 · 디자인 직접 편집", () => {
+  it("Task가 없어도 정보구조도·플로우 생성 프롬프트가 있고, Task 없는 설계 규칙이 들어간다", async () => {
+    const { buildNewProject } = await import("../src/project/model-files.js");
+    const m = buildNewProject({ code: "EMPTY", name: "빈 프로젝트", serviceType: "NEW", preset: "public-civil" });
+    let s: ProjectState = { model: m, chunks: [], snapshots: [] };
+    s = execute(s, { op: "req.add", input: { title: "민원 신청", description: "민원인이 신청하고 담당자가 처리한다" }, autoTasks: false }, now).state;
+    const gens = deriveProject(s, now).gens;
+    expect(gens["ia:CVL"]?.prompt).toMatch(/taskIds는 모두 빈 배열/);
+    expect(gens["ia:CVL"]?.prompt).toMatch(/민원 신청/);
+    const rid = s.model.requirements[0]!.id;
+    expect(gens[`flow:${rid}`]?.prompt).toMatch(/요구사항 설명·기능 명세·참조자료로 처리 단계를 직접 설계/);
+    expect(gens["dsc:CVL"]).toBeDefined();
+  });
+
+  it("디자인 시스템을 직접 편집하면 새 개정과 ‘직접 편집’ 이력이 남는다", () => {
+    const d0 = base.model.design.systems.find((d) => d.systemCode === "CVL" && d.status === "SELECTED")!;
+    const s = execute(base, { op: "design.edit", systemCode: "CVL", patch: { tokens: { color: { primary: "#123456" } }, layout: { list: "table" } }, note: "CI 색" }, now).state;
+    const d1 = s.model.design.systems.find((d) => d.systemCode === "CVL" && d.status === "SELECTED")!;
+    expect(d1.revision).toBe(d0.revision + 1);
+    expect(d1.tokens!.color.primary).toBe("#123456");
+    expect(d1.history.at(-1)?.instruction).toBe("직접 편집");
+    expect(() => execute(s, { op: "design.edit", systemCode: "CVL", patch: { tokens: { color: { primary: "#123456" } } } }, now)).toThrow(/바뀐 내용이 없습니다/);
+  });
+});

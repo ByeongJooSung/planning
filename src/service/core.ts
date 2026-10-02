@@ -9,7 +9,7 @@
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
 import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec } from "../model/schema.js";
-import { applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
+import { applyDesignPatch, applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
 import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
 import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, setSystemChannels, systemChannels, upsertCase } from "../project/qa-ops.js";
 
@@ -128,6 +128,8 @@ export type Command =
   | { op: "design.component"; systemCode: string; input: unknown }
   /** 디자인 미세조정 되돌리기 — 적용 전 디자인 시스템으로 바꾼다 */
   | { op: "design.revert"; systemCode: string; design: unknown }
+  /** 디자인 시스템 직접 편집 (색·글꼴·크기·모서리·레이아웃) — AI 조정과 같은 경로로 개정·이력을 남긴다 */
+  | { op: "design.edit"; systemCode: string; patch: unknown; note?: string }
   | { op: "gen.apply"; kind: string; target: string; output: unknown; instruction?: string; scope?: string }
   | {
       op: "kb.add";
@@ -486,6 +488,13 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       prev.history = [...cur.history, { rev: prev.revision, at: now.toISOString(), note: "되돌리기", changes: [`r${cur.revision} 적용 취소`] }];
       m.design.systems[i] = prev;
       message = `${cmd.systemCode} 디자인 시스템을 되돌렸습니다 (r${prev.revision})`;
+      break;
+    }
+    case "design.edit": {
+      const r = applyDesignPatch(m, cmd.systemCode, { ...(cmd.patch as object), summary: cmd.note || "직접 편집" }, { now, instruction: "직접 편집" });
+      message = r.summary;
+      detail = r;
+      m.rtmRecords.work[`ds:${cmd.systemCode}`] = { status: "IN_PROGRESS", at: now.toISOString(), by: "직접 편집", note: "" };
       break;
     }
     case "gen.apply": {

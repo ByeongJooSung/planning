@@ -99,6 +99,7 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
 ${data.mode === "server" ? PWA_HEAD : ""}<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONTS}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
 ${css}</style>
 <div class="shell">

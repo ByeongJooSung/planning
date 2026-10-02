@@ -648,7 +648,7 @@ button.pcard.new { cursor: pointer; text-align: left; font: inherit; color: inhe
 .fm-row { display: flex; flex-direction: column; gap: 4px; }
 .fm-row label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .fm-row .fm-req { font-style: normal; font-weight: 500; color: var(--crit); font-size: 11px; margin-left: 4px; }
-.fm input[type=text], .fm input[type=email], .fm input[type=password], .fm input[type=url], .fm select, .fm textarea { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); width: 100%; box-sizing: border-box; }
+.fm input[type=text], .fm input[type=email], .fm input[type=password], .fm input[type=url], .fm input[type=number], .fm select, .fm textarea { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); width: 100%; box-sizing: border-box; }
 .fm input[type=color] { width: 64px; height: 34px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
 .fm input:focus, .fm select:focus, .fm textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 .fm textarea { resize: vertical; }
@@ -1162,3 +1162,10 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .gen-claude .cl-steps li { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .gen-claude textarea { width: 100%; font: 12px var(--mono); }
 .gen-claude > p { margin: 0; padding: 4px 10px 10px; }
+/* 디자인 시스템 직접 편집 */
+.fm-sec { margin: 10px 0 4px; font-size: 13px; color: var(--ink-2); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 10px; }
+.ds-color { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.ds-color input[type=color] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--line-strong); border-radius: 6px; background: none; cursor: pointer; }
+.ds-color span { display: flex; flex-direction: column; line-height: 1.25; }
+.ds-color em { font-style: normal; font-size: 11px; color: var(--ink-3); }

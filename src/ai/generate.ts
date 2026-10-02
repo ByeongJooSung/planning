@@ -61,7 +61,7 @@ export function buildGenPrompts(m: Model, chunks: Chunk[], opts: PromptOptions =
   for (const n of m.ia.nodes.filter((x) => x.kind !== "MENU")) out[`sb:${n.id}`] = sbGen(c, n.id);
   for (const sb of m.storyboard.screens) if (c.node(sb.screenId)) out[`desc:${sb.screenId}`] = descGen(c, sb.screenId);
   for (const n of m.ia.nodes.filter((x) => x.kind !== "MENU")) out[`qa:${n.id}`] = qaGen(c, n.id);
-  for (const r of c.rtm.rows) if (r.status !== "EXCLUDED" && r.tasks.length) out[`flow:${r.requirementId}`] = flowGen(c, r.requirementId);
+  for (const r of c.rtm.rows) if (r.status !== "EXCLUDED") out[`flow:${r.requirementId}`] = flowGen(c, r.requirementId);
   for (const d of m.design.systems) if (d.status === "SELECTED") out[`ds:${d.systemCode}`] = dsGen(c, d.systemCode);
   for (const s of m.systems.filter((x) => x.hasScreens)) out[`dsc:${s.code}`] = dscGen(c, s.code);
   return out;
@@ -82,11 +82,19 @@ function iaGen(c: Ctx, code: string): GenPrompt {
   const prefix = s.screenIdPrefix ?? s.code;
   const ev = c.evidence(`${s.name} 메뉴 화면 ${c.rtm.rows.map((r) => r.title).join(" ")}`, 4);
   const existing = c.m.project.serviceType === "EXISTING";
+  const reqs = c.m.requirements.filter((r) => r.status === "ACTIVE").map((r) => `- ${r.id} ${r.title}${r.description ? `: ${r.description.slice(0, 160)}` : ""}`).join("\n");
+  const others = c.m.ia.nodes.filter((n) => n.systemCode !== code && n.kind === "MENU" && !n.parentId).map((n) => `${n.systemCode}:${n.name}`).join(", ");
   const prompt = finish([
-    head(`${code} ${s.name} 정보구조도`, "이 시스템의 메뉴·화면 구조(정보구조도)를 만들어 주세요. 모든 Task가 필요한 화면에 연결되어야 합니다."),
-    section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s.name} (주 사용자: ${s.users.join(", ") || "-"}, 채널: ${s.channels.join(", ") || "-"})`),
+    head(
+      `${code} ${s.name} 정보구조도`,
+      tasks
+        ? "이 시스템의 메뉴·화면 구조(정보구조도)를 만들어 주세요. 모든 Task가 필요한 화면에 연결되어야 합니다."
+        : "이 시스템의 메뉴·화면 구조(정보구조도)를 만들어 주세요. 아직 Task가 없으므로 시스템의 목적·사용자·요구사항·참조자료와 같은 성격의 서비스에서 일반적으로 필요한 메뉴(예: 서비스 안내, 주요 업무, 조회·내역, 마이페이지, 고객센터·공지)를 근거로 빠짐없이 설계합니다. taskIds는 비워 둡니다.",
+    ),
+    section("대상", `${projectLine(c)}\n- 시스템: ${code} ${s.name} (주 사용자: ${s.users.join(", ") || "-"}, 채널: ${s.channels.join(", ") || "-"})${s.description ? `\n- 시스템 설명: ${s.description}` : ""}`),
     section("참조 URL", urlBlock(c.urls(code))),
-    section("이 시스템의 Task", tasks || "- (없음)"),
+    section("이 시스템의 Task", tasks || "- (없음 — 작업자가 나중에 화면과 Task를 직접 연결합니다)"),
+    ...(tasks ? [] : [section("프로젝트 요구사항 (메뉴 범위의 근거)", reqs || "- (없음 — 시스템 설명·참조자료·추가 지시를 근거로)"), section("다른 시스템의 1depth 메뉴 (겹치지 않게)", others || "- (없음)")]),
     section("현재 정보구조 (있으면 유지·보완)", nodes.length ? JSON.stringify({ nodes: nodes.map(({ systemCode: _, ...n }) => n) }) : "- (없음, 새로 설계)"),
     section("참조자료 근거", ev.text),
     section(
@@ -95,7 +103,7 @@ function iaGen(c: Ctx, code: string): GenPrompt {
         `- 화면 ID 규칙: ${rule.pattern} (system=${prefix}, d1·d2는 영문 약어 대문자 3자, seq는 ${rule.seqStart}부터 ${rule.seqStep}씩 ${rule.seqDigits}자리). 예: ${prefix}_INF_REG_010. 팝업은 부모 화면 ID + ${rule.popupSuffix.replace("{nn}", "01")}`,
         `- 메뉴 노드는 kind "MENU", id는 "M-${prefix}-약어"`,
         "- 이미 있는 화면은 같은 id를 그대로 쓴다. 폐기된 id는 다시 쓰지 않는다: " + (c.m.ia.retiredIds.join(", ") || "없음"),
-        "- 화면이 필요한 Task마다 알맞은 화면의 taskIds에 Task ID를 넣는다. 한 Task가 여러 화면(목록·상세·팝업)을 쓸 수 있다",
+        tasks ? "- 화면이 필요한 Task마다 알맞은 화면의 taskIds에 Task ID를 넣는다. 한 Task가 여러 화면(목록·상세·팝업)을 쓸 수 있다" : "- Task가 없으므로 taskIds는 모두 빈 배열. 대신 목록·상세·등록·수정·확인 팝업처럼 업무에 필요한 화면을 빠짐없이 둔다",
         `- change: ${existing ? "기존 화면은 KEPT, 바꾸는 화면은 CHANGED(+changeReason), 새 화면은 NEW" : "모두 NEW"}`,
         "- 로그인이 필요한 화면은 loginRequired true",
         "- 메뉴 depth는 3단계 이하, 1depth 메뉴는 7개 이하",
@@ -253,7 +261,8 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
       return `- ${t.taskId} [${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action}${raw.after.length ? ` · 선행 ${raw.after.join(", ")}` : ""}${raw.transition ? ` · 상태 ${raw.transition.from ?? ""}→${raw.transition.to}` : ""} · 화면 ${t.screenless ? "없음" : t.screens.join(", ") || "미연결"}`;
     })
     .join("\n");
-  const systems = [...new Set(row.tasks.map((t) => t.systemCode))].map((code) => c.system(code)).filter(Boolean);
+  // Task가 없으면 화면이 있는 시스템을 모두 레인 후보로 준다 (AI가 필요한 것만 쓴다)
+  const systems = (row.tasks.length ? [...new Set(row.tasks.map((t) => t.systemCode))] : c.m.systems.map((s) => s.code)).map((code) => c.system(code)).filter(Boolean);
   const existing = c.m.flows.find((f) => f.nodes.some((n) => n.taskIds.some((id) => id.startsWith(`${requirementId}-`))));
   const ev = c.evidence(`${req.title} ${req.description} 절차 반려 보완 승인`, 4);
   const flowId = existing?.id ?? `PF-${requirementId}`;
@@ -261,7 +270,7 @@ function flowGen(c: Ctx, requirementId: string): GenPrompt {
     head(`${requirementId} ${req.title} 프로세스 플로우`, "이 요구사항의 업무 처리 흐름을 시스템별 레인으로 나눈 프로세스 플로우로 만들어 주세요."),
     section("대상", `${projectLine(c)}\n- 요구사항: ${requirementId} ${req.title}: ${req.description || "(설명 없음)"}`),
     section("기능 명세 (작업자 확인)", SPEC_SLOT),
-    section("Task (처리 순서의 근거)", tasks),
+    section("Task (처리 순서의 근거)", tasks || "- (없음 — 요구사항 설명·기능 명세·참조자료로 처리 단계를 직접 설계하고 taskIds는 비워 둔다)"),
     section("레인 (시스템 구분)", systems.map((s) => `- L-${s!.code}: ${s!.name} · ${s!.users[0] ?? ""} (systemCode ${s!.code})`).join("\n")),
     section("현재 플로우 (있으면 보완)", existing ? JSON.stringify(existing) : "- (없음, 새로 작성)"),
     section("참조자료 근거", ev.text),

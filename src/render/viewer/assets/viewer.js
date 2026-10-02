@@ -428,7 +428,7 @@
         (req.description ? '<p class="req-desc">' + esc(req.description) + "</p>" : "") + specLine(p, row.requirementId) +
         (row.status === "EXCLUDED" ? '<div class="hint">제외 사유: ' + esc(row.excludeReason) + "</div>" :
           steps ? '<div class="chain">' + steps + "</div>" : '<div class="notask">시스템별 Task가 아직 없습니다.' + (SRV ? "" : copyBox("planning -p " + m.project.code + " task auto " + row.requirementId)) + "</div>") +
-        (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + '<span class="sp"></span>' + actBtn("req-edit", "요구사항 수정", row.requirementId) + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
+        (canEdit() && row.status !== "EXCLUDED" ? '<div class="row-actions">' + actBtn("task-auto", "Task 자동 생성", row.requirementId) + actBtn("task-add", "+ Task 직접 추가", row.requirementId) + flowEditBtn(p, row.requirementId, flowOfReq(p, row.requirementId) ? "플로우 편집" : "플로우 그리기") + (flowOfReq(p, row.requirementId) ? "" : genBtn("flow:" + row.requirementId, "AI 플로우")) + '<span class="sp"></span>' + actBtn("req-edit", "요구사항 수정", row.requirementId) + actBtn("req-exclude", "제외", row.requirementId) + "</div>" : "") +
         "</article>";
     }).join("");
     return '<section class="section"><div class="note row"><div><b>요구사항 등록과 Task 생성</b><p class="hint">' + (SRV ? "등록할 때 ‘시스템별 Task 자동 생성’을 켜면" : "등록할 때 <code>--auto-tasks</code>를 붙이면") + ' 업무 동사(신청·심사·공개·알림·연계)를 시스템 성격에 맞춰 Task를 자동으로 만듭니다. <span class="auto">자동</span> 표시에 마우스를 올리면 근거가 보입니다. ' + (SRV ? "직접 만들려면 요구사항 아래 ‘Task 직접 추가’를 누릅니다." : "직접 만들려면 <code>task add</code>를 씁니다.") + '</p></div>' +
@@ -762,6 +762,49 @@
     }).join("") + "</div>";
   }
   function picked(name) { return Array.prototype.map.call(document.querySelectorAll("[data-" + name + "]:checked"), function (e) { return e.getAttribute("data-" + name); }); }
+  // 디자인 시스템 직접 편집 — 색·글꼴·크기·모서리·레이아웃을 AI 없이 바꾼다 (개정 이력에 ‘직접 편집’으로 남음)
+  var DS_COLORS = [["primary", "주 색"], ["onPrimary", "주 색 위 글자"], ["accent", "강조 색"], ["nav", "메뉴(GNB) 배경"], ["onNav", "메뉴 글자"], ["bg", "화면 배경"], ["surface", "카드·표 배경"], ["surfaceAlt", "보조 배경(표 머리 등)"], ["border", "테두리"], ["text", "글자"], ["textMuted", "보조 글자"]];
+  var DS_FONTS = [['"Pretendard Variable", "Pretendard", "Malgun Gothic", sans-serif', "Pretendard"], ['"Noto Sans KR", "Malgun Gothic", sans-serif', "Noto Sans KR"], ['"IBM Plex Sans KR", "Malgun Gothic", sans-serif', "IBM Plex Sans KR"], ['"Gothic A1", "Malgun Gothic", sans-serif', "Gothic A1"], ['"Nanum Gothic", "Malgun Gothic", sans-serif', "나눔고딕"]];
+  ACTIONS_LATE["ds-edit"] = function (code) {
+    var p = P(), d = selectedDesign(p, code);
+    if (!d) return;
+    var t = d.tokens, L = d.layout;
+    var fonts = DS_FONTS.some(function (f) { return f[0] === t.font.family; }) ? DS_FONTS : [[t.font.family, fontName(t.font.family) + " (현재)"]].concat(DS_FONTS);
+    var nums = [["fBody", "본문 글자 크기(px)", t.font.scale.body], ["fH1", "페이지 제목 크기(px)", t.font.scale.h1], ["rMd", "모서리 둥글기(px)", t.radius.md], ["cH", "입력칸·버튼 높이(px)", t.control.height], ["cRow", "표 행 높이(px)", t.control.rowHeight], ["maxW", "본문 최대 폭(px)", t.grid.maxWidth]];
+    openForm({
+      eyebrow: code + " 디자인 시스템 r" + d.revision, title: "디자인 시스템 직접 편집", submit: "저장 (새 개정)",
+      intro: "바꾼 값만 반영해 새 개정을 만듭니다. 이 디자인 시스템을 쓰는 화면설계서·프로토타입이 모두 다시 그려지고, 완료된 화면설계서는 ‘재검토 필요’가 됩니다.",
+      fields: [{ type: "html", html: '<h4 class="fm-sec">색</h4><div class="ds-grid">' + DS_COLORS.map(function (c) { return '<label class="ds-color"><input type="color" name="c_' + c[0] + '" value="' + esc(t.color[c[0]]) + '"><span>' + esc(c[1]) + '<em class="mono">' + esc(t.color[c[0]]) + "</em></span></label>"; }).join("") + "</div>" }]
+        .concat([{ type: "html", html: '<h4 class="fm-sec">글꼴·크기</h4>' }, { name: "family", label: "글꼴", type: "select", options: fonts, value: t.font.family }])
+        .concat(nums.map(function (n) { return { name: n[0], label: n[1], type: "number", value: String(n[2]) }; }))
+        .concat([{ name: "shadow", label: "그림자", type: "select", options: [["none", "없음"], ["soft", "약하게"], ["strong", "강하게"]], value: t.shadow }, { type: "html", html: '<h4 class="fm-sec">레이아웃</h4>' }])
+        .concat(Object.keys(LAYOUT_LABEL).map(function (k) { return { name: "L_" + k, label: LAYOUT_LABEL[k][0], type: "select", options: Object.keys(LAYOUT_LABEL[k][1]).map(function (o) { return [o, LAYOUT_LABEL[k][1][o]]; }), value: L[k] }; }))
+        .concat([{ name: "note", label: "변경 메모 (선택)", placeholder: "예: 기관 CI 색으로 변경" }]),
+      onSubmit: function (v) {
+        var color = {}, patch = { tokens: {}, layout: {} };
+        DS_COLORS.forEach(function (c) { var el = document.querySelector('[name="c_' + c[0] + '"]'), val = el && el.value.toUpperCase(); if (val && val !== String(t.color[c[0]]).toUpperCase()) color[c[0]] = val; });
+        if (Object.keys(color).length) patch.tokens.color = color;
+        var num = function (k) { var x = Number(v[k]); return isFinite(x) && x > 0 ? x : null; };
+        var font = {};
+        if (v.family !== t.font.family) font.family = v.family;
+        var sc = {};
+        if (num("fBody") && num("fBody") !== t.font.scale.body) sc.body = num("fBody");
+        if (num("fH1") && num("fH1") !== t.font.scale.h1) sc.h1 = num("fH1");
+        if (Object.keys(sc).length) font.scale = sc;
+        if (Object.keys(font).length) patch.tokens.font = font;
+        if (num("rMd") != null && num("rMd") !== t.radius.md) patch.tokens.radius = { md: num("rMd") };
+        var ctl = {};
+        if (num("cH") && num("cH") !== t.control.height) ctl.height = num("cH");
+        if (num("cRow") && num("cRow") !== t.control.rowHeight) ctl.rowHeight = num("cRow");
+        if (Object.keys(ctl).length) patch.tokens.control = ctl;
+        if (num("maxW") && num("maxW") !== t.grid.maxWidth) patch.tokens.grid = { maxWidth: num("maxW") };
+        if (v.shadow !== t.shadow) patch.tokens.shadow = v.shadow;
+        Object.keys(LAYOUT_LABEL).forEach(function (k) { if (v["L_" + k] && v["L_" + k] !== L[k]) patch.layout[k] = v["L_" + k]; });
+        if (!Object.keys(patch.tokens).length && !Object.keys(patch.layout).length) return Promise.reject(new Error("바꾼 값이 없습니다"));
+        return cmd({ op: "design.edit", systemCode: code, patch: patch, note: v.note });
+      }
+    });
+  };
   ACTIONS_LATE["task-screens"] = function (taskId) {
     var p = P(), t = findTrace(p, taskId);
     var groups = p.model.systems.filter(function (s) { return s.hasScreens; }).sort(function (a, b) { return (b.code === t.systemCode) - (a.code === t.systemCode); }).map(function (s) {
@@ -1225,7 +1268,7 @@
     if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.<br><span class="hint">AI 제안은 이 시스템의 사용자·채널·참조 URL·참조자료를 읽고 만들고, 기본 제안은 시스템 성격별로 정해 둔 규칙 기반 3종입니다.</span>' + (SRV ? '<div class="row-actions center">' + genBtn("dsc:" + code, "AI로 컨셉 3종 제안") + editBtn("ds-propose", "기본 컨셉 3종 (규칙 기반)", code) + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
     else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
-    return '<section class="section"><div class="toolbar">' + chips + (d && d.status === "SELECTED" ? genBtn("dsc:" + code, "AI 새 컨셉 후보 제안") : "") + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
+    return '<section class="section"><div class="toolbar">' + chips + (d && d.status === "SELECTED" && SRV && canEdit() ? actBtn("ds-edit", "✎ 직접 편집", code) : "") + (d && d.status === "SELECTED" ? genBtn("dsc:" + code, "AI 새 컨셉 후보 제안") : "") + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
   }
 
   function renderProposals(p, d, ctx) {
@@ -1782,7 +1825,7 @@
   // ── 통합: 시스템별 프로세스 플로우 ─────────────
   function renderFlows() {
     var p = P(), flows = p.model.flows;
-    if (!flows.length) return '<div class="box empty">아직 작성된 플로우가 없습니다. 요구사항마다 캔버스에서 직접 그리거나 AI로 그리면 여기로 통합됩니다.' + (canEdit() || !SRV ? '<div class="row-actions center">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return flowEditBtn(p, r.requirementId, r.requirementId + " 그리기"); }).join("") + "</div>" : "") + "</div>";
+    if (!flows.length) return '<div class="box empty">아직 작성된 플로우가 없습니다. 요구사항마다 캔버스에서 직접 그리거나 AI로 그리면 여기로 통합됩니다.' + (canEdit() || !SRV ? '<div class="row-actions center">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED"; }).map(function (r) { return flowEditBtn(p, r.requirementId, r.requirementId + " 그리기"); }).join("") + "</div>" : "") + "</div>";
     var withLanes = p.model.systems.filter(function (s) { return flows.some(function (f) { return f.lanes.some(function (l) { return l.systemCode === s.code; }); }); });
     var cur = state.flowSys;
     var chips = '<div class="filters"><button class="fchip" data-fsys="ALL" aria-pressed="' + (cur === "ALL") + '">전체 통합</button>' + withLanes.map(function (s) {
@@ -1795,7 +1838,7 @@
       return '<section class="section"><h2>' + esc(f.title) + " <small>" + esc(f.id) + (cur === "ALL" ? " · 전체 시스템" : " · " + esc(cur) + " 영역만") + '</small></h2><div class="flow-tools">' + flowEditBtn(p, rq, canEdit() ? "캔버스로 편집 · 전체보기" : "전체보기 · 내보내기") + (rq ? "" : '<span class="hint">요구사항과 연결되지 않은 플로우라 보기만 할 수 있습니다</span>') + '</div><div class="box flow-box fit"' + flowOpenAttr(rq) + ">" + Flow.svg(g, { color: sysColor }) + "</div></section>";
     }).join("") || '<div class="box empty">이 시스템이 들어간 플로우가 없습니다.</div>';
     var genBar = '<div class="ai-bar"><span class="hint">AI 생성·조정</span>' + p.rtm.rows.filter(function (r) { return p.gens["flow:" + r.requirementId]; }).map(function (r) { return genBtn("flow:" + r.requirementId, r.requirementId + " " + r.title); }).join("") + "</div>";
-    var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.length; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + (!flowOfReq(p, r.requirementId) && (canEdit() || !SRV) ? flowEditBtn(p, r.requirementId, "캔버스에서 그리기") : "") + "</div>"; }).join("") + "</div>";
+    var fwork = '<div class="box wlist">' + p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED"; }).map(function (r) { return '<div class="wrow"><span class="mono">' + esc(r.requirementId) + "</span><span>" + esc(r.title) + "</span>" + workCtl(p, "flow:" + r.requirementId, "플로우") + (!flowOfReq(p, r.requirementId) && (canEdit() || !SRV) ? flowEditBtn(p, r.requirementId, "캔버스에서 그리기") : "") + "</div>"; }).join("") + "</div>";
     return '<section class="section">' + genBar + fwork + chips + '<p class="hint">시스템을 고르면 그 시스템 레인만 남기고, 다른 시스템으로 넘어가는 지점은 “→ 다른 시스템” 연결 노드로 보여 줍니다. 점선 화살표는 되돌아가는 흐름입니다.</p></section>' + body;
   }
 
