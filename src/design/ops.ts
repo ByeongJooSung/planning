@@ -162,3 +162,18 @@ export function removeFrameComponent(m: Model, systemCode: string, id: string, c
   d.history.push({ rev: d.revision, at: now, note: `컴포넌트 ${msg}`, instruction: "프레임 편집기", changes: [msg] });
   return msg;
 }
+
+/**
+ * 화면설계서 와이어프레임을 저장하려는데 시스템에 디자인 시스템이 아직 없으면 기본 컨셉 A로 정한다.
+ * 정했으면 안내 문구를, 이미 있으면 null을 돌려준다 (디자인 시스템 화면에서 언제든 다른 컨셉으로 바꿀 수 있다)
+ */
+export function ensureDesign(m: Model, systemCode: string, c: Ctx = {}): string | null {
+  const sys = m.systems.find((s) => s.code === systemCode);
+  if (!sys?.hasScreens) return null;
+  const d = getSystemDesign(m, systemCode);
+  if (d?.status === "SELECTED") return null;
+  const p = d && d.proposals.length ? d : proposeDesign(m, systemCode);
+  const first = p.proposals[0]!;
+  selectDesign(m, systemCode, first.id, c);
+  return `${systemCode} 디자인 시스템이 없어 기본 컨셉 ${first.id}(${first.name})로 정했습니다 — 디자인 시스템 화면에서 바꿀 수 있습니다`;
+}

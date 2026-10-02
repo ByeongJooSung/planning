@@ -120,7 +120,7 @@ function iaGen(c: Ctx, code: string): GenPrompt {
 function sbGen(c: Ctx, screenId: string): GenPrompt {
   const node = c.node(screenId)!;
   const s = c.system(node.systemCode);
-  const d = c.design(node.systemCode);
+  const d = c.wireDesign(node.systemCode);
   const sb = c.m.storyboard.screens.find((x) => x.screenId === screenId);
   const tasks = c.tasksOfScreen(screenId);
   const reqs = [...new Set(tasks.map(({ r }) => r.requirementId))].map((id) => c.m.requirements.find((r) => r.id === id)!);

@@ -101,6 +101,9 @@
     var d = designOf(p, code);
     return d && d.status === "SELECTED" ? d : null;
   }
+  /** 와이어프레임에 쓸 디자인: 고른 디자인 시스템, 없으면 임시 기본 컨셉 (저장하면 같은 컨셉으로 정해진다) */
+  function wireDesign(p, code) { return selectedDesign(p, code) || (p.provisionalDesigns && p.provisionalDesigns[code]) || null; }
+  function isProvisional(p, code) { return !selectedDesign(p, code) && !!(p.provisionalDesigns && p.provisionalDesigns[code]); }
   function profileOf(s) {
     var u = (s.users || []).join(" ");
     if ((s.channels || []).indexOf("ADMIN_WEB") >= 0 || /관리자|심사자|운영|담당자/.test(u) || s.code === "ADM") return "admin";
@@ -625,7 +628,7 @@
   }
 
   function screenWire(p, sb, markers) {
-    var ds = selectedDesign(p, sb.systemCode);
+    var ds = wireDesign(p, sb.systemCode);
     if (!ds) return null;
     var node = p.model.ia.nodes.find(function (n) { return n.id === sb.screenId; }) || {};
     var ctx = wireCtx(p, sb.systemCode, sb.screenId);
@@ -720,7 +723,7 @@
   // ── 화면설계서 항목 편집 ──
   function sbCompForm(sid, c) {
     var p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === sid; });
-    var ds = selectedDesign(p, sb.systemCode), v = c.validation || {}, o = c.options || {};
+    var ds = wireDesign(p, sb.systemCode), v = c.validation || {}, o = c.options || {};
     var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name + (x.tree ? " ✎" : "")]; }) : [];
     var variantOpts = function (cid) { var fc = ds && ds.components.find(function (x) { return x.id === cid; }); return [["", "기본"]].concat(fc && fc.variantTrees ? fc.variantTrees.map(function (v) { return [v.name, v.name]; }) : []); };
     var frameProps = function (cc) { var fc = ds && cc.ui && ds.components.find(function (x) { return x.id === cc.ui.component && x.tree; }); if (!fc) return ""; var pr = cc.ui.props || {}; return Frames.binds(fc.tree).filter(function (k) { return pr[k] != null; }).map(function (k) { return k + " = " + pr[k]; }).join("\n"); };
@@ -973,7 +976,7 @@
     var movable = SRV && canEdit() && !opts.preview;
     var moved = sb.components.filter(function (c) { return c.marker; }).length;
     return '<div class="wire-box sb-canvas" data-sbc="' + esc(sid) + '">' +
-      '<div class="sbc-tools"><span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 해당 설명이 강조됩니다.") + '</span><span class="sp"></span>' +
+      '<div class="sbc-tools">' + (isProvisional(p, sb.systemCode) ? '<span class="pill IN_DESIGN" title="디자인 시스템을 아직 고르지 않아 기본 컨셉으로 그렸습니다. 저장하면 이 컨셉으로 정해지고, 디자인 시스템 화면에서 바꿀 수 있습니다">임시 기본 디자인</span>' : "") + '<span class="hint">' + (movable ? "설명 번호를 끌어 옮기면 저장됩니다. 번호를 누르면 오른쪽 설명이 표시됩니다." : "번호를 누르면 해당 설명이 강조됩니다.") + '</span><span class="sp"></span>' +
       '<button class="btn-sm" data-sbzoom="-1" aria-label="축소">−</button><span class="sbc-z">' + Math.round(z * 100) + '%</span><button class="btn-sm" data-sbzoom="1" aria-label="확대">+</button><button class="btn-sm" data-sbzoom="0">화면 맞춤</button>' +
       (movable && moved ? '<button class="btn-sm" data-sbreset="' + esc(sid) + '">번호 위치 초기화 (' + moved + ")</button>" : "") + "</div>" +
       '<div class="sbc-view"><div class="sbc-board"><div class="sbc-frame"><div class="sbc-inner" style="width:' + VW + 'px">' + wire + "</div></div>" +
@@ -1126,7 +1129,7 @@
     var cur = state.proto[pc.key];
     if (list.indexOf(cur) < 0) cur = state.proto[pc.key] = list[0];
     var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === cur; });
-    var wire = screenWire(p, sb, false), ds = selectedDesign(p, sb.systemCode);
+    var wire = screenWire(p, sb, false), ds = wireDesign(p, sb.systemCode);
     if (pc.sys) {
       box.innerHTML = '<div class="proto-sys">' + protoNav(p, pc.sys, cur) + '<div class="proto-main"><div class="proto-cur"><b class="mono">' + esc(cur) + "</b> " + esc(sb.title) + workPill(p, "sb:" + cur, "설계서 ") + '<span class="sp"></span><span class="hint">' + (list.indexOf(cur) + 1) + " / " + list.length + '</span><button class="btn-sm" data-pstep="-1"' + (list.indexOf(cur) ? "" : " disabled") + '>← 이전 화면</button><button class="btn-sm" data-pstep="1"' + (list.indexOf(cur) < list.length - 1 ? "" : " disabled") + ">다음 화면 →</button></div>" +
         (wire ? '<div class="proto-frame" id="proto-frame">' + stage('<div class="wf-vp" style="' + Wire.vars(ds) + '">' + wire + "</div>", { w: VW, h: VH, label: VW + " × " + VH + " 뷰포트 · 화면 안에서 스크롤" }) + "</div>" : '<div class="box empty">' + esc(sb.systemCode) + " 디자인 시스템 컨셉을 먼저 선택해야 프로토타입을 볼 수 있습니다.</div>") +
@@ -2201,16 +2204,24 @@
       if (!Array.isArray(out.components) || !out.components.length) errs.push("components 배열이 없습니다");
       else {
         var node = p.model.ia.nodes.find(function (n) { return n.id === target; }) || {};
-        var ds = selectedDesign(p, node.systemCode);
+        var ds = wireDesign(p, node.systemCode);
+        if (isProvisional(p, node.systemCode)) warns.push(node.systemCode + " 디자인 시스템이 아직 없어 기본 컨셉으로 미리 보여 줍니다. 적용하면 이 컨셉으로 디자인 시스템이 정해집니다(나중에 바꿀 수 있음)");
         out.components.forEach(function (c, i) {
           if (!c.label && !c.name && !c.title) warns.push((i + 1) + "번 항목에 label이 없어 번호로 표시합니다");
-          var uic = typeof c.ui === "string" ? c.ui : c.ui && c.ui.component;
-          if (uic && ds && !ds.components.some(function (x) { return x.id === uic; })) errs.push((c.no || i + 1) + ". " + uic + " 는 디자인 시스템에 없는 컴포넌트입니다");
+          if (!c.ui && c.component) c.ui = { component: c.component, props: c.props || {} };
+          if (typeof c.ui === "string") c.ui = { component: c.ui, props: {} };
+          if (c.ui && !c.ui.component && (c.ui.type || c.ui.id)) c.ui.component = c.ui.type || c.ui.id;
+          var uic = c.ui && c.ui.component;
+          if (uic && ds && !ds.components.some(function (x) { return x.id === uic; })) {
+            var hit = fitComp(ds, uic, c.kind);
+            if (hit) { c.ui.component = hit; warns.push((c.no || i + 1) + ". " + uic + " 는 디자인 시스템에 없어 " + hit + " 로 바꿨습니다"); }
+            else { delete c.ui; warns.push((c.no || i + 1) + ". " + uic + " 는 디자인 시스템에 없어 이 항목은 글로만 표시합니다"); }
+          } else if (!c.ui && ds && c.kind && ds.components.some(function (x) { return x.id === c.kind; })) c.ui = { component: c.kind, props: {} };
           if (c.options && typeof c.options === "object" && !Array.isArray(c.options) && !Array.isArray(c.options.values)) warns.push((c.no || i + 1) + ". 선택지 목록(options.values)이 없어 " + (c.options.default ? "기본값만 선택지로 넣습니다" : "선택지 없이 반영합니다"));
           if (c.ui && c.ui.link && !p.model.ia.nodes.some(function (n) { return n.id === c.ui.link; })) warns.push(c.no + ". 이동 화면 " + c.ui.link + " 가 정보구조도에 없습니다");
           if (/API|DB|쿼리|서버|백엔드/.test((c.planner || "") + (c.customer || ""))) warns.push(c.no + ". 개발자 관점 표현이 들어 있습니다");
         });
-        if (!ds) warns.push("디자인 시스템 컨셉이 없어 와이어프레임은 글로만 보입니다");
+        if (!ds) warns.push("디자인 시스템이 없어 와이어프레임은 글로만 보입니다");
       }
     } else if (kind === "flow") {
       if (!Array.isArray(out.nodes) || !Array.isArray(out.edges) || !Array.isArray(out.lanes)) errs.push("lanes·nodes·edges 배열이 필요합니다");
@@ -2417,6 +2428,18 @@
     for (var i = 0; i < keys.length; i++) { var r = o[keys[i]] != null ? findComps(o[keys[i]], depth + 1) : null; if (r) return r; }
     for (var k in o) if (keys.indexOf(k) < 0 && o[k] && typeof o[k] === "object") { var r2 = findComps(o[k], depth + 1); if (r2) return r2; }
     return null;
+  }
+  var COMP_ALIAS = { table: "data-table", list: "data-table", grid: "data-table", "board-list": "notice-list", board: "notice-list", input: "text-input", "text-field": "text-input", textfield: "text-input", password: "text-input", email: "text-input", number: "text-input", "text-area": "textarea", dropdown: "select", combobox: "select", radio: "radio-group", checkbox: "checkbox-group", date: "date-range", datepicker: "date-range", "date-picker": "date-range", period: "date-range", upload: "file-upload", file: "file-upload", btn: "button", buttons: "button-group", actions: "button-group", "action-bar": "button-group", header: "gnb", nav: "gnb", navigation: "gnb", menu: "gnb", sidebar: "lnb", "side-menu": "lnb", location: "breadcrumb", tab: "tabs", steps: "step-indicator", stepper: "step-indicator", search: "search-bar", filter: "search-panel", "filter-panel": "search-panel", cards: "card-list", card: "card-list", paging: "pagination", detail: "detail-table", "detail-view": "detail-table", badge: "status-badge", status: "status-badge", attachments: "file-list", stats: "stat-cards", dashboard: "stat-cards", empty: "empty-state", banner: "hero-banner", hero: "hero-banner", login: "login-form", dialog: "modal", popup: "modal", confirm: "confirm-dialog", alert: "alert-dialog", notice: "notice-list", links: "quick-links", "quick-menu": "quick-links" };
+  /** 디자인 시스템에 없는 컴포넌트 이름 → 가까운 컴포넌트 ID (서버 fitUi와 같은 규칙) */
+  function fitComp(ds, name, kind) {
+    var ids = {};
+    ds.components.forEach(function (x) { ids[x.id] = true; });
+    function key(v) { return String(v || "").toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9가-힣-]/g, ""); }
+    var raw = key(name), k = key(kind);
+    var cands = [raw, raw.replace(/^(krds|ds|ui|w|wf|c)-/, ""), COMP_ALIAS[raw], COMP_ALIAS[raw.replace(/s$/, "")], k, COMP_ALIAS[k]];
+    for (var i = 0; i < cands.length; i++) if (cands[i] && ids[cands[i]]) return cands[i];
+    var m = ds.components.find(function (x) { var n = key(x.name); return n.indexOf(raw) >= 0 || (raw.length > 1 && n.split(/[()-]/).indexOf(raw) >= 0); });
+    return m ? m.id : null;
   }
   function normSbOut(out, prev) {
     var comps = findComps(out, 0);
@@ -2681,7 +2704,7 @@
     if (g.kind === "sb") {
       var node = p.model.ia.nodes.find(function (n) { return n.id === g.target; }) || {};
       var sb = { screenId: g.target, systemCode: node.systemCode, title: node.name, template: out.template, components: out.components || [] };
-      var gk = "gen:" + g.target, hasWire = !!selectedDesign(p, node.systemCode);
+      var gk = "gen:" + g.target, hasWire = !!wireDesign(p, node.systemCode);
       var desc = '<table class="desc dpanel"><thead><tr><th>No</th><th>항목</th><th>Description</th></tr></thead><tbody>' + sb.components.map(function (c) {
         return '<tr data-dno="' + esc(gk + "|" + c.no) + '"><td><span class="no">' + esc(c.no) + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
       }).join("") + "</tbody></table>";

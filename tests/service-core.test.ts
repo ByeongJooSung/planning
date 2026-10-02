@@ -36,6 +36,22 @@ describe("서비스 코어", () => {
     expect(Object.keys(v.diff!.entries)).toContain("project");
   });
 
+  it("디자인 시스템을 고르지 않았어도 화면설계서 반영 시 기본 컨셉으로 정하고 와이어프레임을 저장한다", () => {
+    let r = execute(base(), { op: "screen.add", systemCode: "PUB", name: "공지 목록" }, now);
+    const id = r.state.model.ia.nodes.find((n) => n.name === "공지 목록")!.id;
+    expect(deriveProject(r.state, now).provisionalDesigns.PUB).toBeTruthy();
+    const output = { components: [{ no: 1, label: "검색", kind: "search-bar", ui: { type: "search-bar" } }] };
+    r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output }, now);
+    expect(r.state.model.design.systems.find((d) => d.systemCode === "PUB")!.status).toBe("SELECTED");
+    expect(r.message).toMatch(/기본 컨셉/);
+    expect(deriveProject(r.state, now).provisionalDesigns.PUB).toBeUndefined();
+    // 디자인 시스템에 없는 컴포넌트 이름은 가까운 컴포넌트로 바꾸고, 못 찾으면 그 항목만 글로 남긴다
+    const odd = { components: [{ no: 1, label: "목록", kind: "list", ui: { component: "Table" } }, { no: 2, label: "입력", component: "text_field" }, { no: 3, label: "?", kind: "zzz", ui: "mystery-widget" }] };
+    r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output: odd }, now);
+    const comps = r.state.model.storyboard.screens.find((x) => x.screenId === id)!.components;
+    expect(comps.map((c) => c.ui?.component)).toEqual(["data-table", "text-input", undefined]);
+  });
+
   it("디자인 미세조정 적용 후 되돌리기", () => {
     let s = execute(base(), { op: "design.select", systemCode: "PUB", conceptId: "A" }, now).state;
     const before = structuredClone(s.model.design.systems.find((d) => d.systemCode === "PUB")!);

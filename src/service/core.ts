@@ -19,7 +19,7 @@ import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
-import { addDesignComponent, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign } from "../design/ops.js";
+import { addDesignComponent, ensureDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign } from "../design/ops.js";
 import { toChunks } from "../knowledge/chunk.js";
 import type { Segment } from "../knowledge/extract-text.js";
 import type { Chunk } from "../knowledge/search.js";
@@ -72,6 +72,22 @@ export interface ViewerProject {
   work: WorkBoard;
   /** 요구사항별 기능 명세 (저장본·참조자료 초안) — 추적표·요구사항 화면에서 보고 편집 */
   specs: Record<string, SpecItem>;
+  /** 디자인 시스템을 아직 고르지 않은 시스템의 임시 기본 디자인 (화면설계서 미리보기용 — 저장할 때 같은 컨셉으로 정해진다) */
+  provisionalDesigns: Record<string, SystemDesign>;
+}
+
+function provisionalDesigns(model: Model): Record<string, SystemDesign> {
+  const out: Record<string, SystemDesign> = {};
+  for (const s of model.systems.filter((x) => x.hasScreens)) {
+    if (model.design.systems.some((d) => d.systemCode === s.code && d.status === "SELECTED")) continue;
+    const tmp = { ...model, design: { systems: model.design.systems.filter((d) => d.systemCode === s.code).map((d) => structuredClone(d)) } } as Model;
+    try {
+      ensureDesign(tmp, s.code);
+      const d = tmp.design.systems.find((x) => x.systemCode === s.code);
+      if (d) out[s.code] = d;
+    } catch { /* 화면 없는 시스템 등 */ }
+  }
+  return out;
 }
 
 export type Command =
@@ -170,6 +186,8 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
   const c = { now };
   let message = "";
   let detail: unknown;
+  /** 명령과 함께 일어난 일 (예: 기본 디자인 시스템 자동 선택) — 메시지 뒤에 붙인다 */
+  const notes: string[] = [];
 
   switch (cmd.op) {
     case "project.update": {
@@ -237,6 +255,7 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
     case "sb.component": {
       const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
       if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      if (!cmd.remove && (cmd.input as { ui?: unknown } | undefined)?.ui) { const ad = ensureDesign(m, sb.systemCode, { now }); if (ad) notes.push(ad); }
       if (cmd.remove) {
         const i = sb.components.findIndex((x) => x.no === cmd.no);
         if (i < 0) throw new Error(`${cmd.no}번 항목이 없습니다`);
@@ -379,6 +398,7 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       const node = m.ia.nodes.find((n) => n.id === cmd.screenId);
       if (!node || node.kind === "MENU") throw new Error(`정보구조도에 없는 화면입니다: ${cmd.screenId}`);
       if (m.storyboard.screens.some((x) => x.screenId === cmd.screenId)) throw new Error("이미 화면설계서가 있습니다");
+      { const ad = ensureDesign(m, node.systemCode, { now }); if (ad) notes.push(ad); }
       const d = m.design.systems.find((x) => x.systemCode === node.systemCode && x.status === "SELECTED");
       const tpl = ["login", "dashboard", "main", "list", "detail", "form", "popup"].includes(String(cmd.template)) ? (cmd.template as "form") : node.kind === "POPUP" ? "popup" : undefined;
       m.storyboard.screens.push({ screenId: node.id, systemCode: node.systemCode, title: node.name, template: tpl, taskIds: node.taskIds.slice(), components: [], status: "DRAFT", designRevision: d?.revision });
@@ -527,11 +547,14 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
     }
     case "gen.apply": {
       if (!(GEN_KINDS as readonly string[]).includes(cmd.kind)) throw new Error(`생성 종류는 ${GEN_KINDS.join(" | ")} 중 하나입니다`);
+      // 화면설계서인데 시스템에 디자인 시스템이 없으면 기본 컨셉으로 정해 와이어프레임이 그려지게 한다
+      let autoDs: string | null = null;
+      if (cmd.kind === "sb") { const nd = m.ia.nodes.find((n) => n.id === cmd.target); if (nd) autoDs = ensureDesign(m, nd.systemCode, { now }); }
       const r = applyGenerated(m, cmd.kind as GenKind, cmd.target, cmd.output, { now, instruction: cmd.instruction, scope: cmd.scope });
       // AI가 만들었다고 완료가 아니다 — 진행중으로 두고 작업자가 검토 후 완료 표시
       const wk = cmd.kind === "flow" ? `flow:${cmd.target}` : `${cmd.kind}:${cmd.target}`;
       if (cmd.kind !== "dsc") m.rtmRecords.work[wk] = { status: "IN_PROGRESS", at: now.toISOString(), by: "AI 적용", note: "" };
-      message = r.summary;
+      message = r.summary + (autoDs ? ` · ${autoDs}` : "");
       detail = r;
       break;
     }
@@ -571,6 +594,7 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
   const errors = validateModel(m).filter((i) => i.level === "error");
   if (errors.length) throw new Error(`반영할 수 없습니다:\n- ${errors.map((e) => e.message).join("\n- ")}`);
   m.project.updatedAt = now.toISOString();
+  if (notes.length) message = [message, ...notes].filter(Boolean).join(" · ");
   return { state: { model: m, chunks, snapshots }, message, detail };
 }
 
@@ -622,6 +646,7 @@ export function deriveProject(state: ProjectState, now = new Date(), opts: { vie
     gens: buildGenPrompts(model, chunks, opts),
     work: workBoard(model),
     specs: Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x])),
+    provisionalDesigns: provisionalDesigns(model),
   };
 }
 

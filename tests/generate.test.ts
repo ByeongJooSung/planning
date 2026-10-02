@@ -132,13 +132,14 @@ describe("생성 결과 반영", () => {
     expect(() => applyDesignPatch(m, "ADM", { layout: { button: "rounded" } })).toThrow("바뀐 내용이 없습니다");
   });
 
-  it("화면설계서 생성 결과는 디자인 시스템에 있는 컴포넌트만 받고, 현재 디자인 개정을 기록한다", async () => {
+  it("화면설계서 생성 결과는 디자인 시스템에 있는 컴포넌트만 쓰고(없는 것은 글로만), 현재 디자인 개정을 기록한다", async () => {
     const m = await fresh();
     const ok = { template: "popup", components: [{ no: 1, label: "처리 결과", kind: "radio-group", planner: "반려 시 사유 100자 이상", customer: "승인 또는 반려를 고른다", options: { values: ["승인", "반려"], default: "승인" }, ui: { component: "radio-group", props: { label: "처리 결과", options: ["승인", "반려"] } } }] };
     applyGenerated(m, "sb", "ADM_INF_REV_010_P01", ok);
     expect(m.storyboard.screens.find((s) => s.screenId === "ADM_INF_REV_010_P01")).toMatchObject({ systemCode: "ADM", title: "승인·반려 처리", designRevision: 1 });
     const bad = { components: [{ no: 1, label: "x", kind: "x", ui: { component: "not-in-ds", props: {} } }] };
-    expect(() => applyGenerated(m, "sb", "ADM_INF_REV_010_P01", bad)).toThrow("디자인 시스템에 없습니다");
+    applyGenerated(m, "sb", "ADM_INF_REV_010_P01", bad);
+    expect(m.storyboard.screens.find((s) => s.screenId === "ADM_INF_REV_010_P01")!.components[0]!.ui).toBeUndefined();
   });
 
   it("화면설계서 결과의 흔한 형식 차이(값 없는 options, 배열 options, 글자 번호·필수값)를 보정하고, 못 고치면 읽기 쉬운 오류", async () => {

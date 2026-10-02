@@ -10,6 +10,7 @@
 import { search, type Chunk } from "../knowledge/search.js";
 import type { DesignComponent, Model, StoryboardScreen, SystemDesign } from "../model/schema.js";
 import { buildRtm, STATUS_LABEL, type Rtm } from "../trace/rtm.js";
+import { ensureDesign } from "../design/ops.js";
 
 export interface PromptUrl {
   label: string;
@@ -70,8 +71,24 @@ export class Ctx {
   system(code: string) {
     return this.m.systems.find((s) => s.code === code);
   }
+  private provisional = new Map<string, SystemDesign | undefined>();
   design(code: string): SystemDesign | undefined {
-    return this.m.design.systems.find((d) => d.systemCode === code);
+    return this.m.design.systems.find((x) => x.systemCode === code);
+  }
+  /** 화면설계서용 디자인. 아직 고르지 않았으면 저장 때 정해질 기본 컨셉(임시)을 쓴다 — 프롬프트에 토큰·컴포넌트 목록이 빠지지 않게 */
+  wireDesign(code: string): SystemDesign | undefined {
+    const d = this.design(code);
+    if (d?.status === "SELECTED") return d;
+    if (!this.provisional.has(code)) {
+      let p: SystemDesign | undefined;
+      try {
+        const tmp = { ...this.m, design: { systems: this.m.design.systems.filter((x) => x.systemCode === code).map((x) => structuredClone(x)) } } as Model;
+        ensureDesign(tmp, code);
+        p = tmp.design.systems.find((x) => x.systemCode === code);
+      } catch { p = undefined; }
+      this.provisional.set(code, p ?? d);
+    }
+    return this.provisional.get(code);
   }
   node(id: string) {
     return this.m.ia.nodes.find((n) => n.id === id);
@@ -187,7 +204,7 @@ export function finish(lines: string[]) {
 function storyboardPrompt(c: Ctx, sb: StoryboardScreen): PromptSet {
   const node = c.node(sb.screenId);
   const sys = c.system(sb.systemCode);
-  const d = c.design(sb.systemCode);
+  const d = c.wireDesign(sb.systemCode);
   const tasks = c.tasksOfScreen(sb.screenId);
   const parent = node?.kind === "POPUP" && node.parentId ? c.node(node.parentId) : undefined;
   const target = [
@@ -303,7 +320,7 @@ function prototypePrompt(c: Ctx, taskId: string): PromptSet {
   const ev = c.evidence(`${t.action} ${list.map((s) => s.title).join(" ")}`, 3);
   const screensBlock = list.map((sb) => `### ${sb.screenId} ${sb.title} (${sb.systemCode})\n${componentLines(sb)}`).join("\n\n");
   const target = [projectLine(c), `- 요구사항: ${row.requirementId} ${row.title}`, `- Task: ${t.taskId} [${t.systemCode}] ${t.actor ? `${t.actor}: ` : ""}${t.action}`, `- 화면: ${list.map((s) => s.screenId).join(", ")}`].join("\n");
-  const ds = systems.map((code) => `### ${code}\n${tokensBlock(c.design(code), code)}`).join("\n");
+  const ds = systems.map((code) => `### ${code}\n${tokensBlock(c.wireDesign(code), code)}`).join("\n");
 
   const figma = finish([
     `# 요청: Figma 프로토타입 연결 — ${t.taskId} ${t.action}`,

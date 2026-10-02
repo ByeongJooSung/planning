@@ -145,7 +145,8 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
     template: out.template ?? prev?.template,
     taskIds: prev?.taskIds ?? [],
     // 캔버스에서 옮긴 설명 번호 위치는 같은 번호·항목이면 유지
-    components: out.components.map((c) => {
+    components: out.components.map((c0) => {
+      const c = ds?.status === "SELECTED" ? fitUi(c0, ds) : c0;
       const was = prev?.components.find((x) => x.no === c.no && x.label === c.label);
       return was?.marker && !c.marker ? { ...c, marker: was.marker } : c;
     }),
@@ -155,6 +156,40 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
   work.storyboard.screens = prev ? work.storyboard.screens.map((s) => (s.screenId === screenId ? next : s)) : [...work.storyboard.screens, next];
   commit(m, work);
   return { summary: `${screenId} 화면설계서 ${prev ? "교체" : "작성"}: 구성 ${out.components.length}개`, changes: [], affectedScreens: [screenId] };
+}
+
+const ALIAS: Record<string, string> = {
+  table: "data-table", list: "data-table", grid: "data-table", "board-list": "notice-list", board: "notice-list",
+  input: "text-input", "text-field": "text-input", textfield: "text-input", password: "text-input", email: "text-input", number: "text-input",
+  "text-area": "textarea", dropdown: "select", combobox: "select", radio: "radio-group", checkbox: "checkbox-group",
+  date: "date-range", datepicker: "date-range", "date-picker": "date-range", period: "date-range", upload: "file-upload", file: "file-upload",
+  btn: "button", buttons: "button-group", actions: "button-group", "action-bar": "button-group", header: "gnb", nav: "gnb", navigation: "gnb", menu: "gnb",
+  sidebar: "lnb", "side-menu": "lnb", location: "breadcrumb", tab: "tabs", steps: "step-indicator", stepper: "step-indicator", search: "search-bar",
+  filter: "search-panel", "filter-panel": "search-panel", cards: "card-list", card: "card-list", paging: "pagination", detail: "detail-table",
+  "detail-view": "detail-table", badge: "status-badge", status: "status-badge", attachments: "file-list", stats: "stat-cards", dashboard: "stat-cards",
+  empty: "empty-state", banner: "hero-banner", hero: "hero-banner", login: "login-form", dialog: "modal", popup: "modal", confirm: "confirm-dialog",
+  alert: "alert-dialog", notice: "notice-list", links: "quick-links", "quick-menu": "quick-links",
+};
+
+/**
+ * 디자인 시스템에 없는 컴포넌트 이름이 오면 가까운 컴포넌트로 바꾼다 — 한 항목 때문에 화면 전체 반영이 막히지 않게.
+ * 대소문자·구분자 차이, 흔한 다른 이름, 이름(한글) 일치, 유형(kind) 순으로 찾고, 없으면 와이어프레임만 비운다.
+ */
+function fitUi<T extends { kind: string; label: string; ui?: { component: string; props: Record<string, unknown>; link?: string } }>(c: T, ds: { components: { id: string; name: string }[] }): T {
+  if (!c.ui) {
+    const k = ds.components.find((x) => x.id === c.kind);
+    return k ? { ...c, ui: { component: k.id, props: {} } } : c;
+  }
+  const ids = new Set(ds.components.map((x) => x.id));
+  if (ids.has(c.ui.component)) return c;
+  const key = (v: string) => v.toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9가-힣-]/g, "");
+  const raw = key(c.ui.component);
+  const cands = [raw, raw.replace(/^(krds|ds|ui|w|wf|c)-/, ""), ALIAS[raw], ALIAS[raw.replace(/s$/, "")], key(c.kind), ALIAS[key(c.kind)]];
+  let hit = cands.find((x) => x && ids.has(x));
+  if (!hit) hit = ds.components.find((x) => key(x.name).includes(raw) || (raw.length > 1 && key(x.name).split(/[()-]/).includes(raw)))?.id;
+  if (hit) return { ...c, ui: { ...c.ui, component: hit } };
+  const { ui: _drop, ...rest } = c;
+  return rest as T;
 }
 
 // ── 형식 보정: 모델마다 조금씩 다른 모양으로 답하므로 뜻이 분명한 차이는 받아들인다 ──
@@ -247,7 +282,7 @@ export function normalizeStoryboardOutput(output: unknown): unknown {
     if (options) out.options = options;
     const validation = normValidation(c.validation);
     if (validation) out.validation = validation;
-    const ui = normUi(c.ui, str(c.kind));
+    const ui = normUi(c.ui ?? (c.component != null ? { component: c.component, props: c.props } : undefined), str(c.kind));
     if (ui) out.ui = ui;
     return out;
   });

@@ -55,7 +55,8 @@ describe("AI 요청 프롬프트", () => {
     expect(pub["ds:ADM"]!.figma).toContain("`review-timeline` 심사 이력 타임라인");
     expect(shop["ds:USR"]!.figma).toContain("아직 컨셉이 선택되지 않았습니다");
     expect(shop["ds:USR"]!.claude).toContain("planning design select USR");
-    expect(shop["sb:USR_MY_ORD_010"]!.figma).toContain("컨셉이 아직 선택되지 않았습니다");
+    expect(shop["sb:USR_MY_ORD_010"]!.figma).toContain("- 컨셉: A.");
+    expect(shop["sb:USR_MY_ORD_010"]!.figma).not.toContain("컨셉이 아직 선택되지 않았습니다");
     expect(shop["sb:USR_MY_ORD_010"]!.urls.map((u) => u.url)).toEqual(["https://shop.example.com/my/orders"]);
   });
 });
