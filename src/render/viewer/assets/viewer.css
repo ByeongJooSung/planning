@@ -1224,3 +1224,23 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .figx { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 12px; margin: 0 0 12px; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--surface); }
 .figx b { font-size: 13px; }
 .figx .hint { flex: 1 1 260px; }
+.figx-sep { flex-basis: 100%; height: 0; }
+/* 프레임 편집기: 변형 막대 · 여러 선택 · 숨김 */
+.fx-mid { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.fx-mid > .fx-view { flex: 1; min-height: 0; }
+.fx-vbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 10px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.fx-vl { font-weight: 600; color: var(--ink-2); margin-right: 4px; }
+.fx-vt { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 3px 10px; font: 12.5px var(--font); cursor: pointer; color: var(--ink-2); }
+.fx-vt[aria-pressed="true"] { background: #7c3aed; border-color: #7c3aed; color: #fff; font-weight: 600; }
+.fx-vt.add { border-style: dashed; }
+.fx-vedit { display: inline-flex; gap: 4px; margin-left: 8px; }
+.fx-vedit input { width: 120px; font: 12.5px var(--font); padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.fx-vedit input.bad { border-color: var(--crit); }
+.fx-vhint { margin-left: auto; color: var(--ink-3); font-size: 11.5px; }
+.fx-sel.multi { outline: 2px dashed #4f6bff; }
+.fx-lr.on2 { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.fx-lr.hid .fx-ln { opacity: .45; text-decoration: line-through; }
+.fx-hid { font-style: normal; font-size: 10.5px; color: var(--ink-3); }
+.fx .fe-panel .fx-sub { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.fx-pad4 input { min-width: 0; width: 100%; box-sizing: border-box; padding: 6px 4px; }
+.fx-row2 input, .fx-row2 select, .fx-size input, .fx-size select { min-width: 0; box-sizing: border-box; }

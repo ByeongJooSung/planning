@@ -74,7 +74,7 @@ function treeStats(n: FNodeT, depth = 0): { count: number; depth: number; ids: s
  * 프레임 편집기로 그린 컴포넌트 저장 — 새로 만들거나, 기존 컴포넌트(기본 컴포넌트 포함)의 모양을 바꾼다.
  * 디자인 개정을 올려 이 컴포넌트를 쓰는 화면설계서가 다시 그려지고 재검토 대상이 된다.
  */
-export function saveFrameComponent(m: Model, systemCode: string, input: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number }, c: Ctx = {}): DesignComponent {
+export function saveFrameComponent(m: Model, systemCode: string, input: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number; variantTrees?: unknown }, c: Ctx = {}): DesignComponent {
   const d = getSystemDesign(m, systemCode);
   if (d?.status !== "SELECTED") throw new Error(`${systemCode} 디자인 시스템이 아직 없습니다. 컨셉을 먼저 선택하세요`);
   const tree = FNode.parse(input.tree);
@@ -83,13 +83,32 @@ export function saveFrameComponent(m: Model, systemCode: string, input: { id?: s
   if (st.count > 400) throw new Error(`노드가 너무 많습니다 (${st.count}개, 최대 400개)`);
   if (st.depth > 12) throw new Error("프레임을 너무 깊게 겹쳤습니다 (최대 12단계)");
   if (new Set(st.ids).size !== st.ids.length) throw new Error("노드 ID가 겹칩니다");
+  // 변형: 이름이 겹치지 않고, 각각 프레임으로 시작
+  const variants = input.variantTrees == null ? undefined : (input.variantTrees as unknown[]).map((v) => {
+    const o = v as { name?: unknown; tree?: unknown };
+    const name = String(o?.name ?? "").trim();
+    if (!name) throw new Error("변형 이름을 입력하세요");
+    const t = FNode.parse(o.tree);
+    if (t.type !== "frame") throw new Error(`변형 ${name}: 맨 위는 프레임이어야 합니다`);
+    const vs = treeStats(t);
+    if (vs.count > 400 || vs.depth > 12) throw new Error(`변형 ${name}이(가) 너무 큽니다`);
+    if (new Set(vs.ids).size !== vs.ids.length) throw new Error(`변형 ${name}: 노드 ID가 겹칩니다`);
+    return { name, tree: t };
+  });
+  if (variants) {
+    const names = variants.map((v) => v.name);
+    if (new Set(names).size !== names.length) throw new Error("변형 이름이 겹칩니다");
+    if (variants.length > 20) throw new Error("변형은 20개까지입니다");
+  }
   const now = (c.now ?? new Date()).toISOString();
   const name = String(input.name ?? "").trim();
   let comp = input.id ? d.components.find((x) => x.id === input.id) : undefined;
   if (input.id && !comp && !/^[a-z][a-z0-9-]*$/.test(input.id)) throw new Error("컴포넌트 ID는 영문 소문자·숫자·하이픈");
   // 인스턴스가 자기 자신을 쓰면 무한히 그려진다
   const refs: string[] = [];
-  (function walk(n: FNodeT) { if (n.type === "instance" && n.ref) refs.push(n.ref); (n.children ?? []).forEach(walk); })(tree);
+  const collect = (n: FNodeT) => { if (n.type === "instance" && n.ref) refs.push(n.ref); (n.children ?? []).forEach(collect); };
+  collect(tree);
+  for (const v of variants ?? []) collect(v.tree);
   const myId = comp?.id ?? input.id;
   if (myId && refs.includes(myId)) throw new Error("컴포넌트 안에 자기 자신을 넣을 수 없습니다");
   for (const r of refs) if (!d.components.some((x) => x.id === r)) throw new Error(`없는 컴포넌트를 인스턴스로 썼습니다: ${r}`);
@@ -99,6 +118,7 @@ export function saveFrameComponent(m: Model, systemCode: string, input: { id?: s
     if (input.description !== undefined) comp.description = String(input.description);
     comp.tree = tree;
     if (input.frameW) comp.frameW = input.frameW;
+    if (variants) { if (variants.length) comp.variantTrees = variants; else delete comp.variantTrees; }
   } else {
     if (!name) throw new Error("컴포넌트 이름을 입력하세요");
     let id = input.id || "";
@@ -109,7 +129,7 @@ export function saveFrameComponent(m: Model, systemCode: string, input: { id?: s
       id = base;
       for (let i = 2; d.components.some((x) => x.id === id); i++) id = slug ? `${base}-${i}` : `c-comp-${i}`;
     }
-    comp = DesignComponent.parse({ id, name, category: input.category ?? "content", description: input.description ?? "", origin: "ADDED", addedFor: "프레임 편집기", addedAt: now, tree, frameW: input.frameW });
+    comp = DesignComponent.parse({ id, name, category: input.category ?? "content", description: input.description ?? "", origin: "ADDED", addedFor: "프레임 편집기", addedAt: now, tree, frameW: input.frameW, ...(variants && variants.length ? { variantTrees: variants } : {}) });
     d.components.push(comp);
   }
   d.revision += 1;
@@ -129,6 +149,7 @@ export function removeFrameComponent(m: Model, systemCode: string, id: string, c
   if (comp.origin === "BASE") {
     delete comp.tree;
     delete comp.frameW;
+    delete comp.variantTrees;
     msg = `${id} 기본 모양으로 되돌림`;
   } else {
     if (usedIn.length) throw new Error(`화면설계서에서 쓰는 컴포넌트라 지울 수 없습니다: ${usedIn.join(", ")}`);

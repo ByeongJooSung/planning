@@ -40,8 +40,9 @@
   function open(o) {
     if (S) close(true);
     var c = o.comp || {};
-    var doc = { id: c.id || "", name: c.name || "", category: c.category || "content", description: c.description || "", frameW: c.frameW || 360, tree: c.tree ? clone(c.tree) : starter() };
-    S = { o: o, doc: doc, saved: JSON.stringify(doc), undo: [], redo: [], sel: doc.tree.id, hover: null, tool: "select", z: 1, tab: "props", drag: null };
+    var doc = { id: c.id || "", name: c.name || "", category: c.category || "content", description: c.description || "", frameW: c.frameW || 360,
+      vars: [{ name: "기본", tree: c.tree ? clone(c.tree) : starter() }].concat((c.variantTrees || []).map(clone)) };
+    S = { o: o, doc: doc, vi: 0, saved: JSON.stringify(doc), undo: [], redo: [], sel: doc.vars[0].tree.id, multi: [], hover: null, tool: "select", z: 1, tab: "props", drag: null, ai: { draft: "", busy: false, err: "", mode: "edit" } };
     var el = document.createElement("div");
     el.className = "fe fx";
     el.setAttribute("role", "dialog");
@@ -91,12 +92,17 @@
 
   // ── 변경·되돌리기 ───────────────────────────
   function snap() { S.undo.push(JSON.stringify(S.doc)); if (S.undo.length > 150) S.undo.shift(); S.redo = []; }
-  function mut(fn) { snap(); fn(S.doc.tree); render(); }
+  /** 지금 편집 중인 변형의 트리 */
+  function T() { return S.doc.vars[S.vi].tree; }
+  function setT(t) { S.doc.vars[S.vi].tree = t; }
+  /** 선택한 노드 ID들 (기본 선택 + Shift로 더한 것) */
+  function sels() { var out = S.sel ? [S.sel] : []; (S.multi || []).forEach(function (id) { if (out.indexOf(id) < 0 && F.find(T(), id)) out.push(id); }); return out; }
+  function mut(fn) { snap(); fn(T()); render(); }
   function undo() { if (!S.undo.length) return; S.redo.push(JSON.stringify(S.doc)); S.doc = JSON.parse(S.undo.pop()); fixSel(); S.forceSide = true; render(); }
   function redo() { if (!S.redo.length) return; S.undo.push(JSON.stringify(S.doc)); S.doc = JSON.parse(S.redo.pop()); fixSel(); S.forceSide = true; render(); }
-  function fixSel() { if (S.sel && !F.find(S.doc.tree, S.sel)) S.sel = S.doc.tree.id; }
-  function cur() { var f = S.sel && F.find(S.doc.tree, S.sel); return f ? f.node : null; }
-  function parentOf(id) { var f = F.find(S.doc.tree, id); return f ? f.parent : null; }
+  function fixSel() { if (S.vi >= S.doc.vars.length) S.vi = 0; if (!S.sel || !F.find(T(), S.sel)) S.sel = T().id; S.multi = (S.multi || []).filter(function (id) { return F.find(T(), id); }); }
+  function cur() { var f = S.sel && F.find(T(), S.sel); return f ? f.node : null; }
+  function parentOf(id) { var f = F.find(T(), id); return f ? f.parent : null; }
   function modeOf(n) { return n && n.layout ? n.layout.mode : "none"; }
 
   // ── 그리기 ──────────────────────────────────
@@ -112,12 +118,20 @@
       '<button class="fe-b fe-close" data-fx-act="close">닫기 ✕</button></header>' +
       '<div class="fe-body fx-body"><aside class="fe-tools" aria-label="도구">' + (ed ? tools : "") + "</aside>" +
       '<aside class="fx-layers" aria-label="레이어"><div class="fx-lh">레이어</div><div class="fx-ltree"></div></aside>' +
-      '<div class="fx-view" tabindex="0" aria-label="캔버스"><div class="fx-canvas"><div class="fx-scale"></div><div class="fx-ov"></div><textarea class="fx-inline" hidden aria-label="텍스트 편집"></textarea></div></div>' +
-      '<aside class="fe-side"><div class="fe-tabs" role="tablist"><button data-fx-tab="props" role="tab">속성</button><button data-fx-tab="export" role="tab">Figma · 내보내기</button></div><div class="fe-panel"></div></aside></div>' +
+      '<div class="fx-mid"><div class="fx-vbar" aria-label="변형"></div><div class="fx-view" tabindex="0" aria-label="캔버스"><div class="fx-canvas"><div class="fx-scale"></div><div class="fx-ov"></div><textarea class="fx-inline" hidden aria-label="텍스트 편집"></textarea></div></div></div>' +
+      '<aside class="fe-side"><div class="fe-tabs" role="tablist"><button data-fx-tab="props" role="tab">속성</button><button data-fx-tab="ai" role="tab">✦ AI</button><button data-fx-tab="export" role="tab">Figma</button></div><div class="fe-panel"></div></aside></div>' +
       '<footer class="fe-f" id="fx-hint"></footer>';
+  }
+  function renderVbar() {
+    var b = S.el.querySelector(".fx-vbar"), ed = S.o.editable !== false;
+    b.innerHTML = '<span class="fx-vl">변형</span>' + S.doc.vars.map(function (v, i) { return '<button class="fx-vt" data-fx-v="' + i + '" aria-pressed="' + (i === S.vi) + '">' + esc(v.name) + "</button>"; }).join("") +
+      (ed ? '<button class="fx-vt add" data-fx-act="vadd" title="지금 변형을 복제해 새 변형 만들기">+ 변형</button>' : "") +
+      (ed && S.vi > 0 ? '<span class="fx-vedit"><input data-fx-vname value="' + esc(S.doc.vars[S.vi].name) + '" aria-label="변형 이름" maxlength="40"><button class="fe-b danger" data-fx-act="vdel">이 변형 삭제</button></span>' : "") +
+      '<span class="fx-vhint">화면설계서에서 항목 props의 variant로 고릅니다 (예: 기본 · 비활성 · 오류)</span>';
   }
   function render() {
     if (!S) return;
+    renderVbar();
     renderCanvas();
     renderLayers();
     renderSide();
@@ -134,8 +148,8 @@
   }
   function renderCanvas() {
     var sc = S.el.querySelector(".fx-scale"), o = S.o;
-    var rootFill = S.doc.tree.w === "fill";
-    sc.innerHTML = '<div class="wf fx-wf" style="' + o.vars + '"><div class="fx-board"' + (rootFill ? ' style="width:' + S.doc.frameW + 'px"' : "") + ">" + F.html(S.doc.tree, { ids: true, ds: o.ds, comps: o.comps, props: {} }) + "</div></div>";
+    var rootFill = T().w === "fill";
+    sc.innerHTML = '<div class="wf fx-wf" style="' + o.vars + '"><div class="fx-board"' + (rootFill ? ' style="width:' + S.doc.frameW + 'px"' : "") + ">" + F.html(T(), { ids: true, ds: o.ds, comps: o.comps, props: {} }) + "</div></div>";
     sc.style.transform = "scale(" + S.z + ")";
     var wf = sc.firstElementChild;
     var cv = S.el.querySelector(".fx-canvas");
@@ -156,6 +170,7 @@
     if (!S) return;
     var ov = S.el.querySelector(".fx-ov"), h = "", n = cur();
     if (S.hover && S.hover !== S.sel) { var hb = boxOf(S.hover); if (hb) h += '<div class="fx-hov" style="left:' + hb.x + "px;top:" + hb.y + "px;width:" + hb.w + "px;height:" + hb.h + 'px"></div>'; }
+    sels().slice(1).forEach(function (id) { var mb = boxOf(id); if (mb) h += '<div class="fx-sel multi" style="left:' + mb.x + "px;top:" + mb.y + "px;width:" + mb.w + "px;height:" + mb.h + 'px"></div>'; });
     if (n) {
       var b = boxOf(n.id);
       if (b) {
@@ -190,11 +205,11 @@
     var rows = [];
     (function walk(n, d, parent) {
       var kids = n.children || [];
-      rows.push('<div class="fx-lr' + (n.id === S.sel ? " on" : "") + '" data-fx-sel="' + esc(n.id) + '" style="padding-left:' + (8 + d * 14) + 'px"><span class="fx-li">' + svg(n.type === "frame" && modeOf(n) === "row" ? "frame" : n.type) + "</span><span class=\"fx-ln\">" + esc(n.name || (n.type === "text" ? (n.text || "").slice(0, 20) : TYPE[n.type])) + "</span>" +
+      rows.push('<div class="fx-lr' + (n.id === S.sel ? " on" : sels().indexOf(n.id) >= 0 ? " on2" : "") + (n.hidden ? " hid" : "") + '" data-fx-sel="' + esc(n.id) + '" style="padding-left:' + (8 + d * 14) + 'px"><span class="fx-li">' + svg(n.type === "frame" && modeOf(n) === "row" ? "frame" : n.type) + "</span><span class=\"fx-ln\">" + esc(n.name || (n.type === "text" ? (n.text || "").slice(0, 20) : TYPE[n.type])) + "</span>" +
         (n.bind ? '<em class="fx-bind">{' + esc(n.bind) + "}</em>" : "") + (n.type === "frame" && modeOf(n) !== "none" ? '<em class="fx-al">' + (modeOf(n) === "row" ? "→" : "↓") + "</em>" : "") +
-        (ed && parent ? '<span class="fx-lb"><button data-fx-act="up" data-fx-id="' + esc(n.id) + '" title="위로">↑</button><button data-fx-act="down" data-fx-id="' + esc(n.id) + '" title="아래로">↓</button><button data-fx-act="outdent" data-fx-id="' + esc(n.id) + '" title="상위 프레임 밖으로">⇤</button><button data-fx-act="indent" data-fx-id="' + esc(n.id) + '" title="바로 위 프레임 안으로">⇥</button></span>' : "") + "</div>");
+        (n.hidden ? '<em class="fx-hid">숨김</em>' : "") + (ed && parent ? '<span class="fx-lb"><button data-fx-act="hide" data-fx-id="' + esc(n.id) + '" title="' + (n.hidden ? "보이기" : "숨기기") + '">' + (n.hidden ? "◌" : "◉") + '</button><button data-fx-act="up" data-fx-id="' + esc(n.id) + '" title="위로">↑</button><button data-fx-act="down" data-fx-id="' + esc(n.id) + '" title="아래로">↓</button><button data-fx-act="outdent" data-fx-id="' + esc(n.id) + '" title="상위 프레임 밖으로">⇤</button><button data-fx-act="indent" data-fx-id="' + esc(n.id) + '" title="바로 위 프레임 안으로">⇥</button></span>' : "") + "</div>");
       kids.forEach(function (c) { walk(c, d + 1, n); });
-    })(S.doc.tree, 0, null);
+    })(T(), 0, null);
     box.innerHTML = rows.join("");
   }
 
@@ -217,9 +232,11 @@
     S.forceSide = false;
     var h = "";
     if (S.tab === "export") h = exportPanel();
+    else if (S.tab === "ai") h = aiPanel();
     else if (!n) h = docPanel();
+    else if (sels().length > 1) h = multiPanel();
     else {
-      var par = parentOf(n.id), pm = modeOf(par), isRoot = n.id === S.doc.tree.id;
+      var par = parentOf(n.id), pm = modeOf(par), isRoot = n.id === T().id;
       h = '<h3>' + esc(TYPE[n.type]) + ' <small class="mono">' + esc(n.id) + "</small></h3>" +
         '<label>이름<input data-fx="name" value="' + esc(n.name || "") + '" placeholder="' + esc(TYPE[n.type]) + '"></label>';
       if (n.type !== "line") h += '<div class="fx-row2">' + sizeCtl("w", n.w, "너비") + (n.type === "text" || n.type === "icon" ? "" : sizeCtl("h", n.h, "높이")) + "</div>";
@@ -257,19 +274,46 @@
       }
       if (n.type === "instance") {
         var others = (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; });
-        h += '<div class="fx-sec"><b>인스턴스</b><label>컴포넌트<select data-fx="ref">' + others.map(function (c) { return opt(c.id, c.name + " (" + c.id + ")" + (c.tree ? " ✎" : ""), n.ref); }).join("") + '</select></label><p class="fe-note">원본 컴포넌트를 고치면 여기도 함께 바뀝니다.</p></div>';
+        var refc = others.find(function (c) { return c.id === n.ref; }), vnames = refc && refc.variantTrees ? refc.variantTrees.map(function (v) { return v.name; }) : [];
+        var rb = refc ? F.binds(F.treeOf(refc, n.variant)) : [];
+        h += '<div class="fx-sec"><b>인스턴스</b><label>컴포넌트<select data-fx="ref">' + others.map(function (c) { return opt(c.id, c.name + " (" + c.id + ")" + (c.tree ? " ✎" : ""), n.ref); }).join("") + "</select></label>" +
+          (vnames.length ? '<label>변형<select data-fx="variant">' + opt("", "기본", n.variant || "") + vnames.map(function (v) { return opt(v, v, n.variant); }).join("") + "</select></label>" : "") +
+          (rb.length ? '<b class="fx-sub">글자 덮어쓰기</b>' + rb.map(function (k) { return '<label>' + esc(k) + '<input data-fx-prop="' + esc(k) + '" value="' + esc((n.props || {})[k] || "") + '" placeholder="원본 글자 그대로"></label>'; }).join("") : '<p class="fe-note">원본에 props 연결된 텍스트가 없어 글자를 덮어쓸 수 없습니다.</p>') +
+          colorCtl("fill", n.fill, "채우기 덮어쓰기", true) +
+          '<p class="fe-note">원본 컴포넌트를 고치면 덮어쓰지 않은 부분은 함께 바뀝니다.</p></div>';
       }
+      if (!isRoot) h += '<label class="fe-chk"><input type="checkbox" data-fx="hidden"' + (n.hidden ? " checked" : "") + "> 숨김 (이 변형에서 안 보이게)</label>";
       if (ed) h += '<div class="fx-acts">' + (isRoot ? "" : '<button class="fe-b" data-fx-act="dup">복제 (Ctrl+D)</button>') + '<button class="fe-b" data-fx-act="wrap">프레임으로 감싸기 (Ctrl+Alt+G)</button>' + (isRoot ? "" : '<button class="fe-b" data-fx-act="parent">상위 선택 (Esc)</button><button class="fe-b danger" data-fx-act="del">삭제 (Delete)</button>') + "</div>";
       if (isRoot) h += docPanel();
     }
     p.innerHTML = h;
   }
+  function multiPanel() {
+    var ids = sels(), ed = S.o.editable !== false;
+    var abs = ids.every(function (id) { var f = F.find(T(), id); return f && f.parent && modeOf(f.parent) === "none"; });
+    return "<h3>" + ids.length + "개 선택</h3><p class=\"fe-note\">" + ids.map(function (id) { var f = F.find(T(), id); return esc(f ? f.node.name || TYPE[f.node.type] : id); }).join(", ") + "</p>" +
+      (ed ? '<div class="fx-acts"><button class="fe-b fe-primary" data-fx-act="group">프레임으로 묶기 (Ctrl+G)</button><button class="fe-b" data-fx-act="dup">모두 복제</button><button class="fe-b danger" data-fx-act="del">모두 삭제</button></div>' +
+        (abs ? '<div class="fx-sec"><b>정렬</b><div class="fx-seg sm"><button data-fx-act="al-l">왼쪽</button><button data-fx-act="al-c">가운데</button><button data-fx-act="al-r">오른쪽</button></div><div class="fx-seg sm"><button data-fx-act="al-t">위</button><button data-fx-act="al-m">가운데</button><button data-fx-act="al-b">아래</button></div></div>' : '<p class="fe-note">정렬은 위치 지정 프레임 안 요소에 씁니다. 오토 레이아웃 안에서는 부모 프레임의 정렬을 바꾸세요.</p>') +
+        '<div class="fx-sec"><b>한꺼번에 바꾸기</b>' + colorCtl("m:fill", "", "채우기", true) + colorCtl("m:color", "", "글자 색", true) + "</div>" : "") +
+      '<p class="fe-note">Shift+누르기로 더하거나 뺍니다.</p>';
+  }
+  function aiPanel() {
+    var ai = S.o.ai || {}, A = S.ai, ed = S.o.editable !== false;
+    return "<h3>✦ AI로 그리기·고치기</h3>" +
+      '<p class="fe-note">디자인 토큰·쓸 수 있는 컴포넌트·아이콘·노드 규칙을 함께 보내, 오토 레이아웃과 토큰을 쓰는 컴포넌트를 그립니다. 결과는 캔버스에 바로 들어가고(되돌리기 가능) 저장해야 반영됩니다.</p>' +
+      '<div class="fx-seg sm"><button data-fx-aimode="new" aria-pressed="' + (A.mode === "new") + '">새로 그리기</button><button data-fx-aimode="edit" aria-pressed="' + (A.mode !== "new") + '">지금 모양 고치기</button></div>' +
+      '<label>요청<textarea rows="5" data-fx-ai placeholder="' + (A.mode === "new" ? "예: 공지 알림 카드 — 아이콘·제목·날짜·더보기 버튼, 변형: 기본·중요(빨간 테두리)" : "예: 버튼 높이를 48로, 비활성 변형 추가") + '">' + esc(A.draft) + "</textarea></label>" +
+      (A.busy ? '<div class="fe-busy"><span class="fe-spin"></span>AI가 그리는 중… <button class="fe-b" data-fx-act="ai-stop">멈춤</button></div>' :
+        (ed ? '<button class="fe-b wide fe-primary" data-fx-act="ai-run"' + (ai.available ? "" : ' disabled title="AI 연결이 없습니다 — 아래 claude.ai로 만들기를 쓰거나 AI 설정에서 연결을 등록하세요"') + ">✦ AI로 " + (A.mode === "new" ? "그리기" : "고치기") + (ai.label ? " · " + esc(ai.label) : "") + "</button>" : "")) +
+      (A.err ? '<p class="fe-err" role="alert">' + esc(A.err) + "</p>" : "") +
+      (ed ? '<details class="gen-claude"><summary><span class="cl-logo">✳</span> Claude 구독(claude.ai)으로 만들기</summary><ol class="cl-steps"><li><button class="fe-b" data-fx-act="ai-copy">① 프롬프트 복사 · claude.ai 열기</button></li><li><label>② Claude 답 붙여 넣기<textarea rows="4" class="fx-paste" placeholder="Claude가 준 JSON(코드 블록 포함) 그대로"></textarea></label><button class="fe-b" data-fx-act="ai-paste">붙여 넣은 결과 적용</button></li></ol></details>' : "");
+  }
   function docPanel() {
     var d = S.doc, binds = [];
-    F.walk(d.tree, function (n) { if (n.bind) binds.push(n.bind); });
+    S.doc.vars.forEach(function (v) { F.walk(v.tree, function (n) { if (n.bind && binds.indexOf(n.bind) < 0) binds.push(n.bind); }); });
     return '<div class="fx-sec"><b>컴포넌트</b><label>분류<select data-fx-doc="category">' + (S.o.categories || []).map(function (c) { return opt(c[0], c[1], d.category); }).join("") + "</select></label>" +
       '<label>설명<textarea rows="2" data-fx-doc="description" placeholder="언제 쓰는 컴포넌트인지">' + esc(d.description) + "</textarea></label>" +
-      (d.tree.w === "fill" ? '<label>미리보기 폭(px)<input type="number" min="40" max="1920" data-fx-doc="frameW" value="' + d.frameW + '"></label>' : "") +
+      (T().w === "fill" ? '<label>미리보기 폭(px)<input type="number" min="40" max="1920" data-fx-doc="frameW" value="' + d.frameW + '"></label>' : "") +
       '<p class="fe-note">ID: <span class="mono">' + esc(d.id || "(저장하면 정해짐)") + "</span>" + (binds.length ? " · props: " + binds.map(function (b) { return "<code>" + esc(b) + "</code>"; }).join(" ") : " · props 연결 없음") + "</p>" +
       '<div class="fe-help"><b>쓰는 법</b><ol><li>왼쪽 도구로 프레임·텍스트·도형을 넣으면 선택한 프레임 안에 들어갑니다.</li><li>프레임의 오토 레이아웃(가로·세로)·간격·패딩·정렬로 배치하고, 크기는 내용에 맞춤·채우기·고정 중에 고릅니다.</li><li>색·글자 크기·모서리는 토큰으로 고르면 디자인 시스템 토큰을 바꿀 때 함께 바뀝니다.</li><li>텍스트의 ‘props 연결’에 label처럼 이름을 주면 화면설계서 항목 값으로 글자가 바뀝니다.</li><li>저장하면 화면설계서·프로토타입에서 이 컴포넌트를 고를 수 있습니다.</li></ol></div></div>';
   }
@@ -286,7 +330,10 @@
   function onClick(ev) {
     var b = ev.target.closest && ev.target.closest("button, [data-fx-sel]");
     if (!b || !S) return;
-    var tool = b.getAttribute("data-fx-tool"), tab = b.getAttribute("data-fx-tab"), act = b.getAttribute("data-fx-act"), sel = b.getAttribute("data-fx-sel");
+    var tool = b.getAttribute("data-fx-tool"), tab = b.getAttribute("data-fx-tab"), act = b.getAttribute("data-fx-act"), sel = b.getAttribute("data-fx-sel"), vv = b.getAttribute("data-fx-v");
+    var am = b.getAttribute("data-fx-aimode");
+    if (am) { S.ai.mode = am; S.forceSide = true; renderSide(); return; }
+    if (vv != null) { S.vi = Number(vv); S.sel = T().id; S.multi = []; S.forceSide = true; render(); return; }
     if (tool) { S.tool = S.tool === tool && tool !== "select" ? "select" : tool; if (S.tool !== "select" && S.tool !== "instance") { addNode(S.tool); S.tool = "select"; } else if (S.tool === "instance") { addNode("instance"); S.tool = "select"; } render(); return; }
     if (tab) { S.tab = tab; S.forceSide = true; renderSide(); render(); return; }
     if (act) { action(act, b.getAttribute("data-fx-id")); return; }
@@ -307,12 +354,23 @@
       S.forceSide = true; renderSide();
       return;
     }
-    if (sel) { S.sel = sel; S.forceSide = true; render(); }
+    if (sel) { if (ev.shiftKey && S.sel && sel !== S.sel) { var mi = S.multi.indexOf(sel); if (mi >= 0) S.multi.splice(mi, 1); else S.multi.push(sel); } else { S.sel = sel; S.multi = []; } S.forceSide = true; render(); }
   }
-  function onFocus(ev) { if (ev.target.getAttribute && (ev.target.getAttribute("data-fx") || ev.target.getAttribute("data-fx-doc"))) S.fieldSnap = true; }
+  function onFocus(ev) { if (ev.target.getAttribute && (ev.target.getAttribute("data-fx") || ev.target.getAttribute("data-fx-doc") || ev.target.hasAttribute("data-fx-vname"))) S.fieldSnap = true; }
   function onInput(ev) {
     var t = ev.target, k = t.getAttribute("data-fx"), dk = t.getAttribute("data-fx-doc");
     if (t.classList.contains("fx-inline")) return;
+    if (t.hasAttribute("data-fx-vname")) {
+      var nm = t.value.trim();
+      if (!nm || S.doc.vars.some(function (v, i) { return i !== S.vi && v.name === nm; })) { t.classList.add("bad"); return; }
+      t.classList.remove("bad");
+      if (S.fieldSnap) { snap(); S.fieldSnap = false; }
+      S.doc.vars[S.vi].name = nm;
+      S.el.querySelectorAll(".fx-vt")[S.vi].textContent = nm;
+      return;
+    }
+    if (t.getAttribute("data-fx-ai") != null) { S.ai.draft = t.value; return; }
+    if (t.getAttribute("data-fx-prop") != null) { var inn = cur(); if (inn) { if (S.fieldSnap) { snap(); S.fieldSnap = false; } inn.props = inn.props || {}; if (t.value === "") delete inn.props[t.getAttribute("data-fx-prop")]; else inn.props[t.getAttribute("data-fx-prop")] = t.value; if (!Object.keys(inn.props).length) delete inn.props; renderCanvas(); } return; }
     if (!k && !dk) return;
     if (t.tagName === "SELECT" || t.type === "checkbox") return;
     if (S.fieldSnap) { snap(); S.fieldSnap = false; }
@@ -344,6 +402,11 @@
     if (/^pad[0-3]$/.test(k)) { n.layout = n.layout || { mode: "none", gap: 0, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false }; n.layout.pad = (n.layout.pad || [0, 0, 0, 0]).slice(); n.layout.pad[Number(k[3])] = Math.max(0, num(v)); return; }
     if (k === "wrap") { n.layout.wrap = !!v; return; }
     if (k === "clip") { if (v) n.clip = true; else delete n.clip; return; }
+    if (/^m:(fill|color)(#hex)?$/.test(k)) {
+      var key = k.slice(2).replace("#hex", ""), val = /#hex$/.test(k) ? String(v).toUpperCase() : v === "#custom" ? (S.el.querySelector('[data-fx="m:' + key + '#hex"]') || {}).value : v;
+      sels().forEach(function (id) { var f = F.find(T(), id); if (!f) return; var x = f.node; if (key === "fill" && /frame|rect|ellipse|instance/.test(x.type)) { if (val) x.fill = val; else delete x.fill; } if (key === "color" && /text|icon/.test(x.type)) { if (val) x.color = val; else delete x.color; } });
+      return;
+    }
     if (k === "fill" || k === "stroke" || k === "color") {
       if (v === "#custom") { var hx = S.el.querySelector('[data-fx="' + k + '#hex"]'); n[k] = hx ? hx.value.toUpperCase() : "#888888"; }
       else if (v) n[k] = v; else delete n[k];
@@ -362,7 +425,9 @@
     if (k === "weight") { n.weight = num(v); return; }
     if (k === "bind") { var b = String(v).trim().replace(/[^a-zA-Z0-9_]/g, ""); if (b && /^[a-zA-Z]/.test(b)) n.bind = b; else delete n.bind; return; }
     if (k === "icon") { n.icon = v; return; }
-    if (k === "ref") { n.ref = v; return; }
+    if (k === "ref") { n.ref = v; delete n.variant; delete n.props; return; }
+    if (k === "variant") { if (v) n.variant = v; else delete n.variant; return; }
+    if (k === "hidden") { if (v) n.hidden = true; else delete n.hidden; return; }
   }
 
   // 노드 넣기: 선택한 프레임 안 끝 / 선택한 요소 다음
@@ -410,15 +475,61 @@
       case "dup": return dup();
       case "wrap": return wrap();
       case "up": case "down": case "outdent": case "indent": return move(act, id || (n && n.id));
+      case "vadd": snap(); S.doc.vars.push({ name: uniqueVName(), tree: clone(T()) }); S.vi = S.doc.vars.length - 1; S.sel = T().id; S.multi = []; S.forceSide = true; render(); return;
+      case "vdel": if (S.vi === 0) return; if (!window.confirm("‘" + S.doc.vars[S.vi].name + "’ 변형을 지울까요?")) return; snap(); S.doc.vars.splice(S.vi, 1); S.vi = 0; S.sel = T().id; S.forceSide = true; render(); return;
+      case "hide": { var hf = F.find(T(), id); if (!hf || !hf.parent) return; mut(function () { if (hf.node.hidden) delete hf.node.hidden; else hf.node.hidden = true; }); return; }
+      case "group": return group();
+      case "al-l": case "al-c": case "al-r": case "al-t": case "al-m": case "al-b": return align(act);
+      case "ai-run": return aiRun();
+      case "ai-copy": return aiCopy();
+      case "ai-paste": return aiPaste();
+      case "ai-stop": if (S.ai.ctl) S.ai.ctl.abort(); return;
       case "x-script": case "x-plugin": case "x-prompt": case "x-json": return doExport(act);
     }
   }
+  function uniqueVName() { for (var i = 1; ; i++) { var nm = "변형 " + i; if (!S.doc.vars.some(function (v) { return v.name === nm; })) return nm; } }
   function del() {
-    var n = cur();
-    if (!n || n.id === S.doc.tree.id) return;
-    var p = parentOf(n.id);
-    mut(function () { var i = p.children.indexOf(n); p.children.splice(i, 1); S.sel = p.children[Math.min(i, p.children.length - 1)] ? p.children[Math.min(i, p.children.length - 1)].id : p.id; });
+    var ids = sels().filter(function (id) { return id !== T().id; });
+    if (!ids.length) return;
+    var first = F.find(T(), ids[0]), p = first && first.parent;
+    mut(function (tree) {
+      ids.forEach(function (id) { var f = F.find(tree, id); if (f && f.parent) f.parent.children.splice(f.parent.children.indexOf(f.node), 1); });
+      S.sel = p && F.find(tree, p.id) ? (p.children[0] ? p.children[0].id : p.id) : tree.id;
+      S.multi = [];
+    });
     S.forceSide = true; renderSide();
+  }
+  /** 여러 개를 골라 같은 부모 안에서 오토 레이아웃 프레임으로 묶기 */
+  function group() {
+    var ids = sels().filter(function (id) { return id !== T().id; });
+    if (ids.length < 2) return wrap();
+    var fs = ids.map(function (id) { return F.find(T(), id); });
+    var p = fs[0].parent;
+    if (fs.some(function (f) { return f.parent !== p; })) { S.o.toast && S.o.toast("같은 프레임 안에 있는 요소끼리만 묶을 수 있습니다", "err"); return; }
+    mut(function (tree) {
+      var order = p.children.filter(function (c) { return ids.indexOf(c.id) >= 0; });
+      var at = p.children.indexOf(order[0]);
+      var g = { id: F.nextId(tree, "f"), type: "frame", name: "묶음", w: "hug", h: "hug", layout: { mode: modeOf(p) === "row" ? "row" : "column", gap: 8, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false }, children: order };
+      if (modeOf(p) === "none") { g.x = Math.min.apply(null, order.map(function (c) { return c.x || 0; })); g.y = Math.min.apply(null, order.map(function (c) { return c.y || 0; })); order.forEach(function (c) { delete c.x; delete c.y; }); }
+      p.children = p.children.filter(function (c) { return ids.indexOf(c.id) < 0; });
+      p.children.splice(at, 0, g);
+      S.sel = g.id; S.multi = [];
+    });
+    S.forceSide = true; renderSide();
+  }
+  /** 위치 지정 프레임 안의 여러 요소 정렬 (왼쪽·가운데·오른쪽·위·가운데·아래) */
+  function align(act) {
+    var ids = sels(), fs = ids.map(function (id) { return F.find(T(), id); }).filter(function (f) { return f && f.parent && modeOf(f.parent) === "none"; });
+    if (fs.length < 2) { S.o.toast && S.o.toast("위치 지정 프레임 안의 요소를 두 개 이상 고르세요 (오토 레이아웃은 프레임 정렬을 쓰세요)", "err"); return; }
+    var bx = fs.map(function (f) { var b = boxOf(f.node.id); return { f: f, x: f.node.x || 0, y: f.node.y || 0, w: b ? b.w / S.z : 0, h: b ? b.h / S.z : 0 }; });
+    var minX = Math.min.apply(null, bx.map(function (b) { return b.x; })), maxX = Math.max.apply(null, bx.map(function (b) { return b.x + b.w; })), minY = Math.min.apply(null, bx.map(function (b) { return b.y; })), maxY = Math.max.apply(null, bx.map(function (b) { return b.y + b.h; }));
+    mut(function () {
+      bx.forEach(function (b) {
+        var n = b.f.node;
+        if (act === "al-l") n.x = Math.round(minX); if (act === "al-r") n.x = Math.round(maxX - b.w); if (act === "al-c") n.x = Math.round((minX + maxX) / 2 - b.w / 2);
+        if (act === "al-t") n.y = Math.round(minY); if (act === "al-b") n.y = Math.round(maxY - b.h); if (act === "al-m") n.y = Math.round((minY + maxY) / 2 - b.h / 2);
+      });
+    });
   }
   function reId(n, tree) {
     var used = {};
@@ -426,10 +537,13 @@
     F.walk(n, function (x) { var base = x.id.replace(/\d+$/, "") || "n"; var i = 1; while (used[base + i]) i++; x.id = base + i; used[x.id] = true; });
   }
   function dup() {
-    var n = cur();
-    if (!n || n.id === S.doc.tree.id) return;
-    var p = parentOf(n.id);
-    mut(function (tree) { var c = clone(n); reId(c, tree); if (modeOf(p) === "none") { c.x = (c.x || 0) + 16; c.y = (c.y || 0) + 16; } p.children.splice(p.children.indexOf(n) + 1, 0, c); S.sel = c.id; });
+    var ids = sels().filter(function (id) { return id !== T().id; });
+    if (!ids.length) return;
+    mut(function (tree) {
+      var made = [];
+      ids.forEach(function (id) { var f = F.find(tree, id); if (!f || !f.parent) return; var p = f.parent, c = clone(f.node); reId(c, tree); if (modeOf(p) === "none") { c.x = (c.x || 0) + 16; c.y = (c.y || 0) + 16; } p.children.splice(p.children.indexOf(f.node) + 1, 0, c); made.push(c.id); });
+      S.sel = made[0]; S.multi = made.slice(1);
+    });
     S.forceSide = true; renderSide();
   }
   /** 선택한 요소를 오토 레이아웃 프레임으로 감싸기 (프레임이면 오토 레이아웃 켜기) */
@@ -439,7 +553,7 @@
     mut(function (tree) {
       if (n.id === tree.id) {
         var inner = clone(tree), id = F.nextId(tree, "f");
-        S.doc.tree = { id: "root", type: "frame", name: "컴포넌트", w: "hug", h: "hug", layout: { mode: "column", gap: 8, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false }, children: [Object.assign(inner, { id: id })] };
+        setT({ id: "root", type: "frame", name: "컴포넌트", w: "hug", h: "hug", layout: { mode: "column", gap: 8, pad: [0, 0, 0, 0], align: "start", justify: "start", wrap: false }, children: [Object.assign(inner, { id: id })] });
         S.sel = "root";
         return;
       }
@@ -451,7 +565,7 @@
     S.forceSide = true; renderSide();
   }
   function move(act, id) {
-    var f = F.find(S.doc.tree, id);
+    var f = F.find(T(), id);
     if (!f || !f.parent) return;
     var n = f.node, p = f.parent, i = p.children.indexOf(n);
     mut(function (tree) {
@@ -480,17 +594,24 @@
     if (!id) { S.drag = { kind: "pan", x: ev.clientX, y: ev.clientY, l: S.view.scrollLeft, t: S.view.scrollTop }; return; }
     if (S.tool !== "select") { S.sel = id; addNode(S.tool); S.tool = "select"; render(); return; }
     // 이미 선택한 요소의 자식을 누르면 한 단계씩 안으로 (피그마처럼): 선택이 없거나 다른 가지면 가장 바깥 자식부터
-    S.sel = deepestUnder(id);
+    var pick = deepestUnder(id);
+    if (ev.shiftKey && S.sel && pick !== S.sel) { var mi = S.multi.indexOf(pick); if (mi >= 0) S.multi.splice(mi, 1); else S.multi.push(pick); S.forceSide = true; render(); ev.preventDefault(); return; }
+    if (S.multi.indexOf(pick) < 0 && pick !== S.sel) S.multi = [];
+    S.sel = pick;
     S.forceSide = true;
     render();
     var sn = cur(), p = sn && parentOf(sn.id);
-    if (ed && sn && p) S.drag = { kind: modeOf(p) === "none" ? "move" : "reorder", sx: ev.clientX, sy: ev.clientY, x0: sn.x || 0, y0: sn.y || 0, moved: false, id: sn.id };
+    if (ed && sn && p) {
+      var starts = {};
+      if (modeOf(p) === "none") sels().forEach(function (sid) { var ff = F.find(T(), sid); if (ff && ff.parent === p) starts[sid] = [ff.node.x || 0, ff.node.y || 0]; });
+      S.drag = { kind: modeOf(p) === "none" ? "move" : "reorder", sx: ev.clientX, sy: ev.clientY, x0: sn.x || 0, y0: sn.y || 0, starts: starts, moved: false, id: sn.id };
+    }
     ev.preventDefault();
   }
   /** 누른 요소까지의 경로에서, 지금 선택 바로 아래 단계를 고른다 (처음엔 루트의 자식) */
   function deepestUnder(id) {
-    var path = [], f = F.find(S.doc.tree, id);
-    while (f) { path.unshift(f.node.id); f = f.parent ? F.find(S.doc.tree, f.parent.id) : null; }
+    var path = [], f = F.find(T(), id);
+    while (f) { path.unshift(f.node.id); f = f.parent ? F.find(T(), f.parent.id) : null; }
     var i = path.indexOf(S.sel);
     if (i >= 0 && i < path.length - 1) return path[i + 1];
     if (i === path.length - 1) return id;
@@ -515,7 +636,7 @@
       renderCanvas();
       return;
     }
-    if (d.kind === "move") { n.x = Math.round(d.x0 + dx / S.z); n.y = Math.round(d.y0 + dy / S.z); renderCanvas(); return; }
+    if (d.kind === "move") { Object.keys(d.starts).forEach(function (sid) { var ff = F.find(T(), sid); if (ff) { ff.node.x = Math.round(d.starts[sid][0] + dx / S.z); ff.node.y = Math.round(d.starts[sid][1] + dy / S.z); } }); renderCanvas(); return; }
     if (d.kind === "reorder") {
       var p = parentOf(n.id), row = modeOf(p) === "row", sibs = p.children.filter(function (c) { return c.id !== n.id; });
       var idx = 0, line = null, cv = S.el.querySelector(".fx-canvas").getBoundingClientRect();
@@ -554,12 +675,12 @@
     if (!S || S.o.editable === false) return;
     var id = pickId(ev.target);
     if (!id) return;
-    var f = F.find(S.doc.tree, id);
+    var f = F.find(T(), id);
     if (f && f.node.type === "text") { S.sel = id; render(); startInline(id); }
     else if (f && f.node.type === "frame" && (f.node.children || []).length) { S.sel = f.node.children[0].id; S.forceSide = true; render(); }
   }
   function startInline(id) {
-    var f = F.find(S.doc.tree, id), b = boxOf(id), ta = S.el.querySelector(".fx-inline");
+    var f = F.find(T(), id), b = boxOf(id), ta = S.el.querySelector(".fx-inline");
     if (!f || !b || f.node.type !== "text") return;
     ta.style.left = b.x + "px"; ta.style.top = b.y + "px"; ta.style.width = Math.max(120, b.w + 20) + "px"; ta.style.height = Math.max(32, b.h + 10) + "px";
     ta.value = f.node.text || "";
@@ -600,6 +721,8 @@
     if (!ed) return;
     if (mod && (ev.key === "d" || ev.key === "D")) { ev.preventDefault(); dup(); return; }
     if (mod && ev.altKey && (ev.key === "g" || ev.key === "G")) { ev.preventDefault(); wrap(); return; }
+    if (mod && (ev.key === "g" || ev.key === "G")) { ev.preventDefault(); group(); return; }
+    if (mod && (ev.key === "a" || ev.key === "A")) { ev.preventDefault(); var pa = cur() && parentOf(cur().id); var sib = pa ? pa.children : T().children || []; if (sib.length) { S.sel = sib[0].id; S.multi = sib.slice(1).map(function (c) { return c.id; }); S.forceSide = true; render(); } return; }
     if (ev.shiftKey && (ev.key === "A" || ev.key === "a")) {
       ev.preventDefault();
       var n0 = cur();
@@ -630,7 +753,7 @@
     if (!String(S.doc.name || "").trim()) { S.o.toast && S.o.toast("컴포넌트 이름을 입력하세요", "err"); var ni = S.el.querySelector('[data-fx-doc="name"]'); if (ni) ni.focus(); return; }
     var btn = S.el.querySelector('[data-fx-act="save"]');
     if (btn) { btn.disabled = true; btn.textContent = "저장 중…"; }
-    var doc = clone(S.doc);
+    var doc = { id: S.doc.id, name: S.doc.name, category: S.doc.category, description: S.doc.description, frameW: S.doc.frameW, tree: clone(S.doc.vars[0].tree), variantTrees: S.doc.vars.slice(1).map(clone) };
     Promise.resolve(S.o.save(doc)).then(function (id) {
       if (!S) return;
       if (id) S.doc.id = id;
@@ -644,9 +767,10 @@
   }
   /** 이 컴포넌트 + 인스턴스로 쓴 컴포넌트들 (지금 편집 중인 모양) */
   function exportComps() {
-    var me = { id: S.doc.id || "c-new", name: S.doc.name || "새 컴포넌트", tree: S.doc.tree };
+    var me = { id: S.doc.id || "c-new", name: S.doc.name || "새 컴포넌트", tree: S.doc.vars[0].tree, variantTrees: S.doc.vars.slice(1) };
     var all = (S.o.comps || []).filter(function (c) { return c.id !== me.id; }), out = [], seen = {};
-    (function need(tree) { F.walk(tree, function (n) { if (n.type === "instance" && n.ref && !seen[n.ref]) { var c = all.find(function (x) { return x.id === n.ref; }); if (c && c.tree) { seen[n.ref] = true; need(c.tree); out.push(c); } } }); })(me.tree);
+    function need(c) { [c.tree].concat((c.variantTrees || []).map(function (v) { return v.tree; })).forEach(function (tree) { if (tree) F.walk(tree, function (n) { if (n.type === "instance" && n.ref && !seen[n.ref]) { var r = all.find(function (x) { return x.id === n.ref; }); if (r && r.tree) { seen[n.ref] = true; need(r); out.push(r); } } }); }); }
+    need(me);
     return out.concat([me]);
   }
   function doExport(act) {
@@ -654,11 +778,69 @@
     var copy = function (text, msg) { (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(new Error("클립보드를 쓸 수 없습니다"))).then(function () { o.toast && o.toast(msg); }, function (e) { o.toast && o.toast("복사하지 못했습니다: " + e.message, "err"); }); };
     if (act === "x-script") return copy(F.figmaScript(o.ds, comps, { title: title }), "스크립트를 복사했습니다. Figma ▸ 플러그인 ▸ Scripter에 붙여 넣고 실행하세요");
     if (act === "x-prompt") return copy(F.figmaPrompt(o.ds, comps, { title: title }), "Figma 프롬프트를 복사했습니다. Figma MCP가 연결된 Claude에 붙여 넣으세요");
-    if (act === "x-json") return copy(JSON.stringify(S.doc.tree, null, 2), "노드 JSON을 복사했습니다");
+    if (act === "x-json") return copy(JSON.stringify(T(), null, 2), "노드 JSON을 복사했습니다");
     if (act === "x-plugin" && root.FlowExport) {
       var bytes = root.FlowExport.zip(F.figmaPlugin(o.ds, comps, { title: title }));
       root.FlowExport.download(new Blob([bytes], { type: "application/zip" }), "planning-figma-plugin.zip");
     }
+  }
+
+  // ── AI ─────────────────────────────────────
+  function aiInput() {
+    var ta = S.el.querySelector("[data-fx-ai]"), ins = ta ? ta.value.trim() : S.ai.draft;
+    S.ai.draft = ins;
+    if (!ins && S.ai.mode === "new") { S.ai.err = "무엇을 그릴지 적어 주세요."; S.forceSide = true; renderSide(); return null; }
+    var current = S.ai.mode === "new" ? null : { name: S.doc.name, tree: S.doc.vars[0].tree, variants: S.doc.vars.slice(1) };
+    return F.aiPrompt(S.o.ds, (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; }), { instruction: ins, current: current, name: S.doc.name, system: S.o.title });
+  }
+  /** AI 결과 넣기: {name, category, description, tree, variants:[{name, tree}]} */
+  function applyAi(out) {
+    var comps = (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; });
+    var o = out && (out.component || out);
+    var tree = o && F.sanitize(o.tree || (o.type ? o : null), comps);
+    if (!tree) throw new Error("AI 결과에 tree(프레임 노드)가 없습니다");
+    tree.id = "root";
+    var vars = [{ name: "기본", tree: tree }];
+    (Array.isArray(o.variants) ? o.variants : Array.isArray(o.variantTrees) ? o.variantTrees : []).slice(0, 19).forEach(function (v, i) {
+      var t = v && F.sanitize(v.tree, comps);
+      if (!t) return;
+      t.id = "root";
+      var nm = String(v.name || "변형 " + (i + 1)).slice(0, 40);
+      if (nm === "기본" || vars.some(function (x) { return x.name === nm; })) nm = nm + " " + (i + 2);
+      vars.push({ name: nm, tree: t });
+    });
+    snap();
+    S.doc.vars = vars;
+    S.vi = 0; S.sel = "root"; S.multi = [];
+    if (o.name && (!S.doc.name || S.ai.mode === "new")) S.doc.name = String(o.name).slice(0, 60);
+    if (o.category && (S.o.categories || []).some(function (c) { return c[0] === o.category; })) S.doc.category = o.category;
+    if (o.description && !S.doc.description) S.doc.description = String(o.description).slice(0, 300);
+    var ni = S.el.querySelector('[data-fx-doc="name"]'); if (ni) ni.value = S.doc.name;
+    S.forceSide = true; render(); fit();
+    S.o.toast && S.o.toast("AI 결과를 캔버스에 넣었습니다 (변형 " + vars.length + "개). 확인 후 저장하세요 — 되돌리기 가능");
+  }
+  function aiRun() {
+    var ai = S.o.ai;
+    if (!ai || !ai.available) return;
+    var input = aiInput();
+    if (!input) return;
+    S.ai.busy = true; S.ai.err = ""; S.ai.ctl = new AbortController();
+    S.forceSide = true; renderSide();
+    ai.run(input, S.ai.ctl.signal).then(function (out) { if (S) applyAi(out); }).catch(function (e) {
+      if (!S) return;
+      S.ai.err = e && (e.code === "cancelled" || e.name === "AbortError") ? "" : (e && e.message) || String(e);
+    }).then(function () { if (!S) return; S.ai.busy = false; S.ai.ctl = null; S.forceSide = true; renderSide(); });
+  }
+  function aiCopy() {
+    var input = aiInput();
+    if (!input) return;
+    (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(input) : Promise.reject(new Error("클립보드를 쓸 수 없습니다"))).then(function () { S.o.toast && S.o.toast("프롬프트를 복사했습니다. claude.ai에 붙여 넣으세요"); }, function (e) { S.o.toast && S.o.toast(e.message, "err"); });
+    window.open("https://claude.ai/new", "_blank", "noopener");
+  }
+  function aiPaste() {
+    var ta = S.el.querySelector(".fx-paste");
+    if (!ta || !ta.value.trim()) { S.ai.err = "Claude 답을 붙여 넣어 주세요."; S.forceSide = true; renderSide(); return; }
+    try { applyAi(S.o.parse ? S.o.parse(ta.value) : JSON.parse(ta.value)); S.ai.err = ""; } catch (e) { S.ai.err = e.message; S.forceSide = true; renderSide(); }
   }
 
   root.FrameEdit = { open: open, close: close, isOpen: function () { return !!S; } };

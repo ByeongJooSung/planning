@@ -161,3 +161,27 @@ describe("프레임 편집기 컴포넌트", () => {
     expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "x", tree: { ...tree, fill: "red;}" } } }, now)).toThrow();
   });
 });
+
+describe("프레임 컴포넌트 변형 · 인스턴스 덮어쓰기 · Figma 가져오기", () => {
+  const btn = { id: "root", type: "frame", layout: { mode: "row", gap: 4, pad: [8, 12, 8, 12], align: "center", justify: "center", wrap: false }, fill: "primary", children: [{ id: "t", type: "text", text: "확인", bind: "label" }] };
+  it("변형을 저장하고, 인스턴스가 변형·글자·채우기를 덮어쓴다", () => {
+    let r = execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "Btn", category: "action", tree: btn, variantTrees: [{ name: "비활성", tree: { ...btn, fill: "border" } }] } }, now);
+    const id = (r.detail as { id: string }).id;
+    r = execute(r.state, { op: "design.frame", systemCode: "CVL", component: { name: "Bar", tree: { id: "root", type: "frame", children: [{ id: "i", type: "instance", ref: id, variant: "비활성", props: { label: "취소" }, fill: "danger" }] } } }, now);
+    const d = r.state.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!;
+    expect(d.components.find((c) => c.id === id)?.variantTrees?.map((v) => v.name)).toEqual(["비활성"]);
+    expect(d.components.find((c) => c.name === "Bar")?.tree?.children?.[0]).toMatchObject({ variant: "비활성", props: { label: "취소" } });
+    expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "X", tree: btn, variantTrees: [{ name: "a", tree: btn }, { name: "a", tree: btn }] } }, now)).toThrow(/겹칩니다/);
+  });
+  it("Figma에서 가져오기: id가 있으면 그 컴포넌트를, 없으면 같은 이름 또는 새로", () => {
+    let r = execute(base, { op: "design.frame.import", systemCode: "CVL", items: [{ id: "button", name: "버튼", tree: btn }, { name: "새 카드", tree: btn, variantTrees: [{ name: "강조", tree: btn }] }] }, now);
+    let d = r.state.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!;
+    expect(d.components.find((c) => c.id === "button")?.tree).toBeDefined();
+    const card = d.components.find((c) => c.name === "새 카드")!;
+    expect(card.variantTrees?.[0]?.name).toBe("강조");
+    r = execute(r.state, { op: "design.frame.import", systemCode: "CVL", items: [{ name: "새 카드", tree: { ...btn, fill: "accent" } }] }, now);
+    d = r.state.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!;
+    expect(d.components.filter((c) => c.name === "새 카드")).toHaveLength(1);
+    expect(d.components.find((c) => c.name === "새 카드")?.tree?.fill).toBe("accent");
+  });
+});

@@ -519,6 +519,12 @@ export interface FNodeT {
   bind?: string;
   icon?: string;
   ref?: string;
+  /** instance: 고른 변형 이름 */
+  variant?: string;
+  /** instance: 텍스트 덮어쓰기 (bind 이름 → 글자) */
+  props?: Record<string, string>;
+  /** 숨김 (변형마다 보이고 숨길 때) */
+  hidden?: boolean;
   children?: FNodeT[];
 }
 /** 프레임 노드: 프레임(오토 레이아웃)·텍스트·사각형·원·선·아이콘·인스턴스(다른 컴포넌트) */
@@ -558,6 +564,9 @@ export const FNode: z.ZodType<FNodeT> = z.lazy(() =>
     icon: z.string().max(40).optional(),
     /** instance: 쓰는 컴포넌트 ID */
     ref: z.string().max(60).optional(),
+    variant: z.string().max(40).optional(),
+    props: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/), z.string().max(500)).optional(),
+    hidden: z.boolean().optional(),
     children: z.array(FNode).max(200).optional(),
   }),
 ) as z.ZodType<FNodeT>;
@@ -575,6 +584,8 @@ export const DesignComponent = z.object({
   addedAt: z.string().optional(),
   /** 프레임 편집기로 그린 모양. 있으면 기본 렌더러 대신 이 모양으로 그린다 */
   tree: FNode.optional(),
+  /** 변형(variant): 이름별 다른 모양 (기본 모양은 tree, 이름은 variants[0] 또는 ‘기본’) */
+  variantTrees: z.array(z.object({ name: z.string().min(1).max(40), tree: FNode })).max(20).optional(),
   /** 미리보기 배경·폭 (편집기 캔버스) */
   frameW: z.number().min(40).max(1920).optional(),
 });

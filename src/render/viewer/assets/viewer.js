@@ -566,14 +566,16 @@
     var p = P(), d = selectedDesign(p, code), s = sysOf(p, code);
     if (!d || !window.FrameEdit) return;
     var comp = id ? d.components.find(function (x) { return x.id === id; }) : null;
-    var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW, tree: comp.tree || frameStarter(comp) } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
+    var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW, tree: comp.tree || frameStarter(comp), variantTrees: comp.variantTrees } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
     FrameEdit.open({
       ds: d, vars: Wire.vars(d), comp: start, comps: d.components,
       categories: Object.keys(CATEGORY).map(function (k) { return [k, CATEGORY[k]]; }),
       editable: SRV && canEdit(), title: code + " " + (s ? s.name : ""),
       save: function (doc) {
-        return cmd({ op: "design.frame", systemCode: code, component: { id: doc.id || undefined, name: doc.name, category: doc.category, description: doc.description, tree: doc.tree, frameW: doc.frameW } }).then(function (r) { return r.detail && r.detail.id; });
+        return cmd({ op: "design.frame", systemCode: code, component: { id: doc.id || undefined, name: doc.name, category: doc.category, description: doc.description, tree: doc.tree, frameW: doc.frameW, variantTrees: doc.variantTrees || [] } }).then(function (r) { return r.detail && r.detail.id; });
       },
+      ai: { available: !!(AI.sample && p.ai), label: p.ai ? effLabel(p.ai) : "", run: function (input, signal) { return AI.sample.json(input, { signal: signal, cache: false }); } },
+      parse: looseJson,
       toast: toast,
       onClose: function () { render(); }
     });
@@ -584,6 +586,8 @@
     if (!d) return;
     if (kind === "tokens") return FlowExport.download(new Blob([Frames.tokensJson(d, title)], { type: "application/json" }), code + "_design-tokens.json");
     if (kind === "plugin") return FlowExport.download(new Blob([FlowExport.zip(Frames.figmaPlugin(d, d.components, { title: title }))], { type: "application/zip" }), code + "_figma-plugin.zip");
+    if (kind === "xscript") return copyText(Frames.figmaExportScript(d), btn, "복사함 · Figma에서 프레임을 고르고 Scripter로 실행");
+    if (kind === "xprompt") return copyText(figmaImportPrompt(d, title), btn, "복사함 · Figma MCP가 연결된 Claude에 붙여 넣기");
     var text = kind === "script" ? Frames.figmaScript(d, d.components, { title: title }) : Frames.figmaPrompt(d, d.components, { title: title });
     copyText(text, btn, kind === "script" ? "복사함 · Figma ▸ 플러그인 ▸ Scripter에 붙여 넣기" : "복사함 · Figma MCP가 연결된 Claude에 붙여 넣기");
   }
@@ -717,7 +721,9 @@
   function sbCompForm(sid, c) {
     var p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === sid; });
     var ds = selectedDesign(p, sb.systemCode), v = c.validation || {}, o = c.options || {};
-    var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name]; }) : [];
+    var comps = ds ? ds.components.map(function (x) { return [x.id, x.id + " · " + x.name + (x.tree ? " ✎" : "")]; }) : [];
+    var variantOpts = function (cid) { var fc = ds && ds.components.find(function (x) { return x.id === cid; }); return [["", "기본"]].concat(fc && fc.variantTrees ? fc.variantTrees.map(function (v) { return [v.name, v.name]; }) : []); };
+    var frameProps = function (cc) { var fc = ds && cc.ui && ds.components.find(function (x) { return x.id === cc.ui.component && x.tree; }); if (!fc) return ""; var pr = cc.ui.props || {}; return Frames.binds(fc.tree).filter(function (k) { return pr[k] != null; }).map(function (k) { return k + " = " + pr[k]; }).join("\n"); };
     var screens = p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU" && n.systemCode === sb.systemCode; }).map(function (n) { return [n.id, n.id + " " + n.name]; });
     openForm({
       eyebrow: sid + (c.no ? " · " + c.no + "번" : ""), title: c.no ? c.no + ". " + c.label + " 편집" : "항목 추가", submit: "저장",
@@ -734,7 +740,9 @@
         { name: "format", label: "형식", value: v.format || "", placeholder: "예: 이메일, YYYY-MM-DD" },
         { name: "timing", label: "검증 시점", type: "select", options: [["", "(없음)"], ["ON_SUBMIT", "제출할 때"], ["ON_BLUR", "칸을 벗어날 때"], ["ON_INPUT", "입력 중"], ["ON_BLUR,ON_SUBMIT", "칸을 벗어날 때 + 제출할 때"]], value: (v.timing || []).join(",") },
         { name: "messages", label: "안내 문구 (한 줄에 하나, ‘조건 → 문구’)", type: "textarea", rows: 3, value: (v.messages || []).map(function (m) { return m.condition + " → " + m.text; }).join("\n"), placeholder: "미입력 → 제목을 입력해 주세요." },
-        { name: "link", label: "누르면 이동할 화면", type: "select", options: [["", "(없음)"]].concat(screens), value: c.ui && c.ui.link || "" }
+        { name: "link", label: "누르면 이동할 화면", type: "select", options: [["", "(없음)"]].concat(screens), value: c.ui && c.ui.link || "" },
+        { name: "variant", label: "변형 (프레임 컴포넌트)", type: "select", options: variantOpts(c.ui && c.ui.component), value: c.ui && c.ui.props && c.ui.props.variant || "" },
+        { name: "fprops", label: "글자 값 (프레임 컴포넌트 props — 한 줄에 ‘이름 = 값’)", type: "textarea", rows: 3, value: frameProps(c), hint: "비우면 항목명이 label·title에, 고객 관점 설명이 text에 들어갑니다." }
       ],
       onSubmit: function (f) {
         var input = { no: c.no, label: f.label, kind: f.component || c.kind || "text", planner: f.planner, customer: f.customer };
@@ -747,10 +755,21 @@
         if (val.required || val.minLength != null || val.maxLength != null || val.format || val.timing.length || val.messages.length) input.validation = val;
         // 새로 고른 컴포넌트는 예시 데이터로 채워 와이어프레임에 바로 보이게 한다 (AI 생성·편집으로 바꿀 수 있음)
         if (f.component) input.ui = { component: f.component, props: c.ui && c.ui.component === f.component ? c.ui.props : JSON.parse(JSON.stringify(SAMPLE_PROPS[f.component] || {})), link: f.link || undefined };
+        var fc = f.component && ds && ds.components.find(function (x) { return x.id === f.component && x.tree; });
+        if (fc) {
+          var pr = Object.assign({}, input.ui.props || {});
+          Frames.binds(fc.tree).concat((fc.variantTrees || []).reduce(function (a, v) { return a.concat(Frames.binds(v.tree)); }, [])).forEach(function (k) { delete pr[k]; });
+          f.fprops.split("\n").forEach(function (l) { var m = /^\s*([a-zA-Z][a-zA-Z0-9_]*)\s*=\s*(.*)$/.exec(l); if (m) pr[m[1]] = m[2].trim(); });
+          if (f.variant) pr.variant = f.variant; else delete pr.variant;
+          input.ui.props = pr;
+        }
         if (c.marker) input.marker = c.marker;
         return cmd({ op: "sb.component", screenId: sid, no: c.no, input: input });
       }
     });
+    // 컴포넌트를 바꾸면 변형 목록도 그 컴포넌트 것으로
+    var csel = document.getElementById("f-component");
+    if (csel) csel.addEventListener("change", function () { var vs = document.getElementById("f-variant"); if (vs) vs.innerHTML = variantOpts(csel.value).map(function (o2) { return '<option value="' + esc(o2[0]) + '">' + esc(o2[1]) + "</option>"; }).join(""); });
   }
   ACTIONS_LATE["sb-edit"] = function (arg) {
     var a = arg.split("|"), p = P(), sb = p.model.storyboard.screens.find(function (x) { return x.screenId === a[0]; });
@@ -835,6 +854,41 @@
         Object.keys(LAYOUT_LABEL).forEach(function (k) { if (v["L_" + k] && v["L_" + k] !== L[k]) patch.layout[k] = v["L_" + k]; });
         if (!Object.keys(patch.tokens).length && !Object.keys(patch.layout).length) return Promise.reject(new Error("바꾼 값이 없습니다"));
         return cmd({ op: "design.edit", systemCode: code, patch: patch, note: v.note });
+      }
+    });
+  };
+  /** Claude + Figma MCP로 Figma 프레임을 이 서비스 JSON으로 바꾸게 하는 프롬프트 */
+  function figmaImportPrompt(d, title) {
+    return ["# Figma 프레임 → Planning Studio 컴포넌트 JSON (" + title + ")",
+      "Figma MCP로 지금 선택한(또는 아래 링크의) 프레임·컴포넌트·컴포넌트 세트를 읽고(get_metadata·get_design_context), 아래 형식의 JSON 하나로 바꿔 주세요.",
+      "- 오토 레이아웃: layoutMode HORIZONTAL=row, VERTICAL=column, NONE=none(자식에 x·y), itemSpacing=gap, 패딩=[위,오른쪽,아래,왼쪽], primaryAxisAlignItems→justify(start·center·end·between), counterAxisAlignItems→align(자식이 모두 STRETCH면 stretch)",
+      "- 크기: FIXED=숫자, HUG=hug, FILL=fill · 색: Figma 변수 color/<이름>에 묶여 있으면 그 이름, 아니면 #RRGGBB · 글자 크기 변수 font-size/<이름>, 모서리 변수 radius/<이름>",
+      "- 텍스트 레이어 이름이 {label}처럼 중괄호로 시작하면 bind: \"label\"",
+      "- 인스턴스: 원본 컴포넌트 이름 끝의 (id)를 ref로, 세트의 ‘변형=값’을 variant로, {이름} 텍스트 값을 props로",
+      "- 컴포넌트 세트는 ‘변형=기본’(없으면 첫 번째)을 tree, 나머지를 variantTrees[{name, tree}]",
+      "- 이름 끝에 (id)가 있으면 id로 쓴다 (기존 컴포넌트를 바꿈)",
+      "- 디자인 토큰 색 이름: " + Object.keys(Frames.COLOR_VAR).join(", "),
+      "",
+      '출력: {"planningStudio":1,"items":[{"id":"(있으면)","name":"이름","tree":{"id":"root","type":"frame",…},"variantTrees":[]}]}'].join("\n");
+  }
+  ACTIONS_LATE["ds-figimport"] = function (code) {
+    var d = selectedDesign(P(), code);
+    openForm({
+      eyebrow: code + " 디자인 시스템", title: "Figma에서 가져오기", submit: "가져오기",
+      intro: "Figma에서 프레임·컴포넌트·컴포넌트 세트를 선택하고 ‘내보내기 스크립트’(Scripter) 또는 내려받은 플러그인의 ‘선택한 프레임을 Planning Studio로 보내기’를 실행하면 JSON이 나옵니다. 그 JSON을 붙여 넣으세요. 이름 끝에 (id)가 있으면 그 컴포넌트를, 없으면 같은 이름의 컴포넌트를 바꾸고, 없으면 새로 만듭니다. 변형은 그대로 변형이 됩니다.",
+      fields: [{ name: "json", label: "Figma에서 받은 JSON", type: "textarea", rows: 10, required: true, placeholder: '{"planningStudio":1,"items":[…]}' }],
+      onSubmit: function (v) {
+        var data = looseJson(v.json), items = Array.isArray(data) ? data : data && data.items;
+        if (!Array.isArray(items) || !items.length) return Promise.reject(new Error("items 목록이 없습니다"));
+        var known = d.components.concat(items.filter(function (it) { return it && it.id; }).map(function (it) { return { id: it.id }; }));
+        var clean = Frames.ordered(items.map(function (it, i) {
+          var t = Frames.sanitize(it.tree, known);
+          if (!t) throw new Error((i + 1) + "번째 항목에 프레임(tree)이 없습니다");
+          t.id = "root";
+          var vts = (it.variantTrees || it.variants || []).map(function (vt) { var tt = Frames.sanitize(vt.tree, known); if (tt) tt.id = "root"; return tt ? { name: String(vt.name || "변형").slice(0, 40), tree: tt } : null; }).filter(Boolean);
+          return { id: it.id && /^[a-z][a-z0-9-]*$/.test(it.id) ? it.id : undefined, name: String(it.name || "Figma 컴포넌트 " + (i + 1)).slice(0, 60), category: it.category, description: it.description, tree: t, variantTrees: vts };
+        }));
+        return cmd({ op: "design.frame.import", systemCode: code, items: clean });
       }
     });
   };
@@ -1387,7 +1441,7 @@
       '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
       '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, chosen.name, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>" +
       '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small>" + (SRV && canEdit() ? '<button class="btn-sm btn-primary" data-frameedit="' + esc(code) + '|">+ 새 컴포넌트 (프레임 편집기)</button>' : "") + editBtn("ds-comp-add", "+ 컴포넌트 추가", code) + "</h2>" +
-      '<div class="figx"><b>Figma로 내보내기</b><span class="hint">토큰은 Figma 변수로, 프레임으로 그린 컴포넌트(' + d.components.filter(function (x) { return x.tree; }).length + '개)는 오토 레이아웃 Figma 컴포넌트로 만듭니다.</span><button class="btn-sm" data-figx="' + esc(code) + '|script">플러그인 스크립트 복사 (Scripter)</button><button class="btn-sm" data-figx="' + esc(code) + '|plugin">Figma 플러그인 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|tokens">토큰 JSON 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|prompt">Figma AI 프롬프트 복사</button></div>' + comps + "</section>" +
+      '<div class="figx"><b>Figma로 내보내기</b><span class="hint">토큰은 Figma 변수로, 프레임으로 그린 컴포넌트(' + d.components.filter(function (x) { return x.tree; }).length + '개)는 오토 레이아웃 Figma 컴포넌트로 만듭니다.</span><button class="btn-sm" data-figx="' + esc(code) + '|script">플러그인 스크립트 복사 (Scripter)</button><button class="btn-sm" data-figx="' + esc(code) + '|plugin">Figma 플러그인 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|tokens">토큰 JSON 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|prompt">Figma AI 프롬프트 복사</button>' + (SRV && canEdit() ? '<span class="figx-sep"></span><b>Figma에서 가져오기</b><button class="btn-sm" data-figx="' + esc(code) + '|xscript">① 내보내기 스크립트 복사 (Scripter)</button>' + actBtn("ds-figimport", "② 붙여 넣어 가져오기", code, "btn-sm btn-primary") + '<button class="btn-sm" data-figx="' + esc(code) + '|xprompt">Claude(Figma MCP)로 가져오기 프롬프트</button>' : "") + '</div>' + comps + "</section>" +
       '<section class="section"><h2>아이콘 <small>' + d.icons.length + "개</small></h2>" + icons + "</section>";
   }
 

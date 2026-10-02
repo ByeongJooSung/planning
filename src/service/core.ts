@@ -131,7 +131,9 @@ export type Command =
   /** 디자인 시스템 직접 편집 (색·글꼴·크기·모서리·레이아웃) — AI 조정과 같은 경로로 개정·이력을 남긴다 */
   | { op: "design.edit"; systemCode: string; patch: unknown; note?: string }
   /** 프레임 편집기 컴포넌트 저장(새로·모양 바꾸기) · 지우기(기본 컴포넌트는 기본 모양으로) */
-  | { op: "design.frame"; systemCode: string; component: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number } }
+  | { op: "design.frame"; systemCode: string; component: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number; variantTrees?: unknown } }
+  /** Figma에서 가져오기: 플러그인이 만든 JSON(컴포넌트 목록)을 이름·ID로 맞춰 새로 만들거나 바꾼다 */
+  | { op: "design.frame.import"; systemCode: string; items: unknown }
   | { op: "design.frame.rm"; systemCode: string; id: string }
   | { op: "gen.apply"; kind: string; target: string; output: unknown; instruction?: string; scope?: string }
   | {
@@ -497,6 +499,20 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       const comp = saveFrameComponent(m, cmd.systemCode, cmd.component ?? {}, { now });
       message = `컴포넌트 ${comp.id} ${comp.name} 저장`;
       detail = { id: comp.id };
+      break;
+    }
+    case "design.frame.import": {
+      const list = Array.isArray(cmd.items) ? cmd.items : [];
+      if (!list.length) throw new Error("가져올 컴포넌트가 없습니다");
+      const done: string[] = [];
+      for (const raw of list.slice(0, 60)) {
+        const it = raw as { id?: string; name?: string; category?: string; description?: string; tree?: unknown; variantTrees?: unknown };
+        const d = m.design.systems.find((x) => x.systemCode === cmd.systemCode && x.status === "SELECTED");
+        const same = d?.components.find((x) => (it.id && x.id === it.id) || (!it.id && x.name === it.name));
+        done.push(saveFrameComponent(m, cmd.systemCode, { ...it, id: same?.id ?? it.id }, { now }).id);
+      }
+      message = `Figma에서 컴포넌트 ${done.length}개를 가져왔습니다 (${done.join(", ")})`;
+      detail = { ids: done };
       break;
     }
     case "design.frame.rm":

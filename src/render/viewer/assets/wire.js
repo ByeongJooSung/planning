@@ -239,7 +239,7 @@
       var p2 = Object.assign({}, props || {});
       if (spec && spec.label) { if (p2.label == null) p2.label = spec.label; if (p2.title == null) p2.title = spec.label; }
       if (spec && spec.customer && p2.text == null) p2.text = spec.customer;
-      return '<div class="wf-c wf-fr" data-cmp="' + esc(id) + '"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(fc.tree, { ds: ds, props: p2, comps: ds.components }) + "</div>";
+      return '<div class="wf-c wf-fr" data-cmp="' + esc(id) + '"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(window.Frames.treeOf(fc, p2.variant) || fc.tree, { ds: ds, props: p2, comps: ds.components }) + "</div>";
     }
     var fn = C[id];
     var html = fn && id !== "gnb" && id !== "footer" && id !== "breadcrumb" ? fn(ds, props || {}, ctx || {}, link, spec) : fn ? fn(ds, props || {}, ctx || {}) : generic(ds, id, props || {});
