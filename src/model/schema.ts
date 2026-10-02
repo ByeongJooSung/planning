@@ -590,7 +590,22 @@ export const DesignComponent = z.object({
   variantTrees: z.array(z.object({ name: z.string().min(1).max(40), tree: FNode })).max(20).optional(),
   /** 미리보기 배경·폭 (편집기 캔버스) */
   frameW: z.number().min(40).max(1920).optional(),
+  /** 초안 생성기가 만든 모양(아직 검토 전): render = 지금 모양을 옮김, ai = AI 초안. 프레임 편집기에서 저장하면 지워진다 */
+  draft: z.enum(["render", "ai"]).optional(),
 });
+
+/** 디자인 시스템 단계별 컨셉 (톤앤매너·UI/UX·컴포넌트 각각 따로 쓴다) */
+export const StageBrief = z.object({
+  name: z.string().max(80).default(""),
+  summary: z.string().max(800).default(""),
+  keywords: z.array(z.string().max(30)).max(12).default([]),
+  /** 원칙·규칙 — 한 줄에 하나 (톤 지침, UX 원칙, 컴포넌트 제작 규칙) */
+  rules: z.array(z.string().max(240)).max(24).default([]),
+  /** 출발점이 된 제안 컨셉 ID (A·B·C …) */
+  from: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export const DESIGN_STAGES = ["style", "ux", "comp"] as const;
 
 export const SystemDesign = z.object({
   systemCode: SystemCode,
@@ -604,6 +619,10 @@ export const SystemDesign = z.object({
   icons: z.array(z.string()).default([]),
   /** 컴포넌트별 스타일 변수 값: { "data-table": { "--w-th-bg": "#EEF2F7" } } */
   componentStyles: z.record(z.string(), z.record(z.string(), z.string())).default({}),
+  /** 단계별 컨셉: style(톤앤매너·CSS) · ux(UI·UX 구성) · comp(컴포넌트 제작) */
+  brief: z.object({ style: StageBrief.optional(), ux: StageBrief.optional(), comp: StageBrief.optional() }).default({}),
+  /** 톤앤매너 단계의 추가 CSS — 이 시스템 와이어프레임 안에서만 적용된다 */
+  css: z.string().max(40000).default(""),
   /** 디자인 시스템 개정 번호. 미세조정할 때마다 1씩 오른다 */
   revision: z.number().int().positive().default(1),
   history: z
@@ -666,6 +685,7 @@ export type LayoutRules = z.infer<typeof LayoutRules>;
 export type DesignConcept = z.infer<typeof DesignConcept>;
 export type DesignComponent = z.infer<typeof DesignComponent>;
 export type SystemDesign = z.infer<typeof SystemDesign>;
+export type StageBrief = z.infer<typeof StageBrief>;
 export type Design = z.infer<typeof Design>;
 
 /** 메모리상 프로젝트 전체 모델 */

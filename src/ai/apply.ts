@@ -542,7 +542,7 @@ export function applyConcepts(m: Model, systemCode: string, output: unknown): Ap
   if (!out.length) throw new Error(`쓸 수 있는 컨셉이 없습니다. ${notes.join(" / ")}`);
   if (d) d.proposals = selected ? [...d.proposals, ...out] : out;
   else {
-    d = { systemCode, status: "PROPOSED", proposals: out, components: [], icons: [], componentStyles: {}, revision: 1, history: [] };
+    d = { systemCode, status: "PROPOSED", proposals: out, components: [], icons: [], componentStyles: {}, brief: {}, css: "", revision: 1, history: [] };
     work.design.systems.push(d);
   }
   commit(m, work);

@@ -8,7 +8,7 @@
  */
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
 import { specItems, type SpecItem } from "../ai/spec.js";
-import { ComponentSpec } from "../model/schema.js";
+import { ComponentSpec, DESIGN_STAGES } from "../model/schema.js";
 import { applyDesignPatch, applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
 import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
 import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, setSystemChannels, systemChannels, upsertCase } from "../project/qa-ops.js";
@@ -19,7 +19,7 @@ import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
-import { addDesignComponent, ensureDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign } from "../design/ops.js";
+import { addDesignComponent, ensureDesign, mixDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign, STAGE_LABEL, updateStage, type DesignStage } from "../design/ops.js";
 import { toChunks } from "../knowledge/chunk.js";
 import type { Segment } from "../knowledge/extract-text.js";
 import type { Chunk } from "../knowledge/search.js";
@@ -150,7 +150,9 @@ export type Command =
   /** 프레임 편집기 컴포넌트 저장(새로·모양 바꾸기) · 지우기(기본 컴포넌트는 기본 모양으로) */
   | { op: "design.frame"; systemCode: string; component: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number; variantTrees?: unknown } }
   /** Figma에서 가져오기: 플러그인이 만든 JSON(컴포넌트 목록)을 이름·ID로 맞춰 새로 만들거나 바꾼다 */
-  | { op: "design.frame.import"; systemCode: string; items: unknown }
+  | { op: "design.frame.import"; systemCode: string; items: unknown; draft?: "render" | "ai" }
+  | { op: "design.stage"; systemCode: string; stage: string; brief?: unknown; tokens?: unknown; layout?: unknown; css?: string; note?: string }
+  | { op: "design.mix"; systemCode: string; stage: string; conceptId: string }
   | { op: "design.frame.rm"; systemCode: string; id: string }
   | { op: "gen.apply"; kind: string; target: string; output: unknown; instruction?: string; scope?: string }
   | {
@@ -543,15 +545,48 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
         const it = raw as { id?: string; name?: string; category?: string; description?: string; tree?: unknown; variantTrees?: unknown };
         const d = m.design.systems.find((x) => x.systemCode === cmd.systemCode && x.status === "SELECTED");
         const same = d?.components.find((x) => (it.id && x.id === it.id) || (!it.id && x.name === it.name));
-        done.push(saveFrameComponent(m, cmd.systemCode, { ...it, id: same?.id ?? it.id }, { now }).id);
+        done.push(saveFrameComponent(m, cmd.systemCode, { ...it, id: same?.id ?? it.id, draft: cmd.draft }, { now }).id);
       }
-      message = `Figma에서 컴포넌트 ${done.length}개를 가져왔습니다 (${done.join(", ")})`;
+      message = cmd.draft ? `컴포넌트 초안 ${done.length}개를 만들었습니다 (${done.join(", ")}) — 프레임 편집기에서 다듬어 저장하면 초안 표시가 사라집니다` : `Figma에서 컴포넌트 ${done.length}개를 가져왔습니다 (${done.join(", ")})`;
       detail = { ids: done };
       break;
     }
     case "design.frame.rm":
       message = removeFrameComponent(m, cmd.systemCode, cmd.id, { now });
       break;
+    case "design.stage": {
+      const stage = cmd.stage as DesignStage;
+      if (!(DESIGN_STAGES as readonly string[]).includes(stage)) throw new Error(`단계는 ${DESIGN_STAGES.join(" | ")} 중 하나입니다`);
+      if (stage !== "style" && (cmd.tokens != null || cmd.css != null)) throw new Error("색·글꼴·모서리 같은 토큰과 CSS는 톤앤매너 단계에서 바꿉니다");
+      if (stage !== "ux" && cmd.layout != null) throw new Error("메뉴·검색·목록 구성은 UI·UX 단계에서 바꿉니다");
+      const parts: string[] = [];
+      let changed = 0;
+      if (cmd.tokens != null || cmd.layout != null) {
+        try {
+          const r = applyDesignPatch(m, cmd.systemCode, { ...(cmd.tokens != null ? { tokens: cmd.tokens } : {}), ...(cmd.layout != null ? { layout: cmd.layout } : {}), summary: `[${STAGE_LABEL[stage]}] ${cmd.note || "단계 컨셉 반영"}` }, { now, instruction: cmd.note || "단계별 컨셉" });
+          parts.push(r.summary);
+          changed += r.changes.length;
+        } catch (e) {
+          if (!/바뀐 내용이 없습니다/.test((e as Error).message)) throw e;
+        }
+      }
+      const ch = updateStage(m, cmd.systemCode, stage, { brief: cmd.brief, css: cmd.css }, { now });
+      changed += ch.length;
+      if (!changed) throw new Error("바뀐 내용이 없습니다");
+      parts.push(...ch);
+      m.rtmRecords.work[`ds:${cmd.systemCode}`] = { status: "IN_PROGRESS", at: now.toISOString(), by: STAGE_LABEL[stage], note: "" };
+      message = `${cmd.systemCode} ${STAGE_LABEL[stage]} 단계: ${parts.join(" · ")}`;
+      detail = { changes: ch };
+      break;
+    }
+    case "design.mix": {
+      const stage = cmd.stage as "style" | "ux";
+      if (stage !== "style" && stage !== "ux") throw new Error("컨셉에서 가져올 수 있는 단계는 style(톤앤매너)·ux(UI·UX)입니다");
+      const ch = mixDesign(m, cmd.systemCode, stage, cmd.conceptId, { now });
+      m.rtmRecords.work[`ds:${cmd.systemCode}`] = { status: "IN_PROGRESS", at: now.toISOString(), by: STAGE_LABEL[stage], note: "" };
+      message = `${cmd.systemCode} ${STAGE_LABEL[stage]}: ${ch.join(" · ")}`;
+      break;
+    }
     case "design.edit": {
       const r = applyDesignPatch(m, cmd.systemCode, { ...(cmd.patch as object), summary: cmd.note || "직접 편집" }, { now, instruction: "직접 편집" });
       message = r.summary;

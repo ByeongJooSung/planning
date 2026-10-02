@@ -406,9 +406,12 @@
     var t = ds.tokens, icons = root.Wire && root.Wire.iconLabel ? Object.keys(root.Wire.iconLabel) : [];
     var usable = comps.filter(function (c) { return c.tree; }).map(function (c) { return "- " + c.id + " " + c.name + (binds(c.tree).length ? " · props: " + binds(c.tree).join(", ") : "") + (c.variantTrees && c.variantTrees.length ? " · 변형: 기본, " + c.variantTrees.map(function (v) { return v.name; }).join(", ") : ""); });
     var base = comps.filter(function (c) { return !c.tree; }).map(function (c) { return c.id; });
+    var multi = o.multi && o.multi.length ? o.multi : null;
     return [
-      "# 디자인 시스템 컴포넌트 " + (o.current ? "고치기" : "그리기") + (o.system ? " — " + o.system : ""),
-      o.current ? "아래 ‘현재 컴포넌트’를 요청대로 고쳐 같은 JSON 형식 전체를 다시 주세요. 바꾸지 않는 부분은 그대로 둡니다." : "요청한 컴포넌트를 피그마식 프레임 노드 트리로 그려 주세요.",
+      "# 디자인 시스템 컴포넌트 " + (multi ? "초안 " + multi.length + "개 그리기" : o.current ? "고치기" : "그리기") + (o.system ? " — " + o.system : ""),
+      multi ? "아래 ‘그릴 컴포넌트’마다 이 디자인 시스템의 톤앤매너·UI/UX 컨셉에 맞는 제작 초안을 피그마식 프레임 노드 트리로 그려 주세요. 같은 톤으로 한 벌처럼 보이게 합니다." : o.current ? "아래 ‘현재 컴포넌트’를 요청대로 고쳐 같은 JSON 형식 전체를 다시 주세요. 바꾸지 않는 부분은 그대로 둡니다." : "요청한 컴포넌트를 피그마식 프레임 노드 트리로 그려 주세요.",
+      o.concept ? "\n## 컨셉\n" + o.concept : "",
+      multi ? "\n## 그릴 컴포넌트 (id는 그대로 쓴다)\n" + multi.map(function (m) { return "- " + m.id + " " + m.name + (m.usage ? " — " + m.usage : "") + (m.props ? " · 예시 값: " + JSON.stringify(m.props).slice(0, 300) : ""); }).join("\n") : "",
       "",
       "## 요청",
       o.instruction || "(지시 없음 — 지금 모양을 다듬기)",
@@ -439,7 +442,9 @@
       "- 한국어 UI 문구, 실제 서비스 수준의 여백·정렬",
       "",
       o.current ? "## 현재 컴포넌트\n```json\n" + JSON.stringify(o.current) + "\n```\n" : "",
+      multi ? "- 예시 값의 글자는 bind로 연결하고(label·title·text·placeholder 등), 표·목록은 2~3행 예시로 그린다" : "",
       "## 출력 형식 (JSON만)",
+      multi ? '{"components":[{"id":"위 id 그대로","name":"컴포넌트 이름","category":"navigation|search|data|form|action|feedback|content|layout","description":"언제 쓰는지","tree":{"id":"root","type":"frame","…":"…"},"variants":[{"name":"비활성","tree":{"…":"…"}}]}]}' :
       '{"name":"컴포넌트 이름","category":"navigation|search|data|form|action|feedback|content|layout","description":"언제 쓰는지","tree":{"id":"root","type":"frame","w":"hug","h":"hug","layout":{"mode":"row","gap":8,"pad":[10,16,10,16],"align":"center","justify":"center","wrap":false},"fill":"primary","radius":"md","children":[{"id":"t1","type":"text","text":"확인","size":"body","weight":600,"color":"onPrimary","bind":"label"}]},"variants":[{"name":"비활성","tree":{"id":"root","type":"frame","…":"…"}}]}'
     ].filter(function (x) { return x !== ""; }).join("\n");
   }

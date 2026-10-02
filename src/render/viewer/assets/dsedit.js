@@ -151,7 +151,7 @@
   function renderCanvas() {
     var sc = S.el.querySelector(".fx-scale"), o = S.o;
     var rootFill = T().w === "fill";
-    sc.innerHTML = '<div class="wf fx-wf" style="' + o.vars + '"><div class="fx-board"' + (rootFill ? ' style="width:' + S.doc.frameW + 'px"' : "") + ">" + F.html(T(), { ids: true, ds: o.ds, comps: o.comps, props: {} }) + "</div></div>";
+    sc.innerHTML = '<div class="wf fx-wf ' + (o.cls || "") + '" style="' + o.vars + '"><div class="fx-board"' + (rootFill ? ' style="width:' + S.doc.frameW + 'px"' : "") + ">" + F.html(T(), { ids: true, ds: o.ds, comps: o.comps, props: {} }) + "</div></div>";
     sc.style.transform = "scale(" + S.z + ")";
     var wf = sc.firstElementChild;
     var cv = S.el.querySelector(".fx-canvas");

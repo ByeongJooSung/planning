@@ -159,7 +159,22 @@ export function tokensBlock(d: SystemDesign | undefined, code: string): string {
     `- 모서리 ${t.radius.sm}/${t.radius.md}/${t.radius.lg}px · 입력·버튼 높이 ${t.control.height}px · 목록 행 높이 ${t.control.rowHeight}px · 기본 간격 ${t.spacing}px · 그림자 ${t.shadow}`,
     `- 그리드: ${t.grid.columns}단, 콘텐츠 최대 폭 ${t.grid.maxWidth}px, 단 간격 ${t.grid.gutter}px`,
     `- 레이아웃 규칙: ${Object.entries(LAYOUT).map(([k, [label, v]]) => `${label} ${v[(d.layout as Record<string, string>)[k]!]}`).join(", ")}`,
+    ...briefLines(d),
   ].join("\n");
+}
+
+/** 단계별 컨셉(톤앤매너·UI/UX·컴포넌트) — 작업자가 쓴 글이 있으면 프롬프트에 함께 싣는다 */
+export function briefLines(d: SystemDesign): string[] {
+  const label = { style: "톤앤매너", ux: "UI·UX", comp: "컴포넌트 제작" } as const;
+  const out: string[] = [];
+  for (const k of ["style", "ux", "comp"] as const) {
+    const b = d.brief?.[k];
+    if (!b || (!b.summary && !b.rules.length && !b.keywords.length)) continue;
+    out.push(`- ${label[k]} 컨셉: ${[b.name, b.summary].filter(Boolean).join(" — ")}${b.keywords.length ? ` (키워드: ${b.keywords.join(", ")})` : ""}`);
+    for (const r of b.rules) out.push(`  · ${r}`);
+  }
+  if (d.css) out.push(`- 추가 CSS ${d.css.length}자 적용 중 (톤앤매너 단계에서 작업자가 쓴 스타일)`);
+  return out;
 }
 
 export function componentLines(sb: StoryboardScreen): string {

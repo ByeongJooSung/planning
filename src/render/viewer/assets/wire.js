@@ -291,7 +291,7 @@
     if (ctx.bare) frame = '<div class="wf-bare">' + blocksHtml + "</div>";
     else if (ds.layout.nav === "side") frame = sideShell(ds, ctx, body);
     else frame = header(ds, ctx) + '<main class="wf-main"><div class="wf-container">' + body + "</div></main>" + footer(ds, ctx);
-    return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
+    return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + (scopeCls(ds) ? " " + useCss(ds) : "") + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
   }
 
   /** 입력 항목: 이어서 나오면 실제 신청 화면처럼 왼쪽 항목명 · 오른쪽 입력칸 표(폼 테이블)로 묶는다 */
@@ -397,5 +397,46 @@
     return "";
   }
 
-  window.Wire = { screen: screen, template: template, component: component, icon: icon, iconLabel: ICON_LABEL, vars: vars, page: page };
+  // ── 톤앤매너 단계의 추가 CSS: 시스템마다 루트 클래스(wfs-코드) 안에서만 적용 ──
+  function scopeCls(ds) { return ds && ds.systemCode && ds.css ? "wfs-" + String(ds.systemCode).toLowerCase().replace(/[^a-z0-9_-]/g, "") : ""; }
+  /** 선택자마다 범위 클래스를 앞에 붙인다. .wf(루트)·:root·html·body로 시작하면 루트 자신을 가리킨다 */
+  function scopeCss(css, sel) {
+    var src = String(css || "").replace(/\/\*[\s\S]*?\*\//g, ""), out = "", i = 0;
+    function block(from) { var d = 0; for (var j = from; j < src.length; j++) { if (src[j] === "{") d++; else if (src[j] === "}") { d--; if (!d) return j; } } return src.length; }
+    function scopeSel(list) {
+      var parts = [], cur = "", par = 0;
+      for (var k = 0; k < list.length; k++) { var ch = list[k]; if (ch === "(") par++; if (ch === ")") par--; if (ch === "," && !par) { parts.push(cur); cur = ""; } else cur += ch; }
+      parts.push(cur);
+      return parts.map(function (x) {
+        x = x.trim();
+        if (!x) return "";
+        var m = /^(:root|html|body|\.wf)(?![a-zA-Z0-9_-])/.exec(x);
+        return m ? sel + ".wf" + x.slice(m[0].length) : sel + " " + x;
+      }).filter(Boolean).join(", ");
+    }
+    while (i < src.length) {
+      var open = src.indexOf("{", i);
+      if (open < 0) break;
+      var pre = src.slice(i, open).trim(), end = block(open), body = src.slice(open + 1, end);
+      if (/^@(media|supports|container|layer)\b/i.test(pre)) out += pre + "{" + scopeCss(body, sel) + "}\n";
+      else if (/^@/.test(pre)) out += pre + "{" + body + "}\n";
+      else if (pre) out += scopeSel(pre) + "{" + body + "}\n";
+      i = end + 1;
+    }
+    return out;
+  }
+  var cssDone = {};
+  /** 이 디자인의 추가 CSS를 문서에 넣고 루트에 붙일 클래스를 돌려준다 */
+  function useCss(ds) {
+    var cls = scopeCls(ds);
+    if (!cls || typeof document === "undefined") return cls;
+    if (cssDone[cls] !== ds.css) {
+      var el = document.getElementById(cls) || document.head.appendChild(Object.assign(document.createElement("style"), { id: cls }));
+      el.textContent = scopeCss(ds.css, "." + cls);
+      cssDone[cls] = ds.css;
+    }
+    return cls;
+  }
+
+  window.Wire = { screen: screen, template: template, component: component, icon: icon, iconLabel: ICON_LABEL, vars: vars, page: page, useCss: useCss, scopeCss: scopeCss };
 })();

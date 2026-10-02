@@ -715,6 +715,13 @@
                   "type": "number",
                   "minimum": 40,
                   "maximum": 1920
+                },
+                "draft": {
+                  "type": "string",
+                  "enum": [
+                    "render",
+                    "ai"
+                  ]
                 }
               },
               "required": [
@@ -746,6 +753,134 @@
                 "type": "string"
               }
             }
+          },
+          "brief": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "style": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "summary": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 800
+                  },
+                  "keywords": {
+                    "default": [],
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 30
+                    }
+                  },
+                  "rules": {
+                    "default": [],
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 240
+                    }
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                }
+              },
+              "ux": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "summary": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 800
+                  },
+                  "keywords": {
+                    "default": [],
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 30
+                    }
+                  },
+                  "rules": {
+                    "default": [],
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 240
+                    }
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                }
+              },
+              "comp": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "summary": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 800
+                  },
+                  "keywords": {
+                    "default": [],
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 30
+                    }
+                  },
+                  "rules": {
+                    "default": [],
+                    "maxItems": 24,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 240
+                    }
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "css": {
+            "default": "",
+            "type": "string",
+            "maxLength": 40000
           },
           "revision": {
             "default": 1,

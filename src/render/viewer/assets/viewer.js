@@ -572,7 +572,7 @@
       var props = SAMPLE_PROPS[c.id];
       if (!props) { props = {}; P().model.storyboard.screens.forEach(function (s) { s.components.forEach(function (x) { if (x.ui && x.ui.component === c.id) props = x.ui.props; }); }); }
       var w = WIDE.test(c.id) || !SAMPLE_PROPS[c.id] ? ds.tokens.grid.maxWidth : 560;
-      var tree = Frames.fromHtml(Wire.component(ds, c.id, props, wireCtx(P(), ds.systemCode)), { vars: Wire.vars(ds), width: w, select: ".wf-c", props: props, name: c.name });
+      var tree = Frames.fromHtml(Wire.component(ds, c.id, props, wireCtx(P(), ds.systemCode)), { vars: Wire.vars(ds), cls: "wf " + Wire.useCss(ds), width: w, select: ".wf-c", props: props, name: c.name });
       if (!tree) return null;
       // 폭이 넓은 컴포넌트는 채우기로 두고 미리보기 폭을 맞춘다
       if (typeof tree.w === "number" && tree.w >= w - 2) tree.w = "fill";
@@ -586,7 +586,7 @@
     var draft = comp && !comp.tree ? compDraft(d, comp) : null;
     var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW || (draft && draft.w), tree: comp.tree || (draft && draft.tree) || frameStarter(comp), variantTrees: comp.variantTrees } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
     FrameEdit.open({
-      ds: d, vars: Wire.vars(d), comp: start, comps: d.components,
+      ds: d, vars: Wire.vars(d), cls: Wire.useCss(d), comp: start, comps: d.components,
       note: draft ? "지금 그려지는 기본 모양을 옮긴 초안입니다. 저장하면 이 컴포넌트는 이 모양으로 그려지고, 화면설계서 항목 값은 ‘props 연결’한 글자에만 들어갑니다" + (/table|list|cards|stat|tabs|steps|step|pagination|search-panel|detail/.test(comp.id) ? " — 표·목록처럼 항목 데이터로 행·열을 채우던 부분은 그린 모양 그대로 고정됩니다(화면별 내용은 화면설계서에서 항목을 프레임으로 편집)." : ".") : "",
       categories: Object.keys(CATEGORY).map(function (k) { return [k, CATEGORY[k]]; }),
       editable: SRV && canEdit(), title: code + " " + (s ? s.name : ""),
@@ -1188,7 +1188,7 @@
     var tree = c.ui && c.ui.tree ? JSON.parse(JSON.stringify(c.ui.tree)) : draft ? draft.tree : frameStarter({ id: "", name: c.label });
     var cur = c.no;
     FrameEdit.open({
-      mode: "item", ds: ds, vars: Wire.vars(ds), comps: ds.components, editable: SRV && canEdit(), title: sid + " · " + c.no + "번",
+      mode: "item", ds: ds, vars: Wire.vars(ds), cls: Wire.useCss(ds), comps: ds.components, editable: SRV && canEdit(), title: sid + " · " + c.no + "번",
       comp: { id: "", name: c.label, category: "content", frameW: draft ? draft.w : el ? el.offsetWidth : 960, tree: tree },
       note: draft ? "지금 화면에 그려진 모양을 옮긴 초안입니다. 저장하면 이 화면의 이 항목만 이 모양으로 바뀝니다(디자인 시스템은 그대로)." : "",
       aiContext: "[화면설계서 문맥] " + sid + " " + (sb.title || "") + " 화면의 " + c.no + "번 항목 ‘" + c.label + "’" + (c.customer ? " · 고객에게 보이는 것: " + c.customer : "") + (c.planner ? " · 정책: " + c.planner : ""),
@@ -1220,7 +1220,7 @@
     if (!ds) return toast("디자인 시스템이 없어 그릴 수 없습니다", "err");
     var cur = null;
     FrameEdit.open({
-      mode: "item", ds: ds, vars: Wire.vars(ds), comps: ds.components, editable: true, title: sid + " · 새 항목",
+      mode: "item", ds: ds, vars: Wire.vars(ds), cls: Wire.useCss(ds), comps: ds.components, editable: true, title: sid + " · 새 항목",
       comp: { id: "", name: "", category: "content", frameW: 960, tree: { id: "root", type: "frame", name: "새 항목", w: "fill", h: "hug", layout: { mode: "column", gap: 12, pad: [20, 20, 20, 20], align: "stretch", justify: "start", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "md", children: [{ id: "t1", type: "text", name: "제목", text: "제목", size: "h3", weight: 700 }, { id: "t2", type: "text", name: "본문", text: "내용을 적습니다.", w: "fill", size: "small", color: "textMuted" }] } },
       aiContext: "[화면설계서 문맥] " + sid + " " + (sb.title || "") + " 화면에 새로 넣을 항목",
       save: function (doc) {
@@ -1527,7 +1527,7 @@
       P().model.storyboard.screens.forEach(function (s) { s.components.forEach(function (x) { if (x.ui && x.ui.component === c.id) props = x.ui.props; }); });
     }
     var w = FULLW[c.id] ? VW : WIDE.test(c.id) || !SAMPLE_PROPS[c.id] ? ds.tokens.grid.maxWidth : 560;
-    return { w: w, html: '<div class="wf ds-sample' + (FULLW[c.id] ? " flush" : "") + '" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>" };
+    return { w: w, html: '<div class="wf ds-sample' + (FULLW[c.id] ? " flush" : "") + " " + Wire.useCss(ds) + '" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>" };
   }
   function sample(ds, c, ctx) {
     var props = SAMPLE_PROPS[c.id];
@@ -1538,7 +1538,7 @@
       if (sbc) props = sbc.ui.props;
     }
     var w = FULLW[c.id] ? VW : WIDE.test(c.id) || !SAMPLE_PROPS[c.id] ? ds.tokens.grid.maxWidth : 560;
-    var html = '<div class="wf ds-sample' + (FULLW[c.id] ? " flush" : "") + '" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>";
+    var html = '<div class="wf ds-sample' + (FULLW[c.id] ? " flush" : "") + " " + Wire.useCss(ds) + '" style="' + Wire.vars(ds) + '">' + Wire.component(ds, c.id, props, ctx) + "</div>";
     return stage(html, { w: w, label: FULLW[c.id] ? "뷰포트 폭 " + w + "px" : w === 560 ? "기준 폭 560px" : "콘텐츠 최대 폭 " + w + "px" });
   }
   function thumbs(ds, ctx, title, reviewCode) {
@@ -1613,9 +1613,6 @@
   function renderSystemDesign(p, d, ctx) {
     var t = d.tokens, L = d.layout, c = t.color, code = d.systemCode;
     var chosen = d.proposals.find(function (x) { return x.id === d.selectedId; });
-    var others = d.proposals.map(function (x) {
-      return '<div class="box pmini' + (x.id === d.selectedId ? " on" : "") + '"><span class="cid">' + esc(x.id) + "</span><b>" + esc(x.name) + "</b>" + swatches(x.tokens) + (x.id === d.selectedId ? '<span class="pill DESIGNED">선택</span>' : SRV && canEdit() ? actBtn("ds-select", "이 컨셉으로 교체", d.systemCode + "|" + x.id) : "") + "</div>";
-    }).join("");
     var colors = [["primary", "주 색"], ["onPrimary", "주 색 위 글자"], ["accent", "강조"], ["nav", "메뉴 배경"], ["onNav", "메뉴 글자"], ["bg", "배경"], ["surface", "면"], ["surfaceAlt", "보조 면"], ["border", "선"], ["text", "글자"], ["textMuted", "보조 글자"], ["success", "성공"], ["warning", "주의"], ["danger", "오류"], ["info", "안내"]].map(function (k) {
       return '<div class="color"><i style="background:' + c[k[0]] + '"></i><b>' + k[1] + '</b><span class="mono">' + esc(c[k[0]]) + "</span></div>";
     }).join("");
@@ -1655,14 +1652,244 @@
       '<div class="tune-f">' + dsHistory(d) + '<span class="sp"></span>' + (dsUndoable(code) ? '<button class="btn-sm" data-dsundo="' + esc(code) + '">마지막 적용 되돌리기</button>' : "") + '<button class="btn-primary" data-dstune="' + esc(code) + '">전역 조정 생성</button></div></section>' : "";
     var cbar = '<div class="note cmt-bar"><div><b>이미지 댓글</b><p class="hint">화면 템플릿이나 컴포넌트 이미지를 누르면 실제 규격 검토 화면이 열립니다. 고칠 곳을 누르거나 “번호 라벨 보기”로 요소 번호를 눌러 댓글을 남기고, 모은 댓글로 수정 요청을 만듭니다.</p></div>' +
       (allOpen.length ? '<button class="btn-primary" data-cmtgen="' + esc(code) + '|">열린 댓글 ' + allOpen.length + "개로 수정 요청</button>" : '<span class="hint">열린 댓글 없음</span>') + "</div>";
-    return tune + cbar + '<div class="ds-head box"><div><span class="eyebrow">선택한 컨셉 · 개정 r' + d.revision + '</span><h2>' + esc(chosen.id + ". " + chosen.name) + "</h2><p>" + esc(chosen.summary) + '</p><p class="hint">선택 ' + esc(fmtDate(d.selectedAt)) + " · 컴포넌트 " + d.components.length + "개(추가 " + d.components.filter(function (x) { return x.origin === "ADDED"; }).length + "개) · 아이콘 " + d.icons.length + '개</p></div><div class="pminis">' + others + "</div></div>" +
-      '<section class="section"><h2>기초 <small>색상 · 글꼴 · 간격 · 모서리 · 컨트롤 — 섹션마다 조정 입력란</small></h2>' + foundation + "</section>" +
-      '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
-      '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, chosen.name, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>" +
+    var tab = state.dsTab[code] || "style";
+    var head = '<div class="ds-head box"><div><span class="eyebrow">디자인 시스템 · 개정 r' + d.revision + '</span><h2>' + esc(code) + " 디자인 시스템</h2>" +
+      '<p class="ds-mix">' + DS_STAGES.slice(0, 3).map(function (st, i) { var b = briefOf(d, st[0]); return '<span class="tag"><b>' + (i + 1) + ". " + st[1] + "</b> " + esc(b.name || "미작성") + "</span>"; }).join("") + "</p>" +
+      '<p class="hint">처음 고른 컨셉 ' + esc(chosen.id + ". " + chosen.name) + " · " + esc(fmtDate(d.selectedAt)) + " · 컴포넌트 " + d.components.length + "개(프레임 " + d.components.filter(function (x) { return x.tree; }).length + "개 · 초안 " + d.components.filter(function (x) { return x.draft; }).length + "개) · 아이콘 " + d.icons.length + "개" + (d.css ? " · 추가 CSS " + d.css.length + "자" : "") + "</p></div></div>";
+    var tabs = '<nav class="ds-stages" role="tablist" aria-label="디자인 시스템 단계">' + DS_STAGES.map(function (st, i) {
+      var b = st[0] === "review" ? null : briefOf(d, st[0]), done = st[0] === "comp" ? d.components.some(function (x) { return x.tree; }) : b && !!(d.brief && d.brief[st[0]] && d.brief[st[0]].summary);
+      return '<button role="tab" data-dstab="' + esc(code + "|" + st[0]) + '" aria-selected="' + (tab === st[0]) + '"><span class="ds-n' + (done ? " ok" : "") + '">' + (st[0] === "review" ? "✓" : i + 1) + "</span><b>" + st[1] + "</b><small>" + st[2] + "</small></button>";
+    }).join("") + "</nav>";
+    var body;
+    if (tab === "style") body = stageCard(d, "style") + mixBar(d, "style") +
+      '<section class="section"><h2>기초 토큰 <small>색상 · 글꼴 · 간격 · 모서리 · 컨트롤 — 섹션마다 조정 입력란</small></h2>' + foundation + "</section>" + cssBox(d, ctx);
+    else if (tab === "ux") body = stageCard(d, "ux") + mixBar(d, "ux") +
+      '<section class="section"><h2>구성 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션 · 버튼 · 밀도 · 푸터</small></h2>' + rules + "</section>" +
+      '<section class="section"><h2>화면 템플릿 <small>이 구성으로 그린 ' + VW + "×" + VH + " 화면 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, code, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>";
+    else if (tab === "comp") body = stageCard(d, "comp") + draftGen(p, d) +
       '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small>" + (SRV && canEdit() ? '<button class="btn-sm btn-primary" data-frameedit="' + esc(code) + '|">+ 새 컴포넌트 (프레임 편집기)</button>' : "") + editBtn("ds-comp-add", "+ 컴포넌트 추가", code) + "</h2>" +
       '<div class="figx"><b>Figma로 내보내기</b><span class="hint">토큰은 Figma 변수로, 프레임으로 그린 컴포넌트(' + d.components.filter(function (x) { return x.tree; }).length + '개)는 오토 레이아웃 Figma 컴포넌트로 만듭니다.</span><button class="btn-sm" data-figx="' + esc(code) + '|script">플러그인 스크립트 복사 (Scripter)</button><button class="btn-sm" data-figx="' + esc(code) + '|plugin">Figma 플러그인 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|tokens">토큰 JSON 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|prompt">Figma AI 프롬프트 복사</button>' + (SRV && canEdit() ? '<span class="figx-sep"></span><b>Figma에서 가져오기</b><button class="btn-sm" data-figx="' + esc(code) + '|xscript">① 내보내기 스크립트 복사 (Scripter)</button>' + actBtn("ds-figimport", "② 붙여 넣어 가져오기", code, "btn-sm btn-primary") + '<button class="btn-sm" data-figx="' + esc(code) + '|xprompt">Claude(Figma MCP)로 가져오기 프롬프트</button>' : "") + '</div>' + comps + "</section>" +
       '<section class="section"><h2>아이콘 <small>' + d.icons.length + "개</small></h2>" + icons + "</section>";
+    else body = tune + cbar + '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, chosen.name, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>" +
+      '<section class="section"><h2>개정 이력</h2><div class="box pad">' + dsHistory(d) + "</div></section>";
+    return head + tabs + '<div class="ds-stage-body" role="tabpanel">' + body + "</div>";
   }
+
+  // ── 디자인 시스템 단계: 톤앤매너·CSS / UI·UX / 컴포넌트 초안 / 검토 ──
+  var DS_STAGES = [["style", "톤앤매너 · CSS", "색·글꼴·모서리·간격 + 추가 CSS로 ‘깔’ 잡기"], ["ux", "UI · UX", "메뉴·검색·목록·버튼·밀도 구성과 사용 원칙"], ["comp", "컴포넌트 초안", "화면 요소마다 이 톤·구성으로 제작 초안"], ["review", "검토 · 템플릿", "템플릿 댓글 · 전역 조정 · 이력"]];
+  var STAGE_NAME = { style: "톤앤매너 · CSS", ux: "UI · UX", comp: "컴포넌트" };
+  state.dsTab = state.dsTab || {};
+  /** 단계 컨셉 (아직 안 썼으면 고른 컨셉에서 시작한 값) */
+  function briefOf(d, stage) {
+    var b = d.brief && d.brief[stage];
+    if (b) return b;
+    var c = d.proposals.find(function (x) { return x.id === d.selectedId; }) || {};
+    if (stage === "comp") return { name: "", summary: "", keywords: [], rules: [] };
+    return { name: c.id ? c.id + ". " + c.name : "", summary: stage === "style" ? c.summary || "" : c.fit || "", keywords: [], rules: [], from: c.id };
+  }
+  function stageCard(d, stage) {
+    var b = briefOf(d, stage), code = d.systemCode, ed = SRV && canEdit();
+    var empty = !b.summary && !b.rules.length && !b.keywords.length;
+    var guide = { style: "어떤 인상(톤앤매너)으로 보일지 — 색의 성격, 글꼴의 분위기, 모서리·그림자·여백의 느낌, 강조 방식", ux: "어떻게 쓰게 할지 — 메뉴 구조, 검색·목록 방식, 정보 밀도, 버튼·확인 흐름, 접근성 원칙", comp: "컴포넌트를 어떤 규칙으로 만들지 — 카드·표·버튼의 형태, 아이콘 쓰임, 상태(비활성·오류) 표현, 재사용 단위" }[stage];
+    return '<div class="box stage-card"><div class="sc-h"><span class="eyebrow">' + STAGE_NAME[stage] + " 컨셉</span>" + (b.from ? '<span class="tag">컨셉 ' + esc(b.from) + "에서 시작</span>" : "") + (d.brief && d.brief[stage] && d.brief[stage].updatedAt ? '<span class="hint">' + esc(fmtDate(d.brief[stage].updatedAt)) + "</span>" : "") + '<span class="sp"></span>' +
+      (ed ? actBtn("ds-brief", "✎ 컨셉 쓰기", code + "|" + stage) + actBtn("ds-stai", "✦ AI로 이 단계 만들기", code + "|" + stage, "btn-sm ai") : "") + "</div>" +
+      "<h3>" + esc(b.name || "(이름 없음)") + "</h3>" + (b.summary ? "<p>" + esc(b.summary) + "</p>" : "") +
+      (b.keywords.length ? '<div class="lchips">' + b.keywords.map(function (k) { return '<span class="tag">#' + esc(k) + "</span>"; }).join("") + "</div>" : "") +
+      (b.rules.length ? '<ul class="sc-rules">' + b.rules.map(function (r) { return "<li>" + esc(r) + "</li>"; }).join("") + "</ul>" : "") +
+      (empty ? '<p class="hint">' + guide + "을 적어 두면, AI 생성(화면설계서·컴포넌트 초안·조정)이 이 컨셉을 따릅니다.</p>" : "") + "</div>";
+  }
+  /** 다른 제안 컨셉에서 이 단계만 가져오기 */
+  function mixBar(d, stage) {
+    var b = briefOf(d, stage), ed = SRV && canEdit();
+    return '<div class="mixbar"><span class="hint">' + (stage === "style" ? "다른 컨셉의 톤(색·글꼴·모서리)만 가져오기 — UI·UX 구성은 그대로" : "다른 컨셉의 구성(메뉴·검색·목록·버튼·밀도)만 가져오기 — 톤은 그대로") + "</span>" +
+      '<div class="pminis">' + d.proposals.map(function (x) {
+        var cur = b.from === x.id;
+        return '<div class="box pmini' + (cur ? " on" : "") + '"><span class="cid">' + esc(x.id) + "</span><b>" + esc(x.name) + "</b>" + (stage === "style" ? swatches(x.tokens) : layoutChips(x.layout)) +
+          (cur ? '<span class="pill DESIGNED">사용 중</span>' : ed ? actBtn("ds-mix", stage === "style" ? "이 톤 쓰기" : "이 구성 쓰기", d.systemCode + "|" + stage + "|" + x.id) : "") + "</div>";
+      }).join("") + (ed ? '<div class="pmini add">' + genBtn("dsc:" + d.systemCode, "AI 새 컨셉 후보") + "</div>" : "") + "</div></div>";
+  }
+  var CSS_HINT = ".wf(화면 전체) · .wf-btn / .wf-btn.primary(버튼) · .wf-input(입력칸) · .wf-table th / td(표) · .wf-card(카드) · .wf-badge(상태 뱃지) · .wf-tabs span.on(선택 탭) · .wf-ptitle h1(화면 제목) · .wf-hbar / .wf-menu span(상단 메뉴) · .wf-footer(바닥) — 색은 var(--w-primary) 같은 토큰 변수로";
+  function cssBox(d, ctx) {
+    var ed = SRV && canEdit(), code = d.systemCode;
+    return '<section class="section"><h2>추가 CSS <small>토큰으로 못 정하는 세부 표현(자간·선 굵기·호버·강조 방식) — 이 시스템 와이어프레임 안에서만 적용</small></h2><div class="box pad css-box">' +
+      '<div class="css-ed"><textarea id="ds-css" class="mono" rows="14" spellcheck="false"' + (ed ? "" : " readonly") + ' placeholder=".wf-btn.primary { letter-spacing: -0.01em; box-shadow: 0 2px 0 rgba(0,0,0,.12); }&#10;.wf-table th { font-weight: 700; border-bottom: 2px solid var(--w-primary); }">' + esc(d.css || "") + "</textarea>" +
+      '<p class="hint">' + esc(CSS_HINT) + '</p><div class="row-actions">' + (ed ? '<button class="btn-sm" data-dscss="' + esc(code) + '|preview">미리보기</button>' + actBtn("ds-stai", "✦ AI로 CSS·토큰 만들기", code + "|style", "btn-sm ai") + '<button class="btn-sm btn-primary" data-dscss="' + esc(code) + '|save">CSS 저장</button>' : "") + "</div></div>" +
+      '<div class="css-prev" id="ds-css-prev">' + cssPreview(d, ctx) + "</div></div></section>";
+  }
+  function cssPreview(d, ctx) {
+    return ["list", "form"].map(function (t) { return '<figure class="thumb">' + stage(Wire.template(d, t, ctx), { w: VW, h: VH, cap: false }) + "<figcaption>" + (t === "list" ? "목록" : "등록") + "</figcaption></figure>"; }).join("");
+  }
+
+  // ── 컴포넌트 초안 생성기: 화면 요소마다 이 톤·구성으로 제작 초안 ──
+  var TPL_NEEDS = {
+    list: ["search-panel", "tabs", "data-table", "card-list", "pagination", "button-group"], detail: ["detail-table", "status-badge", "file-list", "button-group"],
+    form: ["step-indicator", "text-input", "textarea", "select", "radio-group", "checkbox-group", "date-range", "file-upload", "button-group"],
+    dashboard: ["stat-cards", "notice-list", "data-table"], main: ["hero-banner", "search-bar", "quick-links", "notice-list"], login: ["login-form"], popup: ["modal", "confirm-dialog", "alert-dialog"]
+  };
+  var COMMON_NEEDS = ["breadcrumb", "button", "status-badge", "empty-state", "toast", "confirm-dialog", "alert-dialog"];
+  /** 이 시스템 화면에서 쓰는(또는 템플릿상 필요한) 요소 목록 */
+  function pageElements(p, d) {
+    var code = d.systemCode, sbs = p.model.storyboard.screens.filter(function (s) { return s.systemCode === code; }), use = {}, tpls = {}, missing = {};
+    sbs.forEach(function (s) {
+      if (s.template) tpls[s.template] = (tpls[s.template] || 0) + 1;
+      s.components.forEach(function (c) {
+        if (c.ui && !c.ui.tree && c.ui.component !== "frame") { var u = use[c.ui.component] = use[c.ui.component] || { screens: [], props: null }; if (u.screens.indexOf(s.screenId) < 0) u.screens.push(s.screenId); if (!u.props && c.ui.props && Object.keys(c.ui.props).length) u.props = c.ui.props; }
+        else if (!c.ui) { var k = c.kind || "text"; var mm = missing[k] = missing[k] || { screens: [], labels: [] }; if (mm.screens.indexOf(s.screenId) < 0) mm.screens.push(s.screenId); if (mm.labels.length < 3) mm.labels.push(c.label); }
+      });
+    });
+    var need = {};
+    Object.keys(tpls).forEach(function (t) { (TPL_NEEDS[t] || []).forEach(function (id) { need[id] = (need[id] || []).concat([t]); }); });
+    COMMON_NEEDS.forEach(function (id) { need[id] = need[id] || ["공통"]; });
+    var rows = d.components.filter(function (x) { return x.id !== "gnb" && x.id !== "footer" && (use[x.id] || need[x.id] || x.origin === "ADDED"); }).map(function (x) {
+      var u = use[x.id];
+      return { id: x.id, name: x.name, comp: x, screens: u ? u.screens : [], props: u && u.props, why: u ? "화면 " + u.screens.length + "개에서 사용" : need[x.id] ? (need[x.id][0] === "공통" ? "공통 요소" : need[x.id].map(function (t) { return (TEMPLATES.find(function (y) { return y[0] === t; }) || [t, t])[1]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join("·") + " 화면에 필요") : "추가한 컴포넌트" };
+    });
+    rows.sort(function (a, b) { return b.screens.length - a.screens.length; });
+    Object.keys(missing).forEach(function (k) {
+      if (d.components.some(function (x) { return x.id === k; })) return;
+      var id = /^[a-z][a-z0-9-]*$/.test(k) ? k : "c-" + k.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "c-new";
+      rows.push({ id: id, name: missing[k].labels[0] || k, comp: null, screens: missing[k].screens, why: "와이어프레임 없는 항목(" + missing[k].labels.join(", ") + ")", isNew: true });
+    });
+    return rows;
+  }
+  function draftState(x) {
+    if (!x.comp) return '<span class="pill NOT_STARTED">새 컴포넌트 필요</span>';
+    if (x.comp.draft) return '<span class="pill IN_DESIGN">초안 · ' + (x.comp.draft === "ai" ? "AI" : "지금 모양") + "</span>";
+    if (x.comp.tree) return '<span class="pill DESIGNED">프레임 완성</span>';
+    return '<span class="pill NOT_STARTED">기본 렌더러</span>';
+  }
+  state.dsPick = state.dsPick || {};
+  function draftGen(p, d) {
+    var code = d.systemCode, ed = SRV && canEdit(), rows = pageElements(p, d), pick = state.dsPick[code] || {};
+    var trs = rows.map(function (x) {
+      var on = pick[x.id] != null ? pick[x.id] : !(x.comp && x.comp.tree);
+      return "<tr><td>" + (ed ? '<input type="checkbox" data-dspick="' + esc(code + "|" + x.id) + '"' + (on ? " checked" : "") + ' aria-label="' + esc(x.name) + ' 선택">' : "") + '</td><td><b>' + esc(x.name) + '</b> <span class="mono hint">' + esc(x.id) + '</span></td><td class="hint">' + esc(x.why) + (x.screens.length ? ' <span class="mono">' + esc(x.screens.slice(0, 3).join(", ")) + (x.screens.length > 3 ? " 외" : "") + "</span>" : "") + "</td><td>" + draftState(x) + '</td><td class="act">' +
+        (ed && x.comp ? '<button class="btn-sm" data-dsdraft="' + esc(code + "|" + x.id) + '" title="지금 톤·CSS로 그려지는 모양을 프레임으로 옮겨 초안으로">지금 모양으로</button><button class="btn-sm" data-frameedit="' + esc(code + "|" + x.id) + '">✎ 편집</button>' : "") + "</td></tr>";
+    }).join("");
+    return '<section class="section"><h2>컴포넌트 초안 생성기 <small>이 시스템 화면 요소 ' + rows.length + "개 · 톤앤매너·UI/UX 컨셉에 맞춘 제작 초안</small></h2>" +
+      '<div class="box pad dgen"><p class="hint">정보구조도·화면설계서에서 쓰는 요소와 화면 유형(목록·상세·등록·대시보드…)에 필요한 요소를 모았습니다. 고른 요소를 <b>지금 모양으로</b>(현재 토큰·추가 CSS로 그려지는 모양을 프레임으로 옮김) 또는 <b>✦ AI 초안</b>(단계별 컨셉을 읽고 새로 디자인)으로 만들면 ‘초안’ 표시가 붙고, 프레임 편집기에서 다듬어 저장하면 완성으로 바뀝니다.</p>' +
+      (ed ? '<div class="row-actions"><button class="btn-sm" data-dspickall="' + esc(code) + '|1">모두 고르기</button><button class="btn-sm" data-dspickall="' + esc(code) + '|0">모두 풀기</button><span class="sp"></span><button class="btn-sm" data-dsdraft="' + esc(code) + '|*">고른 요소 → 지금 모양으로 초안</button>' + actBtn("ds-stai", "✦ 고른 요소 AI 초안", code + "|comp", "btn-sm btn-primary") + "</div>" : "") +
+      '<div class="twrap"><table class="dgen-t"><thead><tr><th></th><th>요소</th><th>쓰는 곳</th><th>상태</th><th></th></tr></thead><tbody>' + (trs || '<tr><td colspan="5" class="empty">화면설계서가 아직 없어 모을 요소가 없습니다.</td></tr>') + "</tbody></table></div></div></section>";
+  }
+  function pickedElements(p, d) {
+    var pick = state.dsPick[d.systemCode] || {};
+    return pageElements(p, d).filter(function (x) { return pick[x.id] != null ? pick[x.id] : !(x.comp && x.comp.tree); });
+  }
+  /** 지금 모양(토큰·CSS 반영) → 프레임 초안으로 저장 */
+  function draftFromRender(code, ids) {
+    var p = P(), d = selectedDesign(p, code);
+    if (!d) return;
+    var items = [], skip = [];
+    ids.forEach(function (id) {
+      var c = d.components.find(function (x) { return x.id === id; });
+      if (!c) { skip.push(id); return; }
+      var dr = compDraft(d, c);
+      if (dr) items.push({ id: c.id, name: c.name, category: c.category, description: c.description, tree: dr.tree, frameW: dr.w }); else skip.push(id);
+    });
+    if (!items.length) return toast("초안을 만들 요소가 없습니다" + (skip.length ? " (새 컴포넌트는 AI 초안으로: " + skip.join(", ") + ")" : ""), "err");
+    cmd({ op: "design.frame.import", systemCode: code, items: items, draft: "render" }).then(function () { if (skip.length) toast("새 컴포넌트 " + skip.length + "개는 AI 초안으로 만드세요: " + skip.join(", ")); }).catch(function (e) { toast(e.message, "err"); });
+  }
+
+  // ── 단계별 컨셉 쓰기 · AI로 만들기 ──
+  ACTIONS_LATE["ds-brief"] = function (arg) {
+    var a = arg.split("|"), d = selectedDesign(P(), a[0]), stage = a[1];
+    if (!d) return;
+    var b = briefOf(d, stage);
+    var ph = { style: ["예: 차분한 신뢰감 — 남색 주조, 넓은 여백", "공공기관다운 신뢰감과 읽기 쉬움. 강조는 절제하고 정보 위계는 굵기와 크기로", "예: 표 머리글은 연한 배경 + 굵은 글자\n강조색은 한 화면에 한 번만"], ux: ["예: 찾기 쉬운 업무 화면", "처음 쓰는 민원인도 3번 안에 원하는 메뉴에 도달. 목록은 표, 조건 검색은 목록 위 패널", "예: 등록·수정은 확인 창을 거쳐 저장\n목록 기본 정렬은 최신순, 10개씩"], comp: ["예: 단단한 표·카드 중심", "재사용 단위를 작게 — 버튼·뱃지·입력칸을 조합해 큰 요소를 만든다", "예: 카드는 모서리 md, 그림자 없이 테두리\n상태 뱃지는 알약형, 색은 상태 토큰"] }[stage];
+    openForm({
+      eyebrow: a[0] + " 디자인 시스템", title: STAGE_NAME[stage] + " 컨셉 쓰기", submit: "저장",
+      intro: "이 단계의 컨셉만 따로 적습니다. AI 생성(화면설계서·컴포넌트 초안·조정)이 이 글을 읽고 따릅니다.",
+      fields: [
+        { name: "name", label: "컨셉 이름", value: b.name, placeholder: ph[0] },
+        { name: "summary", label: "설명", type: "textarea", rows: 3, value: b.summary, placeholder: ph[1] },
+        { name: "keywords", label: "키워드 (쉼표로 구분)", value: b.keywords.join(", "), placeholder: "예: 신뢰, 차분, 정돈" },
+        { name: "rules", label: "원칙·규칙 (한 줄에 하나)", type: "textarea", rows: 5, value: b.rules.join("\n"), placeholder: ph[2] }
+      ],
+      onSubmit: function (f) { return cmd({ op: "design.stage", systemCode: a[0], stage: stage, brief: { name: f.name, summary: f.summary, keywords: f.keywords, rules: f.rules.split("\n") } }); }
+    });
+  };
+  ACTIONS_LATE["ds-mix"] = function (arg) {
+    var a = arg.split("|");
+    confirmAct(a[1] === "style" ? "톤 가져오기" : "구성 가져오기", "컨셉 " + a[2] + "의 " + (a[1] === "style" ? "톤(색·글꼴·모서리·간격)" : "UI·UX 구성(메뉴·검색·목록·버튼·밀도)") + "만 가져옵니다. " + (a[1] === "style" ? "컴포넌트별 스타일 조정값은 초기화되고, 추가 CSS는 그대로 둡니다." : "톤과 추가 CSS는 그대로 둡니다.") + " 이 디자인 시스템을 쓰는 화면이 함께 바뀝니다.", "가져오기", function () {
+      return cmd({ op: "design.mix", systemCode: a[0], stage: a[1], conceptId: a[2] });
+    });
+  };
+  function stagePrompt(code, stage, ins) {
+    var p = P(), d = selectedDesign(p, code), s = sysOf(p, code);
+    var b = function (k) { var x = briefOf(d, k); return x.name || x.summary || x.rules.length ? "- " + STAGE_NAME[k] + ": " + [x.name, x.summary].filter(Boolean).join(" — ") + (x.keywords.length ? " (키워드 " + x.keywords.join(", ") + ")" : "") + (x.rules.length ? "\n  · " + x.rules.join("\n  · ") : "") : "- " + STAGE_NAME[k] + ": (아직 없음)"; };
+    var sysLine = "- 프로젝트: " + p.model.project.name + "\n- 시스템: " + code + " " + (s ? s.name : "") + (s && s.users && s.users.length ? " (주 사용자: " + s.users.join(", ") + ")" : "") + (s && s.description ? "\n- 시스템 설명: " + s.description : "");
+    var screens = p.model.ia.nodes.filter(function (n) { return n.systemCode === code && n.kind !== "MENU"; }).slice(0, 30).map(function (n) { return n.name; }).join(", ");
+    var concept = [b("style"), b("ux"), b("comp")].join("\n");
+    if (stage === "comp") {
+      var picked = pickedElements(p, d).slice(0, 12);
+      if (!picked.length) return { err: "초안을 만들 요소를 고르세요 (컴포넌트 초안 생성기 표의 체크)" };
+      return { picked: picked, text: Frames.aiPrompt(d, d.components.filter(function (c) { return !picked.some(function (x) { return x.id === c.id; }); }), {
+        system: code + " " + (s ? s.name : ""), instruction: (ins || "컨셉에 맞게 새로 디자인한 제작 초안") + "\n\n[대상]\n" + sysLine + "\n- 화면: " + screens, concept: concept + (d.css ? "\n- 추가 CSS(참고):\n" + d.css.slice(0, 1500) : ""),
+        multi: picked.map(function (x) { return { id: x.id, name: x.name, usage: x.why, props: x.props || SAMPLE_PROPS[x.id] }; })
+      }) + '\n\n덧붙여 이번 컴포넌트 제작 규칙을 "brief": {"name","summary","keywords":[],"rules":[]} 로 함께 주면 컴포넌트 단계 컨셉으로 저장합니다(선택).' };
+    }
+    var t = d.tokens, L = d.layout;
+    var cur = stage === "style" ? "```json\n" + JSON.stringify({ tokens: t }) + "\n```\n- 추가 CSS:\n```css\n" + (d.css || "/* 없음 */") + "\n```" : "```json\n" + JSON.stringify({ layout: L }) + "\n```";
+    var allowed = stage === "style" ? "tokens(색 15종 #RRGGBB, font.family·scale·weightBold, radius sm·md·lg, control.height·rowHeight, spacing, grid, shadow: none|soft|strong)와 css(추가 CSS 문자열)" : "layout: " + Object.keys(LAYOUT_LABEL).map(function (k) { return k + "(" + Object.keys(LAYOUT_LABEL[k][1]).join("|") + ")"; }).join(", ");
+    var text = [
+      "# " + code + " 디자인 시스템 — " + STAGE_NAME[stage] + " 단계 컨셉 만들기",
+      stage === "style" ? "이 시스템 화면의 톤앤매너(깔)를 잡아 주세요: 컨셉 글과 디자인 토큰, 토큰으로 못 정하는 세부 표현을 위한 추가 CSS." : "이 시스템 화면의 UI·UX 구성을 잡아 주세요: 컨셉 글(사용 원칙)과 레이아웃 규칙.",
+      "", "## 요청", ins || "(지시 없음 — 시스템 성격에 맞게)", "", "## 대상", sysLine, "- 화면: " + screens, "", "## 지금 단계별 컨셉", concept, "", "## 지금 값", cur, "",
+      "## 규칙",
+      "- 바꿀 수 있는 값: " + allowed,
+      stage === "style" ? "- 글자 대비 4.5:1 이상(본문 글자/배경, 주 색 위 글자/주 색). 공공 서비스면 KRDS 원칙을 따른다\n- css는 와이어프레임 클래스에만 쓴다: " + CSS_HINT + "\n- css에 @import·외부 url()·스크립트는 쓰지 않는다. 색은 가능하면 var(--w-*) 토큰 변수\n- css는 지금 추가 CSS를 고친 ‘전체’ 내용으로 준다(유지할 규칙도 포함). CSS를 바꾸지 않으려면 css를 빼라" : "- 원칙(rules)은 화면 설계자가 따라야 할 구체적인 규칙으로 (예: ‘목록 위에 조건 검색 패널, 기본 10개씩’)",
+      "- brief.rules는 한 줄짜리 원칙 3~8개, keywords는 3~6개",
+      "", "## 출력 형식 (JSON만)",
+      stage === "style" ? '{"brief":{"name":"…","summary":"…","keywords":["…"],"rules":["…"]},"tokens":{"color":{"primary":"#…"},"font":{"scale":{"h1":30}},"radius":{"md":8}},"css":".wf-btn.primary{…}"}\n바꾸지 않는 토큰은 빼도 됩니다.' : '{"brief":{"name":"…","summary":"…","keywords":["…"],"rules":["…"]},"layout":{"list":"table","density":"comfortable"}}\n바꾸지 않는 규칙은 빼도 됩니다.'
+    ].join("\n");
+    return { text: text };
+  }
+  function stageApply(code, stage, out, picked) {
+    if (!out || typeof out !== "object") return Promise.reject(new Error("AI 결과가 JSON이 아닙니다"));
+    if (stage === "comp") {
+      var list = Array.isArray(out) ? out : Array.isArray(out.components) ? out.components : out.tree ? [out] : [];
+      var items = [];
+      list.forEach(function (o, i) {
+        var tree = o && Frames.sanitize(o.tree || (o.type ? o : null), selectedDesign(P(), code).components);
+        if (!tree) return;
+        tree.id = "root";
+        var id = String(o.id || (picked && picked[i] && picked[i].id) || "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^[^a-z]+/, "");
+        var vt = (Array.isArray(o.variants) ? o.variants : []).map(function (v) { var t = v && Frames.sanitize(v.tree, selectedDesign(P(), code).components); if (!t) return null; t.id = "root"; return { name: String(v.name || "변형").slice(0, 40), tree: t }; }).filter(Boolean).slice(0, 8);
+        items.push({ id: id || undefined, name: String(o.name || (picked && picked[i] && picked[i].name) || id || "새 컴포넌트").slice(0, 60), category: o.category, description: o.description ? String(o.description).slice(0, 300) : undefined, tree: tree, variantTrees: vt.length ? vt : undefined });
+      });
+      if (!items.length) return Promise.reject(new Error("AI 결과에 components[].tree(프레임 노드)가 없습니다"));
+      var chain = out.brief ? cmd({ op: "design.stage", systemCode: code, stage: "comp", brief: out.brief }).catch(function () {}) : Promise.resolve();
+      return chain.then(function () { return cmd({ op: "design.frame.import", systemCode: code, items: items, draft: "ai" }); });
+    }
+    var c = { op: "design.stage", systemCode: code, stage: stage, note: "AI 단계 컨셉" };
+    if (out.brief) c.brief = out.brief;
+    if (stage === "style") { if (out.tokens) c.tokens = out.tokens; if (typeof out.css === "string") c.css = out.css; }
+    else if (out.layout) c.layout = out.layout;
+    if (!c.brief && !c.tokens && !c.layout && c.css == null) return Promise.reject(new Error("AI 결과에 brief·" + (stage === "style" ? "tokens·css" : "layout") + "가 없습니다"));
+    return cmd(c);
+  }
+  ACTIONS_LATE["ds-stai"] = function (arg) {
+    var a = arg.split("|"), code = a[0], stage = a[1], p = P();
+    var ai = !!(AI.sample && p.ai);
+    var pre = stage === "comp" ? pickedElements(p, selectedDesign(p, code)).slice(0, 12) : null;
+    openForm({
+      eyebrow: code + " 디자인 시스템 · " + STAGE_NAME[stage], title: "✦ AI로 " + (stage === "comp" ? "컴포넌트 초안 만들기" : STAGE_NAME[stage] + " 단계 만들기"), submit: ai ? "AI로 만들어 적용" : "붙여 넣은 결과 적용",
+      intro: esc(stage === "comp" ? "고른 요소 " + (pre.length ? pre.length + "개(" + pre.map(function (x) { return x.name; }).join(", ") + ")" : "없음 — 표에서 먼저 고르세요") + "를 단계별 컨셉에 맞춰 새로 그립니다. 결과는 ‘AI 초안’으로 들어가고 프레임 편집기에서 다듬습니다." : (stage === "style" ? "컨셉 글 · 디자인 토큰 · 추가 CSS를 한 번에 만듭니다. UI·UX 구성은 바꾸지 않습니다." : "컨셉 글(사용 원칙) · 구성 규칙을 만듭니다. 톤(색·글꼴)과 CSS는 바꾸지 않습니다.")),
+      fields: [
+        { name: "ins", label: "요청 (비우면 시스템 성격에 맞게)", type: "textarea", rows: 3, value: "", placeholder: { style: "예: 따뜻하고 친근한 톤, 버튼은 알약형, 표 머리글을 강조", ux: "예: 정보 밀도는 촘촘하게, 목록은 카드형, 등록은 단계 표시", comp: "예: 카드형 위주로, 아이콘을 왼쪽에, 상태는 알약 뱃지" }[stage] },
+        { type: "html", html: '<details class="gen-claude"' + (ai ? "" : " open") + '><summary><span class="cl-logo">✳</span> Claude 구독(claude.ai)으로 만들기</summary><ol class="cl-steps"><li><button type="button" class="btn-sm" data-stai-copy="' + esc(code + "|" + stage) + '">① 프롬프트 복사 · claude.ai 열기</button></li><li>② Claude 답을 아래에 붙여 넣고 ‘' + (ai ? "AI로 만들어 적용" : "붙여 넣은 결과 적용") + "’ (붙여 넣은 답이 있으면 그것을 씁니다)</li></ol></details>" },
+        { name: "paste", label: "Claude 답 붙여 넣기 (선택)", type: "textarea", rows: 3, value: "", placeholder: "Claude가 준 JSON(코드 블록 포함) 그대로" }
+      ],
+      onSubmit: function (f) {
+        var r = stagePrompt(code, stage, f.ins);
+        if (r.err) return Promise.reject(new Error(r.err));
+        if (f.paste && f.paste.trim()) { var out; try { out = looseJson(f.paste); } catch (e) { return Promise.reject(new Error("붙여 넣은 답에서 JSON을 찾지 못했습니다: " + e.message)); } return stageApply(code, stage, out, r.picked); }
+        if (!ai) return Promise.reject(new Error("AI 연결이 없습니다 — ‘Claude 구독으로 만들기’로 프롬프트를 복사해 claude.ai 답을 붙여 넣거나, AI 설정에서 연결을 등록하세요"));
+        var ctl = new AbortController(); layer.ctl = ctl;
+        return AI.sample.json(r.text, { signal: ctl.signal, cache: false }).then(function (out) { return stageApply(code, stage, out, r.picked); });
+      }
+    });
+  };
 
   // ── 통합: 요구사항 추적표 ──────────────────────
   function sysFilters() {
@@ -4212,6 +4439,13 @@
       if (lb && lb.hasAttribute("data-copy-layer")) { copyLayer(lb); return; }
       if (layer.kind === "review" && reviewClick(target, ev)) return;
       if (lb && layer.kind === "form" && lb.dataset.copy != null) { copyText(lb.dataset.copy, lb, "복사함"); return; }
+      if (lb && layer.kind === "form" && lb.hasAttribute("data-stai-copy")) {
+        var sca = lb.getAttribute("data-stai-copy").split("|"), sin = document.getElementById("f-ins"), spr = stagePrompt(sca[0], sca[1], sin ? sin.value.trim() : "");
+        if (spr.err) { toast(spr.err, "err"); return; }
+        copyText(spr.text, lb, "복사했습니다 · claude.ai에 붙여 넣으세요");
+        window.open("https://claude.ai/new", "_blank", "noopener");
+        return;
+      }
       if (lb && layer.kind === "form" && lb.hasAttribute("data-specdraft")) { var sta = document.getElementById("f-spec"); if (sta) { sta.value = layer.specDraft || ""; sta.focus(); } return; }
       if (lb && layer.kind === "form" && lb.hasAttribute("data-specclear")) { layer.clear = true; submitForm(document.getElementById("fm")); return; }
       if (lb && lb.hasAttribute("data-gotologs")) { closeLayer(); aiLogs = null; go({ view: "project", p: state.route.p, page: "aiset" }); return; }
@@ -4286,6 +4520,28 @@
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
+    var dst = target.closest && target.closest("[data-dstab]");
+    if (dst) { var dsa = dst.getAttribute("data-dstab").split("|"); state.dsTab[dsa[0]] = dsa[1]; render(); return; }
+    var dpk = target.closest && target.closest("[data-dspick]");
+    if (dpk) { var dpa = dpk.getAttribute("data-dspick").split("|"); (state.dsPick[dpa[0]] = state.dsPick[dpa[0]] || {})[dpa[1]] = dpk.checked; return; }
+    var dpa2 = target.closest && target.closest("[data-dspickall]");
+    if (dpa2) { var dpx = dpa2.getAttribute("data-dspickall").split("|"), dsd = selectedDesign(P(), dpx[0]), mp = state.dsPick[dpx[0]] = {}; if (dsd) pageElements(P(), dsd).forEach(function (x) { mp[x.id] = dpx[1] === "1"; }); render(); return; }
+    var ddr = target.closest && target.closest("[data-dsdraft]");
+    if (ddr) {
+      var dda = ddr.getAttribute("data-dsdraft").split("|"), ddd = selectedDesign(P(), dda[0]);
+      if (ddd) draftFromRender(dda[0], dda[1] === "*" ? pickedElements(P(), ddd).map(function (x) { return x.id; }) : [dda[1]]);
+      return;
+    }
+    var dcs = target.closest && target.closest("[data-dscss]");
+    if (dcs) {
+      var dca = dcs.getAttribute("data-dscss").split("|"), cta = document.getElementById("ds-css"), cdd = selectedDesign(P(), dca[0]);
+      if (!cta || !cdd) return;
+      if (dca[1] === "save") { cmd({ op: "design.stage", systemCode: dca[0], stage: "style", css: cta.value, note: "추가 CSS" }).catch(function (e) { toast(e.message, "err"); }); return; }
+      // 저장 전 미리보기: 다른 범위 클래스로 임시 적용
+      var pv = Object.assign({}, cdd, { css: cta.value, systemCode: cdd.systemCode + "-pv" }), box = document.getElementById("ds-css-prev");
+      if (box) { box.innerHTML = cssPreview(pv, wireCtx(P(), dca[0], null)); fitStages(box); toast("저장 전 미리보기입니다 — ‘CSS 저장’을 눌러야 화면설계서에 반영됩니다"); }
+      return;
+    }
     var frb = target.closest && target.closest("[data-frameedit]");
     if (frb) { var fa = frb.getAttribute("data-frameedit").split("|"); openFrameEditor(fa[0], fa[1] || null); return; }
     var fgx = target.closest && target.closest("[data-figx]");

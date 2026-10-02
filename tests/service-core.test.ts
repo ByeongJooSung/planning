@@ -73,6 +73,46 @@ describe("서비스 코어", () => {
     expect(sbOf(r.state).components[0]).toMatchObject({ planner: "최신순", ui: { component: "data-table", tree: { id: "root" } } });
   });
 
+  it("디자인 시스템 단계별 컨셉: 톤앤매너·CSS와 UI·UX를 따로 쓰고, 다른 제안 컨셉에서 한 단계만 가져온다", () => {
+    let s = execute(base(), { op: "design.select", systemCode: "PUB", conceptId: "A" }, now).state;
+    const d0 = s.model.design.systems.find((x) => x.systemCode === "PUB")!;
+    expect(d0.brief.style).toMatchObject({ from: "A" });
+    expect(d0.brief.ux).toMatchObject({ from: "A" });
+    const rev0 = d0.revision;
+    // 톤앤매너: 컨셉 글 + 토큰 + CSS를 한 번에
+    s = execute(s, { op: "design.stage", systemCode: "PUB", stage: "style", brief: { name: "차분한 신뢰", summary: "남색 중심, 여백 넓게", keywords: "신뢰, 차분", rules: "강조색은 한 화면에 한 번\n표 머리글은 연한 배경" }, tokens: { color: { primary: "#1F3A93" } }, css: ".wf-btn{letter-spacing:-.01em} @import url(http://x); .a{background:url(http://evil/x.png)} </style><script>" }, now).state;
+    const d1 = s.model.design.systems.find((x) => x.systemCode === "PUB")!;
+    expect(d1.brief.style).toMatchObject({ name: "차분한 신뢰", keywords: ["신뢰", "차분"], rules: ["강조색은 한 화면에 한 번", "표 머리글은 연한 배경"] });
+    expect(d1.tokens!.color.primary).toBe("#1F3A93");
+    expect(d1.css).toContain(".wf-btn{letter-spacing:-.01em}");
+    expect(d1.css).not.toMatch(/@import|evil|<\/?style|<script/);
+    expect(d1.revision).toBeGreaterThan(rev0);
+    // 단계를 넘는 값은 막는다
+    expect(() => execute(s, { op: "design.stage", systemCode: "PUB", stage: "ux", tokens: { color: { primary: "#000000" } } }, now)).toThrow(/톤앤매너 단계/);
+    expect(() => execute(s, { op: "design.stage", systemCode: "PUB", stage: "style", layout: { list: "card" } }, now)).toThrow(/UI·UX 단계/);
+    expect(() => execute(s, { op: "design.stage", systemCode: "PUB", stage: "style", brief: { name: "차분한 신뢰" } }, now)).toThrow(/바뀐 내용이 없습니다/);
+    // UI·UX: 레이아웃 규칙 + 원칙
+    s = execute(s, { op: "design.stage", systemCode: "PUB", stage: "ux", brief: { rules: ["목록 위에 검색 조건"] }, layout: { list: "card" } }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "PUB")!.layout!.list).toBe("card");
+    // 컨셉 B의 UI·UX만 가져오면 톤은 그대로
+    const before = s.model.design.systems.find((x) => x.systemCode === "PUB")!;
+    const B = before.proposals.find((x) => x.id === "B")!;
+    s = execute(s, { op: "design.mix", systemCode: "PUB", stage: "ux", conceptId: "B" }, now).state;
+    const d2 = s.model.design.systems.find((x) => x.systemCode === "PUB")!;
+    expect(d2.layout).toEqual(B.layout);
+    expect(d2.tokens!.color.primary).toBe("#1F3A93");
+    expect(d2.brief.ux).toMatchObject({ from: "B", rules: ["목록 위에 검색 조건"], name: `B. ${B.name}` });
+    // 직접 쓴 이름은 다른 컨셉 톤을 가져와도 지킨다
+    s = execute(s, { op: "design.mix", systemCode: "PUB", stage: "style", conceptId: "C" }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "PUB")!.brief.style).toMatchObject({ name: "차분한 신뢰", from: "C" });
+    // 컴포넌트 초안: draft 표시 → 편집기에서 저장하면 지워진다
+    const tree = { id: "root", type: "frame", children: [{ id: "t1", type: "text", text: "확인" }] };
+    s = execute(s, { op: "design.frame.import", systemCode: "PUB", items: [{ id: "button", name: "버튼", tree }], draft: "render" }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "PUB")!.components.find((x) => x.id === "button")).toMatchObject({ draft: "render" });
+    s = execute(s, { op: "design.frame", systemCode: "PUB", component: { id: "button", tree } }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "PUB")!.components.find((x) => x.id === "button")!.draft).toBeUndefined();
+  });
+
   it("디자인 미세조정 적용 후 되돌리기", () => {
     let s = execute(base(), { op: "design.select", systemCode: "PUB", conceptId: "A" }, now).state;
     const before = structuredClone(s.model.design.systems.find((d) => d.systemCode === "PUB")!);
