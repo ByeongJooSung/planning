@@ -134,3 +134,30 @@ describe("Task 없이 만들기 · 디자인 직접 편집", () => {
     expect(() => execute(s, { op: "design.edit", systemCode: "CVL", patch: { tokens: { color: { primary: "#123456" } } } }, now)).toThrow(/바뀐 내용이 없습니다/);
   });
 });
+
+describe("프레임 편집기 컴포넌트", () => {
+  const tree = { id: "root", type: "frame", w: "hug", h: "hug", layout: { mode: "row", gap: 8, pad: [8, 12, 8, 12], align: "center", justify: "start", wrap: false }, fill: "primary", radius: "md", children: [{ id: "t1", type: "text", text: "확인", bind: "label", color: "onPrimary" }] };
+  it("새 컴포넌트를 만들고, 기본 컴포넌트 모양을 바꾸고, 되돌리거나 지운다", () => {
+    const d0 = base.model.design.systems.find((d) => d.systemCode === "CVL" && d.status === "SELECTED")!;
+    let r = execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "Primary Button", category: "action", tree } }, now);
+    const id = (r.detail as { id: string }).id;
+    expect(id).toBe("c-primary-button");
+    let d = r.state.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!;
+    expect(d.revision).toBe(d0.revision + 1);
+    expect(d.components.find((c) => c.id === id)?.tree?.children?.[0]?.bind).toBe("label");
+    // 기본 컴포넌트(button) 모양 바꾸기 → 되돌리기
+    r = execute(r.state, { op: "design.frame", systemCode: "CVL", component: { id: "button", tree: { ...tree, children: [{ id: "t1", type: "instance", ref: id }] } } }, now);
+    d = r.state.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!;
+    expect(d.components.find((c) => c.id === "button")?.tree).toBeDefined();
+    let s = execute(r.state, { op: "design.frame.rm", systemCode: "CVL", id: "button" }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!.components.find((c) => c.id === "button")?.tree).toBeUndefined();
+    s = execute(s, { op: "design.frame.rm", systemCode: "CVL", id }, now).state;
+    expect(s.model.design.systems.find((x) => x.systemCode === "CVL" && x.status === "SELECTED")!.components.some((c) => c.id === id)).toBe(false);
+  });
+  it("잘못된 트리·자기 참조·없는 인스턴스는 막는다", () => {
+    expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "x", tree: { id: "a", type: "text" } } }, now)).toThrow(/프레임/);
+    expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "x", tree: { ...tree, children: [{ id: "i", type: "instance", ref: "nope" }] } } }, now)).toThrow(/없는 컴포넌트/);
+    expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { id: "button", tree: { ...tree, children: [{ id: "i", type: "instance", ref: "button" }] } } }, now)).toThrow(/자기 자신/);
+    expect(() => execute(base, { op: "design.frame", systemCode: "CVL", component: { name: "x", tree: { ...tree, fill: "red;}" } } }, now)).toThrow();
+  });
+});

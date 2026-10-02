@@ -233,6 +233,14 @@
 
   /** 컴포넌트 하나. data-cmp로 감싸 댓글 핀·번호 라벨이 어떤 컴포넌트인지 알 수 있게 한다 */
   function component(ds, id, props, ctx, link, spec) {
+    // 프레임 편집기로 그린 모양이 있으면 그 모양으로 (props는 텍스트 bind에 들어간다)
+    var fc = (ds.components || []).find(function (c) { return c.id === id && c.tree; });
+    if (fc && window.Frames) {
+      var p2 = Object.assign({}, props || {});
+      if (spec && spec.label) { if (p2.label == null) p2.label = spec.label; if (p2.title == null) p2.title = spec.label; }
+      if (spec && spec.customer && p2.text == null) p2.text = spec.customer;
+      return '<div class="wf-c wf-fr" data-cmp="' + esc(id) + '"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(fc.tree, { ds: ds, props: p2, comps: ds.components }) + "</div>";
+    }
     var fn = C[id];
     var html = fn && id !== "gnb" && id !== "footer" && id !== "breadcrumb" ? fn(ds, props || {}, ctx || {}, link, spec) : fn ? fn(ds, props || {}, ctx || {}) : generic(ds, id, props || {});
     if (id === "gnb" || id === "footer" || id === "breadcrumb") return html;

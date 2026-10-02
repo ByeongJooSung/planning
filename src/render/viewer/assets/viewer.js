@@ -554,6 +554,39 @@
       onClose: function () { render(); }
     });
   }
+  /** 디자인 시스템 프레임 편집기 열기. id가 비면 새 컴포넌트 */
+  function frameStarter(c) {
+    var label = { id: "t1", type: "text", name: "라벨", text: c.name || "텍스트", size: "body", weight: 600, color: "text", bind: "label" };
+    if (/button/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: "hug", h: "hug", layout: { mode: "row", gap: 8, pad: [10, 18, 10, 18], align: "center", justify: "center", wrap: false }, fill: "primary", radius: "md", children: [Object.assign(label, { text: "확인", color: "onPrimary" })] };
+    if (/badge/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: "hug", h: "hug", layout: { mode: "row", gap: 4, pad: [2, 10, 2, 10], align: "center", justify: "center", wrap: false }, fill: "surfaceAlt", stroke: "primary", strokeW: 1, radius: "full", children: [Object.assign(label, { text: "심사중", size: "small", color: "primary" })] };
+    if (/input|select|textarea/.test(c.id)) return { id: "root", type: "frame", name: c.name, w: 360, h: "hug", layout: { mode: "column", gap: 6, pad: [0, 0, 0, 0], align: "stretch", justify: "start", wrap: false }, children: [Object.assign(label, { text: "항목명", size: "small" }), { id: "f1", type: "frame", name: "입력칸", w: "fill", h: 44, layout: { mode: "row", gap: 8, pad: [0, 12, 0, 12], align: "center", justify: "between", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "sm", children: [{ id: "t2", type: "text", name: "안내 문구", text: "입력하세요", size: "small", color: "textMuted", bind: "placeholder" }] }] };
+    return { id: "root", type: "frame", name: c.name || "카드", w: 320, h: "hug", layout: { mode: "column", gap: 8, pad: [16, 16, 16, 16], align: "stretch", justify: "start", wrap: false }, fill: "surface", stroke: "border", strokeW: 1, radius: "md", shadow: "soft", children: [Object.assign(label, { size: "h3", weight: 700, text: c.name || "제목", bind: "title" }), { id: "t2", type: "text", name: "본문", text: "설명을 적습니다.", size: "small", color: "textMuted", bind: "text" }] };
+  }
+  function openFrameEditor(code, id) {
+    var p = P(), d = selectedDesign(p, code), s = sysOf(p, code);
+    if (!d || !window.FrameEdit) return;
+    var comp = id ? d.components.find(function (x) { return x.id === id; }) : null;
+    var start = comp ? { id: comp.id, name: comp.name, category: comp.category, description: comp.description, frameW: comp.frameW, tree: comp.tree || frameStarter(comp) } : { name: "", category: "content", tree: frameStarter({ id: "", name: "" }) };
+    FrameEdit.open({
+      ds: d, vars: Wire.vars(d), comp: start, comps: d.components,
+      categories: Object.keys(CATEGORY).map(function (k) { return [k, CATEGORY[k]]; }),
+      editable: SRV && canEdit(), title: code + " " + (s ? s.name : ""),
+      save: function (doc) {
+        return cmd({ op: "design.frame", systemCode: code, component: { id: doc.id || undefined, name: doc.name, category: doc.category, description: doc.description, tree: doc.tree, frameW: doc.frameW } }).then(function (r) { return r.detail && r.detail.id; });
+      },
+      toast: toast,
+      onClose: function () { render(); }
+    });
+  }
+  /** 디자인 시스템 전체를 Figma로 */
+  function figmaExport(code, kind, btn) {
+    var p = P(), d = selectedDesign(p, code), s = sysOf(p, code), title = p.model.project.name + " · " + code + " " + (s ? s.name : "");
+    if (!d) return;
+    if (kind === "tokens") return FlowExport.download(new Blob([Frames.tokensJson(d, title)], { type: "application/json" }), code + "_design-tokens.json");
+    if (kind === "plugin") return FlowExport.download(new Blob([FlowExport.zip(Frames.figmaPlugin(d, d.components, { title: title }))], { type: "application/zip" }), code + "_figma-plugin.zip");
+    var text = kind === "script" ? Frames.figmaScript(d, d.components, { title: title }) : Frames.figmaPrompt(d, d.components, { title: title });
+    copyText(text, btn, kind === "script" ? "복사함 · Figma ▸ 플러그인 ▸ Scripter에 붙여 넣기" : "복사함 · Figma MCP가 연결된 Claude에 붙여 넣기");
+  }
   function taskFlowBody(p, t) {
     var ids = p.rtm.rows.find(function (r) { return r.requirementId === t.requirementId; }).tasks.map(function (x) { return x.taskId; });
     var flows = p.model.flows.filter(function (f) { return f.nodes.some(function (n) { return n.taskIds.some(function (id) { return ids.indexOf(id) >= 0; }); }); });
@@ -804,6 +837,12 @@
         return cmd({ op: "design.edit", systemCode: code, patch: patch, note: v.note });
       }
     });
+  };
+  ACTIONS_LATE["ds-frame-rm"] = function (arg) {
+    var a = arg.split("|"), d = selectedDesign(P(), a[0]), c = d && d.components.find(function (x) { return x.id === a[1]; });
+    if (!c) return;
+    if (!window.confirm(c.origin === "BASE" ? c.name + " 컴포넌트를 기본 모양으로 되돌릴까요? 프레임으로 그린 모양은 지워집니다." : c.name + " 컴포넌트를 지울까요?")) return;
+    cmd({ op: "design.frame.rm", systemCode: a[0], id: a[1] }).catch(function (e) { toast(e.message, "err"); });
   };
   ACTIONS_LATE["task-screens"] = function (taskId) {
     var p = P(), t = findTrace(p, taskId);
@@ -1329,7 +1368,8 @@
         var wide = /gnb|footer|search-panel|data-table|hero-banner|quick-links|stat-cards|step-indicator|review/.test(x.id);
         var cur = cs[x.id] ? Object.keys(cs[x.id]).map(function (vn) { return '<span class="tag mono">' + esc(vn) + " " + esc(cs[x.id][vn]) + "</span>"; }).join("") : "";
         var nOpen = openComments(p, code, "cmp:" + x.id).length;
-        return '<article class="box comp' + (wide ? " wide" : "") + (x.origin === "ADDED" ? " added" : "") + '"><div class="comp-h"><b>' + esc(x.name) + '</b><span class="mono">' + esc(x.id) + "</span>" +
+        var fe = SRV && canEdit() && x.id !== "gnb" && x.id !== "footer" ? '<span class="comp-fx"><button class="btn-sm" data-frameedit="' + esc(code + "|" + x.id) + '" title="피그마처럼 프레임·텍스트·도형·오토 레이아웃으로 모양 편집">✎ 프레임 편집</button>' + (x.tree ? actBtn("ds-frame-rm", x.origin === "BASE" ? "기본 모양으로" : "삭제", code + "|" + x.id) : "") + "</span>" : "";
+        return '<article class="box comp' + (wide ? " wide" : "") + (x.origin === "ADDED" ? " added" : "") + '"><div class="comp-h"><b>' + esc(x.name) + '</b><span class="mono">' + esc(x.id) + "</span>" + (x.tree ? '<span class="pill DESIGNED">프레임</span>' : "") + fe +
           (x.origin === "ADDED" ? '<span class="pill IN_DESIGN">추가 · ' + esc(x.addedFor || "") + "</span>" : "") + (nOpen ? '<span class="pill IN_DESIGN">댓글 ' + nOpen + "</span>" : "") + "</div>" +
           '<p class="hint">' + esc(x.description) + (x.variants.length ? " · 변형: " + x.variants.map(esc).join(", ") : "") + "</p>" + (cur ? '<div class="lchips">' + cur + "</div>" : "") +
           '<div class="comp-demo rv-open' + (x.id === "gnb" || x.id === "footer" ? " flush" : "") + '" role="button" tabindex="0"' + reviewBtnAttrs("cmp", "cmp:" + x.id, x.name) + ' title="눌러서 댓글 달기">' + sample(d, x, ctx) + "</div>" +
@@ -1346,7 +1386,8 @@
       '<section class="section"><h2>기초 <small>색상 · 글꼴 · 간격 · 모서리 · 컨트롤 — 섹션마다 조정 입력란</small></h2>' + foundation + "</section>" +
       '<section class="section"><h2>레이아웃 규칙 <small>GNB · 로고 · 검색 · 목록 · 페이지네이션</small></h2>' + rules + "</section>" +
       '<section class="section"><h2>화면 템플릿 <small>' + VW + "×" + VH + " 뷰포트를 그대로 축소 · 누르면 검토·댓글</small></h2>" + thumbs(d, ctx, chosen.name, code) + secTune(code, "templates", "예: 목록 화면의 검색 영역과 표 사이 여백을 넓게") + "</section>" +
-      '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small>" + editBtn("ds-comp-add", "+ 컴포넌트 추가", code) + "</h2>" + comps + "</section>" +
+      '<section class="section"><h2>컴포넌트 <small>' + d.components.length + "개 · 이미지를 누르면 댓글, 입력란으로 스타일 조정</small>" + (SRV && canEdit() ? '<button class="btn-sm btn-primary" data-frameedit="' + esc(code) + '|">+ 새 컴포넌트 (프레임 편집기)</button>' : "") + editBtn("ds-comp-add", "+ 컴포넌트 추가", code) + "</h2>" +
+      '<div class="figx"><b>Figma로 내보내기</b><span class="hint">토큰은 Figma 변수로, 프레임으로 그린 컴포넌트(' + d.components.filter(function (x) { return x.tree; }).length + '개)는 오토 레이아웃 Figma 컴포넌트로 만듭니다.</span><button class="btn-sm" data-figx="' + esc(code) + '|script">플러그인 스크립트 복사 (Scripter)</button><button class="btn-sm" data-figx="' + esc(code) + '|plugin">Figma 플러그인 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|tokens">토큰 JSON 내려받기</button><button class="btn-sm" data-figx="' + esc(code) + '|prompt">Figma AI 프롬프트 복사</button></div>' + comps + "</section>" +
       '<section class="section"><h2>아이콘 <small>' + d.icons.length + "개</small></h2>" + icons + "</section>";
   }
 
@@ -3952,6 +3993,10 @@
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
+    var frb = target.closest && target.closest("[data-frameedit]");
+    if (frb) { var fa = frb.getAttribute("data-frameedit").split("|"); openFrameEditor(fa[0], fa[1] || null); return; }
+    var fgx = target.closest && target.closest("[data-figx]");
+    if (fgx) { var fg = fgx.getAttribute("data-figx").split("|"); figmaExport(fg[0], fg[1], fgx); return; }
     var feb = target.closest && target.closest("[data-flowedit]");
     if (feb) { openFlowEditor(feb.getAttribute("data-flowedit")); return; }
     var wkb = target.closest && target.closest("[data-work]");

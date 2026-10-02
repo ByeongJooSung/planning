@@ -19,7 +19,7 @@ import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
-import { addDesignComponent, proposeDesign, selectDesign } from "../design/ops.js";
+import { addDesignComponent, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign } from "../design/ops.js";
 import { toChunks } from "../knowledge/chunk.js";
 import type { Segment } from "../knowledge/extract-text.js";
 import type { Chunk } from "../knowledge/search.js";
@@ -130,6 +130,9 @@ export type Command =
   | { op: "design.revert"; systemCode: string; design: unknown }
   /** 디자인 시스템 직접 편집 (색·글꼴·크기·모서리·레이아웃) — AI 조정과 같은 경로로 개정·이력을 남긴다 */
   | { op: "design.edit"; systemCode: string; patch: unknown; note?: string }
+  /** 프레임 편집기 컴포넌트 저장(새로·모양 바꾸기) · 지우기(기본 컴포넌트는 기본 모양으로) */
+  | { op: "design.frame"; systemCode: string; component: { id?: string; name?: string; category?: string; description?: string; tree?: unknown; frameW?: number } }
+  | { op: "design.frame.rm"; systemCode: string; id: string }
   | { op: "gen.apply"; kind: string; target: string; output: unknown; instruction?: string; scope?: string }
   | {
       op: "kb.add";
@@ -490,6 +493,15 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       message = `${cmd.systemCode} 디자인 시스템을 되돌렸습니다 (r${prev.revision})`;
       break;
     }
+    case "design.frame": {
+      const comp = saveFrameComponent(m, cmd.systemCode, cmd.component ?? {}, { now });
+      message = `컴포넌트 ${comp.id} ${comp.name} 저장`;
+      detail = { id: comp.id };
+      break;
+    }
+    case "design.frame.rm":
+      message = removeFrameComponent(m, cmd.systemCode, cmd.id, { now });
+      break;
     case "design.edit": {
       const r = applyDesignPatch(m, cmd.systemCode, { ...(cmd.patch as object), summary: cmd.note || "직접 편집" }, { now, instruction: "직접 편집" });
       message = r.summary;

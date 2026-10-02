@@ -490,6 +490,78 @@ export const DesignConcept = z.object({
   layout: LayoutRules,
 });
 
+// ── 프레임(피그마식) 컴포넌트 ──────────────────────────────────────────
+/** 색: 디자인 토큰 이름(primary·text…) 또는 #RRGGBB, transparent */
+const FColor = z.string().regex(/^(#[0-9A-Fa-f]{6}|[a-zA-Z]{2,20})$/, "색은 토큰 이름 또는 #RRGGBB");
+/** 크기: 숫자(px) · hug(내용에 맞춤) · fill(남은 공간 채우기) */
+const FSize = z.union([z.number().min(0).max(4000), z.enum(["hug", "fill"])]);
+export interface FNodeT {
+  id: string;
+  type: "frame" | "text" | "rect" | "ellipse" | "line" | "icon" | "instance";
+  name?: string;
+  w?: number | "hug" | "fill";
+  h?: number | "hug" | "fill";
+  x?: number;
+  y?: number;
+  layout?: { mode: "none" | "row" | "column"; gap: number; pad: number[]; align: "start" | "center" | "end" | "stretch"; justify: "start" | "center" | "end" | "between"; wrap: boolean };
+  fill?: string;
+  stroke?: string;
+  strokeW?: number;
+  radius?: number | "sm" | "md" | "lg" | "full";
+  opacity?: number;
+  shadow?: "none" | "soft" | "strong";
+  clip?: boolean;
+  text?: string;
+  size?: number | "display" | "h1" | "h2" | "h3" | "body" | "small" | "caption";
+  weight?: number;
+  color?: string;
+  talign?: "left" | "center" | "right";
+  bind?: string;
+  icon?: string;
+  ref?: string;
+  children?: FNodeT[];
+}
+/** 프레임 노드: 프레임(오토 레이아웃)·텍스트·사각형·원·선·아이콘·인스턴스(다른 컴포넌트) */
+export const FNode: z.ZodType<FNodeT> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1).max(40),
+    type: z.enum(["frame", "text", "rect", "ellipse", "line", "icon", "instance"]),
+    name: z.string().max(80).optional(),
+    w: FSize.optional(),
+    h: FSize.optional(),
+    x: z.number().min(-4000).max(4000).optional(),
+    y: z.number().min(-4000).max(4000).optional(),
+    layout: z
+      .object({
+        mode: z.enum(["none", "row", "column"]),
+        gap: z.number().min(0).max(400).default(0),
+        pad: z.array(z.number().min(0).max(400)).length(4).default([0, 0, 0, 0]),
+        align: z.enum(["start", "center", "end", "stretch"]).default("start"),
+        justify: z.enum(["start", "center", "end", "between"]).default("start"),
+        wrap: z.boolean().default(false),
+      })
+      .optional(),
+    fill: FColor.optional(),
+    stroke: FColor.optional(),
+    strokeW: z.number().min(0).max(20).optional(),
+    radius: z.union([z.number().min(0).max(999), z.enum(["sm", "md", "lg", "full"])]).optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    shadow: z.enum(["none", "soft", "strong"]).optional(),
+    clip: z.boolean().optional(),
+    text: z.string().max(2000).optional(),
+    size: z.union([z.number().min(6).max(200), z.enum(["display", "h1", "h2", "h3", "body", "small", "caption"])]).optional(),
+    weight: z.number().int().min(100).max(900).optional(),
+    color: FColor.optional(),
+    talign: z.enum(["left", "center", "right"]).optional(),
+    /** 화면설계서 props와 연결할 이름 (예: label) — 텍스트 내용을 props 값으로 바꾼다 */
+    bind: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/).optional(),
+    icon: z.string().max(40).optional(),
+    /** instance: 쓰는 컴포넌트 ID */
+    ref: z.string().max(60).optional(),
+    children: z.array(FNode).max(200).optional(),
+  }),
+) as z.ZodType<FNodeT>;
+
 export const DesignComponent = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/, "컴포넌트 ID는 영문 소문자·숫자·하이픈 (예: search-panel)"),
   name: z.string(),
@@ -501,6 +573,10 @@ export const DesignComponent = z.object({
   /** 추가를 요청한 화면·Task */
   addedFor: z.string().optional(),
   addedAt: z.string().optional(),
+  /** 프레임 편집기로 그린 모양. 있으면 기본 렌더러 대신 이 모양으로 그린다 */
+  tree: FNode.optional(),
+  /** 미리보기 배경·폭 (편집기 캔버스) */
+  frameW: z.number().min(40).max(1920).optional(),
 });
 
 export const SystemDesign = z.object({

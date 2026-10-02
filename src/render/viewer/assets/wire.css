@@ -244,3 +244,10 @@
 .wf-ptitle .wf-bc + .wf-tacts { margin-left: 16px; }
 .wf-blk.inline { display: inline-flex; }
 .wf-blk.inline .wf-btns { margin: 0; }
+
+/* 프레임(피그마식) 컴포넌트 */
+.fr-root { display: block; font-family: var(--w-font); color: var(--w-text); }
+.fr-n { box-sizing: border-box; min-width: 0; }
+p.fr-n { margin: 0; }
+.fr-missing { padding: 6px 8px; border: 1px dashed var(--w-danger, #c00); color: var(--w-danger, #c00); font-size: 12px; }
+.wf-fr > .fr-root { display: block; }
