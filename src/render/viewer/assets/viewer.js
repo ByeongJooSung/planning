@@ -703,7 +703,8 @@
       return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
     }).join("") || '<tr><td colspan="3" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
     var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + '<button class="btn-sm" data-sbx="' + esc(sb.systemCode) + "|pptx|" + esc(sid) + '" title="이 화면만 PPTX로">⬇ PPTX</button>' + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
-    return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
+    var cov = covTable(p, sid, covReport(p, sid, sb.components, null, sb.coverage), {});
+    return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div>" + cov + "</article>";
   }
 
   // ── 화면설계서 페이지: 시스템별 모든 화면 (Task 연결과 상관없이 작성·AI 생성) ──
@@ -1121,6 +1122,87 @@
     if (row) { row.classList.add("hl"); row.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   }
 
+  // ── 기능 요구사항 충족 점검 (서버 src/ai/coverage.ts와 같은 규칙) ──
+  var COV_STOP = { "그리고": 1, "또는": 1, "경우": 1, "있다": 1, "없다": 1, "한다": 1, "된다": 1, "하는": 1, "있는": 1, "없는": 1, "대한": 1, "위한": 1, "통해": 1, "에서": 1, "으로": 1, "에게": 1, "합니다": 1, "입니다": 1, "해야": 1, "해야한다": 1, "사용자": 1, "화면": 1, "기능": 1, "the": 1, "and": 1, "for": 1, "with": 1 };
+  function covTokens(text) {
+    var out = {}, parts = String(text == null ? "" : text).toLowerCase().split(/[^0-9a-z가-힣]+/);
+    parts.forEach(function (raw) {
+      if (raw.length < 2) return;
+      var t = raw.replace(/(으로|에서|에게|까지|부터|이나|이든|처럼|보다|에는|은|는|이|가|을|를|의|에|로|와|과|도|만|나|들|용|별|시|후|전)$/, "");
+      if (t.length < 2) t = raw;
+      if (COV_STOP[t]) return;
+      out[t] = 1;
+      if (t.length >= 4) out[t.slice(0, 3)] = 1;
+    });
+    return Object.keys(out);
+  }
+  function covMatch(line, comps) {
+    var lt = covTokens(line);
+    if (!lt.length) return [];
+    var need = Math.max(1, Math.ceil(lt.length * 0.3));
+    return comps.map(function (c) {
+      var text = [c.label, c.planner, c.customer, c.ui && c.ui.component].concat((c.options && c.options.values) || [], ((c.validation && c.validation.messages) || []).map(function (x) { return x.text; })).filter(Boolean).join(" ");
+      var ct = {}; covTokens(text).forEach(function (t) { ct[t] = 1; });
+      return { no: c.no, hit: lt.filter(function (t) { return ct[t]; }).length };
+    }).filter(function (x) { return x.hit >= need; }).sort(function (a, b) { return b.hit - a.hit; }).slice(0, 3).map(function (x) { return x.no; });
+  }
+  var normReq = function (t) { return String(t == null ? "" : t).replace(/\s+/g, " ").trim(); };
+  /** 요구 줄마다 반영 항목: 직접 지정 > AI 답 > 자동 추정. aiCov: 결과의 coverage, saved: 저장된 storyboard.coverage */
+  function covReport(p, sid, comps, aiCov, saved) {
+    var lines = (p.reqLines && p.reqLines[sid]) || [];
+    var nos = {}; comps.forEach(function (c) { nos[c.no] = true; });
+    var byReq = function (list, pred) { var m = {}; (list || []).forEach(function (x) { if (x && x.req && (!pred || pred(x))) m[normReq(x.req).toLowerCase()] = x; }); return m; };
+    var man = byReq(saved, function (x) { return x.manual; }), ai = byReq(aiCov || (saved || []).filter(function (x) { return !x.manual; }));
+    var fuzzyFind = function (m, text) { var k = text.toLowerCase(); if (m[k]) return m[k]; var ks = Object.keys(m), best = null, bs = 0; var lt = covTokens(text); ks.forEach(function (key) { var kt = {}; covTokens(key).forEach(function (t) { kt[t] = 1; }); var hit = lt.filter(function (t) { return kt[t]; }).length; if (lt.length && hit / lt.length >= 0.6 && hit > bs) { bs = hit; best = m[key]; } }); return best; };
+    var rows = lines.map(function (l) {
+      var mm = fuzzyFind(man, l.text), aa = mm ? null : fuzzyFind(ai, l.text);
+      var src = mm || aa, by = src ? (src.by || []).filter(function (n) { return nos[n]; }) : covMatch(l.text, comps);
+      var how = mm ? "manual" : aa ? "ai" : by.length ? "auto" : "none";
+      var na = !!(src && !by.length && (src.note || mm)); // 해당 없음으로 표시된 줄
+      return { id: l.id, reqId: l.reqId, text: l.text, source: l.source, by: by, how: how, note: src && src.note || "", ok: by.length > 0 || na, na: na };
+    });
+    var done = rows.filter(function (r) { return r.ok; }).length;
+    return { rows: rows, total: rows.length, done: done, unmet: rows.filter(function (r) { return !r.ok; }) };
+  }
+  function covTable(p, sid, rep, opts) {
+    opts = opts || {};
+    if (!rep.total) return "";
+    var ed = SRV && canEdit() && !opts.preview, allOk = rep.done === rep.total;
+    var HOW = { manual: "직접 지정", ai: "AI 답", auto: "자동 추정", none: "" };
+    var rows = rep.rows.map(function (r) {
+      var chips = r.by.map(function (n) { return '<button class="covno" data-covhl="' + esc(sid + "|" + n) + '" title="' + n + '번 항목 보기">' + n + "</button>"; }).join("");
+      return '<tr class="' + (r.ok ? (r.na ? "na" : "ok") : "miss") + '"><td class="st">' + (r.ok ? (r.na ? "－" : "✓") : "!") + '</td><td class="rq"><span class="tag">' + esc(r.reqId) + (r.source === "task" ? " Task" : r.source === "req" ? " 요구사항" : " 명세") + "</span> " + esc(r.text) + (r.note ? '<div class="hint">' + esc(r.note) + "</div>" : "") + '</td><td class="by">' + (chips || (r.na ? '<span class="hint">해당 없음</span>' : '<span class="warn-t">미반영</span>')) + (r.how !== "none" ? ' <small class="hint">' + HOW[r.how] + "</small>" : "") + "</td>" +
+        (ed ? '<td class="act">' + actBtn("cov-map", "지정", sid + "|" + r.id) + (!r.ok ? actBtn("cov-fix", "✦ 보완", sid + "|" + r.id, "btn-sm ai") : "") + "</td>" : "") + "</tr>";
+    }).join("");
+    return '<details class="cov"' + (allOk && !opts.open ? "" : " open") + '><summary><b>기능 요구사항 충족</b> <span class="pill ' + (allOk ? "DESIGNED" : "IN_DESIGN") + '">' + rep.done + " / " + rep.total + "</span>" + (!allOk ? '<span class="warn-t">미반영 ' + rep.unmet.length + "건</span>" : "") + '<span class="hint">연결 Task의 기능 명세 줄과 Task 문장마다 반영한 항목 번호</span>' + (ed && !allOk ? actBtn("cov-fix", "✦ 미반영 전부 AI로 보완", sid + "|*", "btn-sm btn-primary") : "") + "</summary>" +
+      '<table class="covt"><thead><tr><th></th><th>요구</th><th>반영 항목</th>' + (ed ? "<th></th>" : "") + "</tr></thead><tbody>" + rows + "</tbody></table></details>";
+  }
+  ACTIONS_LATE["cov-map"] = function (arg) {
+    var a = arg.split("|"), sid = a[0], p = P(), sb = sbOf(sid), line = ((p.reqLines && p.reqLines[sid]) || []).find(function (l) { return l.id === a[1]; });
+    if (!sb || !line) return;
+    var rep = covReport(p, sid, sb.components, null, sb.coverage), row = rep.rows.find(function (r) { return r.id === a[1]; }) || { by: [] };
+    openForm({
+      eyebrow: sid, title: "요구사항 → 반영 항목 지정", intro: esc(line.text),
+      fields: sb.components.map(function (c) { return { name: "n" + c.no, label: c.no + ". " + c.label + (c.ui ? " (" + c.ui.component + ")" : ""), type: "checkbox", value: row.by.indexOf(c.no) >= 0 }; })
+        .concat([{ name: "na", label: "이 화면 몫이 아님 (해당 없음으로 표시)", type: "checkbox", value: !!row.na }, { name: "note", label: "메모 (예: 상세 화면에서 처리)", value: row.note || "" }]),
+      onSubmit: function (f) {
+        var by = sb.components.filter(function (c) { return f["n" + c.no]; }).map(function (c) { return c.no; });
+        if (!by.length && !f.na) return cmd({ op: "sb.coverage", screenId: sid, req: line.text, by: null });
+        return cmd({ op: "sb.coverage", screenId: sid, req: line.text, by: f.na ? [] : by, note: f.note || (f.na ? "해당 없음" : "") });
+      }
+    });
+  };
+  /** 미반영 요구를 AI로 보완: 저장본을 기준 버전으로 두고 그 요구를 만족하는 항목 추가·수정 요청을 미리 채워 연다 */
+  ACTIONS_LATE["cov-fix"] = function (arg) {
+    var a = arg.split("|"), sid = a[0], p = P(), sb = sbOf(sid);
+    if (!sb) return;
+    var rep = covReport(p, sid, sb.components, null, sb.coverage);
+    var targets = a[1] === "*" ? rep.unmet : rep.rows.filter(function (r) { return r.id === a[1]; });
+    if (!targets.length) return toast("보완할 미반영 요구가 없습니다");
+    var draft = "다음 기능 요구사항을 만족하도록 항목을 추가하거나 고쳐 주세요(기존 항목은 되도록 그대로):\n" + targets.map(function (r) { return "- [" + r.reqId + "] " + r.text; }).join("\n") + "\n각 요구가 어느 항목으로 만족되는지 coverage에 적어 주세요.";
+    openSbGen(sid, [], draft);
+  };
+
   // ── 화면설계서 문서 내보내기 (PPTX·PDF·인쇄용 HTML) ──
   function sbExportItems(p, code, onlyId) {
     var list = systemScreens(p, code).filter(function (n) { return (!onlyId || n.id === onlyId) && p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; }); });
@@ -1371,9 +1453,10 @@
   }
   ACTIONS_LATE["sb-frame"] = function (arg) { var a = arg.split("|"); openItemFrame(a[0], Number(a[1])); };
   /** 이 항목만 AI로 고치기: 저장본을 기준 버전으로 삼고(없으면 지금 화면설계서로 v1을 만든다) 대상 항목을 그 번호로 고정해 연다 */
-  ACTIONS_LATE["sb-aione"] = function (arg) {
-    var a = arg.split("|"), sid = a[0], no = Number(a[1]), key = "sb:" + sid, p = P(), sb = sbOf(sid);
-    if (!sb) return;
+  ACTIONS_LATE["sb-aione"] = function (arg) { var a = arg.split("|"); openSbGen(a[0], [Number(a[1])], ""); };
+  function openSbGen(sid, focus, draft) {
+    var key = "sb:" + sid, p = P(), sb = sbOf(sid);
+    if (!sb) return Promise.resolve();
     var doc = overlayOf(key), ready;
     var cur = { template: sb.template, components: sb.components };
     var same = doc && doc.versions.length && doc.applied != null && JSON.stringify((doc.versions.find(function (v) { return v.n === doc.applied; }) || {}).output) === JSON.stringify(cur);
@@ -1386,11 +1469,11 @@
       d2.applied = n; d2.updatedAt = new Date().toISOString();
       ready = saveOverlay(key, d2).then(function () { return overlayOf(key); });
     }
-    ready.then(function (d3) {
+    return ready.then(function (d3) {
       var idx = Math.max(0, d3.versions.findIndex(function (v) { return v.n === d3.applied; }));
-      openLayer({ kind: "gen", key: key, sel: idx, focus: [no], draft: "" });
+      openLayer({ kind: "gen", key: key, sel: idx, focus: (focus || []).filter(function (n) { return isFinite(n); }), draft: draft || "" });
     }).catch(function (e) { toast(e.message, "err"); });
-  };
+  }
   ACTIONS_LATE["sb-frame-reset"] = function (arg) {
     var a = arg.split("|"), c = sbItem(a[0], a[1]);
     if (!c || !c.ui) return;
@@ -2903,6 +2986,8 @@
           if (/API|DB|쿼리|서버|백엔드/.test((c.planner || "") + (c.customer || ""))) warns.push(c.no + ". 개발자 관점 표현이 들어 있습니다");
         });
         if (!ds) warns.push("디자인 시스템이 없어 와이어프레임은 글로만 보입니다");
+        var rep = covReport(p, target, out.components, out.coverage, null);
+        if (rep.unmet.length) warns.push("기능 요구사항 미반영 " + rep.unmet.length + "/" + rep.total + "건: " + rep.unmet.slice(0, 3).map(function (r) { return r.text.slice(0, 40); }).join(" · ") + (rep.unmet.length > 3 ? " 외" : "") + " — 적용 뒤 ‘✦ 보완’으로 채우거나 고칠 내용에 적어 다시 생성하세요");
       }
     } else if (kind === "flow") {
       if (!Array.isArray(out.nodes) || !Array.isArray(out.edges) || !Array.isArray(out.lanes)) errs.push("lanes·nodes·edges 배열이 필요합니다");
@@ -3465,7 +3550,8 @@
       var desc = '<table class="desc dpanel"><thead><tr><th>No</th><th>항목</th><th>Description</th></tr></thead><tbody>' + sb.components.map(function (c) {
         return '<tr data-dno="' + esc(gk + "|" + c.no) + '"><td><span class="no">' + esc(c.no) + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
       }).join("") + "</tbody></table>";
-      return (hasWire ? sbCanvas(p, sb, { key: gk, preview: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>";
+      var cov = covTable(p, g.target, covReport(p, g.target, sb.components, out.coverage, null), { preview: true, open: true });
+      return (hasWire ? sbCanvas(p, sb, { key: gk, preview: true }) : '<p class="hint">디자인 시스템이 없어 와이어프레임 없이 설명만 보입니다.</p>') + '<div class="desc-wrap">' + desc + "</div>" + cov;
     }
     if (g.kind === "ds") {
       var d0 = selectedDesign(p, g.target), nd = designWithPatch(d0, sanitizeDsPatch(normDsPatch(out, d0), d0, null).patch, d0.revision + 1), ch = designChanges(d0, nd), ctx = wireCtx(p, g.target, null);
@@ -4854,6 +4940,8 @@
     if (pxb) { protoExport(pxb.getAttribute("data-protox"), pxb); return; }
     var pkb = target.closest && target.closest("[data-pkg]");
     if (pkb) { packageExport(pkb.getAttribute("data-pkg") || null, pkb); return; }
+    var chl = target.closest && target.closest("[data-covhl]");
+    if (chl) { var ca = chl.getAttribute("data-covhl").split("|"); mkHighlight(ca[0], Number(ca[1]), true); return; }
     var sbx = target.closest && target.closest("[data-sbx]");
     if (sbx) { var sxa = sbx.getAttribute("data-sbx").split("|"); sbExport(sxa[0], sxa[1], sxa[2] || null, sbx); return; }
     var dst = target.closest && target.closest("[data-dstab]");

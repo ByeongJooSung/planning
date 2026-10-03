@@ -158,13 +158,14 @@ function sbGen(c: Ctx, screenId: string): GenPrompt {
         "- 입력 요소는 validation: required, minLength/maxLength, format, timing(ON_INPUT|ON_BLUR|ON_SUBMIT), messages(condition, text)",
         "- 참조자료(회의록 결정 등)와 어긋나지 않게. 근거 없는 수치·문구는 지어내지 말고 planner에 ‘확인 필요’로 적는다",
         "- 기능 명세의 항목·규칙·조건·메시지를 이 화면에 해당하는 만큼 빠짐없이 반영한다. 명세와 요구사항 원문이 다르면 명세를 따른다",
+        "- 충족 점검(coverage): 기능 명세의 각 줄과 각 Task 문장을 하나씩 req로 적고, 그것을 만족시키는 항목 번호를 by에 적는다. by가 빈 줄이 남지 않게 항목을 추가하고, 정말 이 화면 몫이 아닌 줄만 by를 비우고 note에 어느 화면 몫인지 적는다",
         "- no는 1부터 위→아래 순서",
       ].join("\n"),
     ),
     section("props 안내", PROPS_GUIDE),
     section(
       "출력 형식",
-      '{"template":"list|detail|form|dashboard|main|login|popup","components":[{"no":1,"label":"검색 조건","kind":"search-panel","planner":"…","customer":"…","options":{"values":["전체","심사중"],"default":"전체"},"validation":{"required":true,"maxLength":100,"timing":["ON_SUBMIT"],"messages":[{"condition":"미입력","text":"…"}]},"ui":{"component":"search-panel","props":{},"link":"이동 화면 ID(없으면 생략)"}}]}\noptions·validation·link는 해당할 때만 넣는다.',
+      '{"template":"list|detail|form|dashboard|main|login|popup","components":[{"no":1,"label":"검색 조건","kind":"search-panel","planner":"…","customer":"…","options":{"values":["전체","심사중"],"default":"전체"},"validation":{"required":true,"maxLength":100,"timing":["ON_SUBMIT"],"messages":[{"condition":"미입력","text":"…"}]},"ui":{"component":"search-panel","props":{},"link":"이동 화면 ID(없으면 생략)"}}],"coverage":[{"req":"기능 명세 줄 또는 Task 문장 그대로","by":[1,3]},{"req":"다른 화면 몫인 줄","by":[],"note":"상세 화면에서 처리"}]}\noptions·validation·link는 해당할 때만 넣는다. coverage는 명세 줄·Task마다 하나씩 모두 넣는다.',
     ),
   ]);
   return { kind: "sb", target: screenId, title: `${screenId} ${node.name} 화면설계서`, prompt, requiresInstruction: false, specs: specItems(c.m, c.chunks, reqs.map((r) => r.id)) };

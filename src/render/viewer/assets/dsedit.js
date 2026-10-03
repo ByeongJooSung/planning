@@ -305,6 +305,7 @@
     return "<h3>✦ AI로 그리기·고치기</h3>" +
       '<p class="fe-note">디자인 토큰·쓸 수 있는 컴포넌트·아이콘·노드 규칙을 함께 보내, 오토 레이아웃과 토큰을 쓰는 컴포넌트를 그립니다. 결과는 캔버스에 바로 들어가고(되돌리기 가능) 저장해야 반영됩니다.</p>' +
       '<div class="fx-seg sm"><button data-fx-aimode="new" aria-pressed="' + (A.mode === "new") + '">새로 그리기</button><button data-fx-aimode="edit" aria-pressed="' + (A.mode !== "new") + '">지금 모양 고치기</button></div>' +
+      (A.mode !== "new" && S.sel && S.sel !== T().id ? '<label class="fm-check fx-only"><input type="checkbox" data-fx-aionly' + (A.only ? " checked" : "") + '> 선택한 요소만 고치기 — <b>' + esc((cur() || {}).name || TYPE[(cur() || {}).type] || S.sel) + '</b> <span class="fe-note">이 요소 안만 바뀌고 나머지는 그대로 둡니다</span></label>' : "") +
       '<label>요청<textarea rows="5" data-fx-ai placeholder="' + (A.mode === "new" ? "예: 공지 알림 카드 — 아이콘·제목·날짜·더보기 버튼, 변형: 기본·중요(빨간 테두리)" : "예: 버튼 높이를 48로, 비활성 변형 추가") + '">' + esc(A.draft) + "</textarea></label>" +
       (A.busy ? '<div class="fe-busy"><span class="fe-spin"></span>AI가 그리는 중… <button class="fe-b" data-fx-act="ai-stop">멈춤</button></div>' :
         (ed ? '<button class="fe-b wide fe-primary" data-fx-act="ai-run"' + (ai.available ? "" : ' disabled title="AI 연결이 없습니다 — 아래 claude.ai로 만들기를 쓰거나 AI 설정에서 연결을 등록하세요"') + ">✦ AI로 " + (A.mode === "new" ? "그리기" : "고치기") + (ai.label ? " · " + esc(ai.label) : "") + "</button>" : "")) +
@@ -379,6 +380,7 @@
       return;
     }
     if (t.getAttribute("data-fx-ai") != null) { S.ai.draft = t.value; return; }
+    if (t.getAttribute("data-fx-aionly") != null) { S.ai.only = t.checked; return; }
     if (t.getAttribute("data-fx-prop") != null) { var inn = cur(); if (inn) { if (S.fieldSnap) { snap(); S.fieldSnap = false; } inn.props = inn.props || {}; if (t.value === "") delete inn.props[t.getAttribute("data-fx-prop")]; else inn.props[t.getAttribute("data-fx-prop")] = t.value; if (!Object.keys(inn.props).length) delete inn.props; renderCanvas(); } return; }
     if (!k && !dk) return;
     if (t.tagName === "SELECT" || t.type === "checkbox") return;
@@ -807,8 +809,11 @@
     var ta = S.el.querySelector("[data-fx-ai]"), ins = ta ? ta.value.trim() : S.ai.draft;
     S.ai.draft = ins;
     if (!ins && S.ai.mode === "new") { S.ai.err = "무엇을 그릴지 적어 주세요."; S.forceSide = true; renderSide(); return null; }
-    var current = S.ai.mode === "new" ? null : { name: S.doc.name, tree: S.doc.vars[0].tree, variants: S.doc.vars.slice(1) };
-    return F.aiPrompt(S.o.ds, (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; }), { instruction: ins + (S.o.aiContext ? "\n\n" + S.o.aiContext : ""), current: current, name: S.doc.name, system: S.o.title });
+    var only = S.ai.mode !== "new" && S.ai.only && S.sel && S.sel !== T().id ? F.find(T(), S.sel) : null;
+    S.ai.onlyId = only ? S.sel : null;
+    var current = S.ai.mode === "new" ? null : only ? { name: only.node.name || TYPE[only.node.type], tree: only.node } : { name: S.doc.name, tree: S.doc.vars[0].tree, variants: S.doc.vars.slice(1) };
+    var scopeNote = only ? "\n\n[범위 제한] 위 ‘현재 컴포넌트’는 컴포넌트 ‘" + S.doc.name + "’ 안의 요소 ‘" + (only.node.name || only.node.type) + "’(id " + only.node.id + ")만 떼어 낸 것입니다. 이 요소만 고쳐 같은 형식의 tree 하나로 답하세요(맨 위 id는 " + only.node.id + " 유지, variants 없이). 다른 요소는 건드리지 않습니다." : "";
+    return F.aiPrompt(S.o.ds, (S.o.comps || []).filter(function (c) { return c.id !== S.doc.id; }), { instruction: ins + scopeNote + (S.o.aiContext ? "\n\n" + S.o.aiContext : ""), current: current, name: S.doc.name, system: S.o.title });
   }
   /** AI 결과 넣기: {name, category, description, tree, variants:[{name, tree}]} */
   function applyAi(out) {
@@ -816,6 +821,23 @@
     var o = out && (out.component || out);
     var tree = o && F.sanitize(o.tree || (o.type ? o : null), comps);
     if (!tree) throw new Error("AI 결과에 tree(프레임 노드)가 없습니다");
+    // 선택한 요소만 고치기: 그 자리만 바꾼다 (위치 지정 프레임 안이면 좌표 유지)
+    if (S.ai.onlyId) {
+      var f = F.find(T(), S.ai.onlyId);
+      if (!f || !f.parent) throw new Error("고칠 요소를 찾지 못했습니다 — 요소를 다시 고르세요");
+      var idx = f.parent.children.indexOf(f.node), old = f.node;
+      snap();
+      f.parent.children.splice(idx, 1);
+      reId(tree, T());
+      tree.id = old.id;
+      if (old.x != null) tree.x = old.x; if (old.y != null) tree.y = old.y;
+      if (old.bind && tree.type === "text" && !tree.bind) tree.bind = old.bind;
+      f.parent.children.splice(idx, 0, tree);
+      S.sel = tree.id; S.multi = [];
+      S.forceSide = true; render();
+      S.o.toast && S.o.toast("‘" + (tree.name || TYPE[tree.type]) + "’ 요소만 바꿨습니다. 확인 후 저장하세요 — 되돌리기 가능");
+      return;
+    }
     tree.id = "root";
     var vars = [{ name: "기본", tree: tree }];
     (S.o.mode === "item" ? [] : Array.isArray(o.variants) ? o.variants : Array.isArray(o.variantTrees) ? o.variantTrees : []).slice(0, 19).forEach(function (v, i) {

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Model } from "../../model/schema.js";
 import { buildGenPrompts, DS_SLOTS, REFINE_INSTRUCTION, type GenPrompt } from "../../ai/generate.js";
+import { screenReqLines, type ReqLine } from "../../ai/coverage.js";
 import { SPEC_SLOT, specItems, type SpecItem } from "../../ai/spec.js";
 import { DESC_SLOT } from "../../ai/generate.js";
 import { WORK_LABEL, workBoard, type WorkBoard } from "../../trace/work.js";
@@ -35,6 +36,7 @@ export interface ViewerProject {
   /** 산출물 작업 상태 (미진행·진행중·완료·재검토 필요) */
   work: WorkBoard;
   specs: Record<string, SpecItem>;
+  reqLines?: Record<string, ReqLine[]>;
 }
 
 export interface ViewerData {
@@ -53,7 +55,8 @@ export async function collectViewerProject(dir: string, now = new Date(), opts: 
   const last = snapshots.at(-1);
   const diff = last ? { from: last.version, entries: diffModels(await loadSnapshot(dir, last.version), model) } : null;
   const chunks = await loadChunks(dir);
-  return { model, rtm: buildRtm(model, now), snapshots, diff, chunks, prompts: buildPrompts(model, chunks, opts), gens: buildGenPrompts(model, chunks, opts), work: workBoard(model), specs: Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x])) };
+  const specs = Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x]));
+  return { model, rtm: buildRtm(model, now), snapshots, diff, chunks, prompts: buildPrompts(model, chunks, opts), gens: buildGenPrompts(model, chunks, opts), work: workBoard(model), specs, reqLines: Object.fromEntries(model.ia.nodes.filter((n) => n.kind !== "MENU").map((n) => [n.id, screenReqLines(model, specs, n.id)]).filter(([, v]) => (v as ReqLine[]).length)) };
 }
 
 export const ASSET_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets");

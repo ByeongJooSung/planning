@@ -9,6 +9,7 @@
 import { buildGenPrompts, type GenPrompt } from "../ai/generate.js";
 import { specItems, type SpecItem } from "../ai/spec.js";
 import { ComponentSpec, DESIGN_STAGES } from "../model/schema.js";
+import { screenReqLines, type ReqLine } from "../ai/coverage.js";
 import { applyDesignPatch, applyFlow, applyIa, normalizeStoryboardOutput } from "../ai/apply.js";
 import { assignIaIds, isScreenKind, nextScreenId, setScreenTasks, setTaskScreens } from "../project/ia-ops.js";
 import { applyAiCases, draftCases, removeCase, setChannels, setIaCell, setResult, setSystemChannels, systemChannels, upsertCase } from "../project/qa-ops.js";
@@ -74,6 +75,8 @@ export interface ViewerProject {
   specs: Record<string, SpecItem>;
   /** 디자인 시스템을 아직 고르지 않은 시스템의 임시 기본 디자인 (화면설계서 미리보기용 — 저장할 때 같은 컨셉으로 정해진다) */
   provisionalDesigns: Record<string, SystemDesign>;
+  /** 화면별 기능 요구 줄 (연결 Task의 요구사항 명세·Task 문장) — 화면설계서 충족 점검 기준 */
+  reqLines: Record<string, ReqLine[]>;
 }
 
 function provisionalDesigns(model: Model): Record<string, SystemDesign> {
@@ -126,6 +129,7 @@ export type Command =
   | { op: "sb.create"; screenId: string; template?: string }
   | { op: "sb.reorder"; screenId: string; order: number[] }
   | { op: "sb.dup"; screenId: string; no: number }
+  | { op: "sb.coverage"; screenId: string; req: string; by: number[] | null; note?: string }
   | { op: "sb.delete"; screenId: string }
   /** 프로세스 플로우 저장 (캔버스에서 직접 편집한 결과 — 옮긴 위치 포함) */
   | { op: "flow.save"; requirementId: string; flow: unknown }
@@ -419,6 +423,19 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
       message = `${cmd.screenId} 항목 순서를 바꿨습니다`;
       break;
     }
+    case "sb.coverage": {
+      const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
+      if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
+      const req = String(cmd.req ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
+      if (!req) throw new Error("요구 줄이 비어 있습니다");
+      const list = (sb.coverage ?? []).filter((x) => x.req !== req);
+      if (cmd.by === null) { sb.coverage = list.length ? list : undefined; message = `${cmd.screenId} 요구사항 매핑 해제: ${req.slice(0, 40)}`; break; }
+      const nos = new Set(sb.components.map((c) => c.no));
+      const by = [...new Set((cmd.by ?? []).map(Number).filter((n) => Number.isInteger(n) && nos.has(n)))];
+      sb.coverage = [...list, { req, by, manual: true, ...(cmd.note ? { note: String(cmd.note).slice(0, 300) } : {}) }];
+      message = `${cmd.screenId} 요구사항 ‘${req.slice(0, 30)}${req.length > 30 ? "…" : ""}’ → 항목 ${by.length ? by.join(", ") + "번" : "없음(해당 없음으로 표시)"}`;
+      break;
+    }
     case "sb.dup": {
       const sb = m.storyboard.screens.find((x) => x.screenId === cmd.screenId);
       if (!sb) throw new Error(`화면설계서가 없습니다: ${cmd.screenId}`);
@@ -685,6 +702,7 @@ function touchStoryboard(m: Model, screenId: string, now: Date) {
 export function deriveProject(state: ProjectState, now = new Date(), opts: { viewerUrl?: string } = {}): ViewerProject {
   const { model, chunks } = state;
   const last = state.snapshots.at(-1);
+  const specs = Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x]));
   return {
     model,
     rtm: buildRtm(model, now),
@@ -694,8 +712,9 @@ export function deriveProject(state: ProjectState, now = new Date(), opts: { vie
     prompts: buildPrompts(model, chunks, opts),
     gens: buildGenPrompts(model, chunks, opts),
     work: workBoard(model),
-    specs: Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x])),
+    specs,
     provisionalDesigns: provisionalDesigns(model),
+    reqLines: Object.fromEntries(model.ia.nodes.filter((n) => n.kind !== "MENU").map((n) => [n.id, screenReqLines(model, specs, n.id)]).filter(([, v]) => (v as ReqLine[]).length)),
   };
 }
 

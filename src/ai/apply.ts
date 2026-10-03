@@ -33,6 +33,8 @@ export const IaOutput = z.object({
 export const SbOutput = z.object({
   template: z.enum(["login", "dashboard", "main", "list", "detail", "form", "popup"]).optional(),
   components: z.array(ComponentSpec).min(1),
+  /** 기능 요구사항 충족: 요구 줄 → 반영 항목 번호 (AI 답) */
+  coverage: z.array(z.object({ req: z.string().max(400), by: z.array(z.number().int()).default([]), note: z.string().max(300).optional() })).max(200).optional(),
 });
 export const FlowOutput = Flow;
 export const DesignPatch = z.object({
@@ -155,6 +157,14 @@ export function applyStoryboard(m: Model, screenId: string, output: unknown): Ap
     }),
     status: "DRAFT",
     designRevision: ds?.status === "SELECTED" ? ds.revision : undefined,
+    // 충족 매핑: AI 답 + 작업자가 직접 지정한 것은 유지 (항목 번호가 아직 있는 것만)
+    coverage: (() => {
+      const nos = new Set(out.components.map((c) => c.no));
+      const manual = (prev?.coverage ?? []).filter((x) => x.manual).map((x) => ({ ...x, by: x.by.filter((n) => nos.has(n)) }));
+      const ai = (out.coverage ?? []).filter((x) => !manual.some((m) => m.req === x.req));
+      const all = [...manual, ...ai];
+      return all.length ? all : undefined;
+    })(),
   };
   work.storyboard.screens = prev ? work.storyboard.screens.map((s) => (s.screenId === screenId ? next : s)) : [...work.storyboard.screens, next];
   commit(m, work);
@@ -291,7 +301,21 @@ export function normalizeStoryboardOutput(output: unknown): unknown {
     return out;
   });
   const template = str(output.template)?.toLowerCase();
-  return { ...(template && TEMPLATES.includes(template) ? { template } : {}), components };
+  // coverage: [{req|requirement|text, by|items|components:[번호…], note|reason}] — 번호가 글자로 와도 받는다
+  const covRaw = Array.isArray(output.coverage) ? output.coverage : Array.isArray(output.requirements) ? output.requirements : undefined;
+  const nos = new Set(components.map((c) => c.no as number));
+  const coverage = covRaw
+    ?.filter(isObj)
+    .map((x) => {
+      const req = str(x.req ?? x.requirement ?? x.text ?? x.line ?? x.spec) ?? "";
+      const byRaw = Array.isArray(x.by) ? x.by : Array.isArray(x.items) ? x.items : Array.isArray(x.components) ? x.components : x.by != null ? [x.by] : [];
+      const by = [...new Set(byRaw.map((v) => int(isObj(v) ? v.no : v)).filter((n): n is number => n != null && nos.has(n)))];
+      const note = str(x.note ?? x.reason);
+      return req.trim() ? { req: req.trim().slice(0, 400), by, ...(note ? { note: note.slice(0, 300) } : {}) } : null;
+    })
+    .filter((x): x is { req: string; by: number[]; note?: string } => !!x)
+    .slice(0, 200);
+  return { ...(template && TEMPLATES.includes(template) ? { template } : {}), components, ...(coverage ? { coverage } : {}) };
 }
 
 /** 플로우 결과 보정 — 빠진 배열·라벨, 글자가 아닌 값 */

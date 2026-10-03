@@ -368,6 +368,8 @@ export const StoryboardScreen = z.object({
   status: z.enum(["DRAFT", "REVIEWED"]).default("DRAFT"),
   /** 이 화면을 마지막으로 작성·검토할 때의 디자인 시스템 개정 번호 */
   designRevision: z.number().int().optional(),
+  /** 기능 요구사항 충족 매핑: 요구 줄(req) → 반영한 항목 번호(by). AI가 답한 것(manual 없음)과 작업자가 지정한 것(manual) */
+  coverage: z.array(z.object({ req: z.string().max(400), by: z.array(z.number().int()).default([]), note: z.string().max(300).optional(), manual: z.boolean().optional() })).max(200).optional(),
 });
 
 export const Storyboard = z.object({ screens: z.array(StoryboardScreen).default([]) });

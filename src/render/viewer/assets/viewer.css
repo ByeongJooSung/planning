@@ -1332,3 +1332,24 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .focus-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .focus-chips .fchip { padding: 2px 8px; font-size: 12px; }
 .focus-chips .fchip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* 기능 요구사항 충족 */
+.cov { border-top: 1px solid var(--line); padding: 8px 12px 10px; }
+.cov > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; list-style: none; }
+.cov > summary::before { content: "▸"; color: var(--ink-3); }
+.cov[open] > summary::before { content: "▾"; }
+.cov > summary .hint { flex: 1 1 200px; }
+.covt { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.covt th { text-align: left; font-size: 11.5px; color: var(--ink-3); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.covt td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.covt tr:last-child td { border-bottom: 0; }
+.covt td.st { width: 18px; font-weight: 700; text-align: center; }
+.covt tr.ok td.st { color: var(--st-done); }
+.covt tr.miss td.st { color: var(--crit); }
+.covt tr.miss td.rq { color: var(--ink); }
+.covt tr.na td { color: var(--ink-3); }
+.covt td.by { white-space: nowrap; }
+.covt td.act { white-space: nowrap; text-align: right; }
+.covt .tag { font-size: 10.5px; }
+.covno { width: 20px; height: 20px; border-radius: 50%; border: 0; background: #d92d20; color: #fff; font: 700 11px/20px var(--font); padding: 0; margin-right: 2px; cursor: pointer; }
+.fx-only { margin: 0 0 8px; font-size: 12.5px; flex-wrap: wrap; }
