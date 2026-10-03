@@ -356,6 +356,10 @@
       return '<div class="wsys">' + sysChip(x.code) + "<b>" + esc(x.name) + '</b><span class="wcell"><span class="wl">정보구조도</span>' + workPill(p, "ia:" + x.code) + '</span><span class="wcell"><span class="wl">디자인</span>' + workPill(p, "ds:" + x.code) + "</span>" +
         '<div class="wcell grow"><span class="wl">화면설계서 ' + x.screens.length + "</span>" + workStack(x.counts, x.screens.length) + "</div>" + protoLink(p, x.code) + "</div>";
     }).join("");
+    var todo = (p.work ? p.work.systems : []).filter(function (x) { return x.hasScreens; }).map(function (x) {
+      var t = nextTodo(p, x);
+      return '<div class="todo' + (t.done ? " done" : t.warn ? " warn" : "") + '">' + sysChip(x.code) + '<span class="tstep">' + (t.done ? "✓ " : "") + esc(t.step) + '</span><span class="tdetail">' + esc(t.detail) + '</span><button class="btn-sm' + (t.done ? "" : " btn-primary") + '" data-page="' + esc(t.page) + '" data-dsys="' + esc(x.code) + '">' + (t.done ? "통합본 보기" : "바로 가기") + "</button></div>";
+    }).join("");
     var outRows = p.model.systems.filter(function (s) { return s.hasScreens; }).map(function (s) {
       var nSb = p.model.storyboard.screens.filter(function (x) { return x.systemCode === s.code; }).length, nSc = systemScreens(p, s.code).length, d = selectedDesign(p, s.code);
       var nFl = p.model.flows.filter(function (f) { return f.lanes.some(function (l) { return l.systemCode === s.code; }); }).length;
@@ -368,7 +372,8 @@
         '<span class="ocell"><span class="ol">디자인</span>' + (d ? '<button class="btn-sm" data-figx="' + esc(s.code) + '|tokens">토큰 JSON</button>' : '<span class="hint">미선택</span>') + "</span>" +
         '<span class="sp"></span><button class="btn-sm btn-primary" data-pkg="' + esc(s.code) + '" title="이 시스템의 모든 산출물을 zip 하나로">⬇ 패키지</button></div>';
     }).join("");
-    return '<section class="section"><h2>단계 진행' + (canEdit() ? " <small>단계를 누르면 상태를 바꿉니다</small>" : "") + '</h2><div class="box stages">' + stages + "</div></section>" +
+    return (todo ? '<section class="section"><h2>지금 할 일 <small>시스템마다 진행 순서(요구사항 → 정보구조도 → 디자인 → 화면설계서 → 플로우 → 통합본)에서 아직 끝나지 않은 첫 단계</small></h2><div class="box todos">' + todo + "</div></section>" : "") +
+      '<section class="section"><h2>단계 진행' + (canEdit() ? " <small>단계를 누르면 상태를 바꿉니다</small>" : "") + '</h2><div class="box stages">' + stages + "</div></section>" +
       (wrows ? '<section class="section"><h2>시스템별 설계 진행 <small>미진행 · 진행중 · 재검토 필요 · 완료 — AI가 만든 결과는 검토 후 완료로 표시합니다</small></h2><div class="box wsyss">' + wrows + "</div></section>" : "") +
       (outRows ? '<section class="section"><h2>산출물 내려받기 <small>정보구조도 · 화면설계서 · 프로토타입 · 플로우 · 테스트 · 디자인 토큰</small><button class="btn-sm btn-primary" data-pkg="" title="모든 시스템의 산출물을 zip 하나로">⬇ 전체 패키지 (zip)</button></h2><div class="box outs">' + outRows + "</div></section>" : "") +
       '<section class="kpis">' + kpis + "</section>" +
@@ -1555,6 +1560,28 @@
     return '<section class="section"><div class="toolbar">' + chips + "</div>" + banner + '<div id="proto"></div></section>' + protoGuide(p, sw);
   }
   /** 통합본 아래: 이 시스템의 설계 진행 순서와 지금 할 일 */
+  /** 시스템별 ‘지금 할 일’: 진행 순서에서 아직 끝나지 않은 첫 단계와 구체적인 대상 */
+  function nextTodo(p, sw) {
+    var code = sw.code, tasks = allTasks(p).filter(function (t) { return t.systemCode === code; });
+    var reqs = p.rtm.rows.filter(function (r) { return r.status !== "EXCLUDED" && r.tasks.some(function (t) { return t.systemCode === code; }); });
+    var flows = reqs.map(function (r) { return { id: r.requirementId, w: workOf(p, "flow:" + r.requirementId) }; });
+    var sc = sw.counts, byId = {};
+    p.model.ia.nodes.forEach(function (n) { byId[n.id] = n; });
+    var names = function (ids) { return ids.slice(0, 3).map(function (id) { var n = byId[id]; return n ? n.name : id; }).join(", ") + (ids.length > 3 ? " 외 " + (ids.length - 3) + "개" : ""); };
+    var review = sw.screens.filter(function (x) { return x.status === "NEEDS_REVIEW"; }).map(function (x) { return x.screenId; });
+    if (!tasks.length) return { step: "요구사항·Task 등록", detail: "이 시스템의 Task가 없습니다. 요구사항을 등록하거나 Task를 연결하세요", page: "req" };
+    if (sw.ia.status === "NOT_STARTED") return { step: "정보구조도", detail: "메뉴·화면 구조를 아직 만들지 않았습니다 (AI 생성 또는 캔버스)", page: "ia" };
+    if (sw.ds.status === "NOT_STARTED") return { step: "디자인 시스템", detail: "컨셉을 골라 디자인 시스템을 정하세요", page: "design" };
+    if (review.length) return { step: "화면설계서 재검토", detail: review.length + "개 화면이 근거 변경으로 재검토 대상: " + names(review), page: "sb", warn: true };
+    var notStarted = sw.screens.filter(function (x) { return x.status === "NOT_STARTED"; }).map(function (x) { return x.screenId; });
+    if (notStarted.length) return { step: "화면설계서 작성", detail: notStarted.length + "개 화면 미작성: " + names(notStarted), page: "sb" };
+    var inProg = sw.screens.filter(function (x) { return x.status === "IN_PROGRESS"; }).map(function (x) { return x.screenId; });
+    if (inProg.length) return { step: "화면설계서 검토", detail: inProg.length + "개 화면이 진행중(AI 생성·편집 후 검토 전): " + names(inProg) + " — 확인 후 ‘완료 처리’", page: "sb" };
+    if (sw.ia.status !== "DONE" || sw.ds.status !== "DONE") return { step: (sw.ia.status !== "DONE" ? "정보구조도" : "디자인 시스템") + " 완료 처리", detail: "내용을 검토했으면 ‘검토 끝 · 완료 처리’로 표시하세요", page: sw.ia.status !== "DONE" ? "ia" : "design" };
+    var fl = flows.filter(function (f) { return f.w.status !== "DONE"; });
+    if (fl.length) return { step: "프로세스 플로우", detail: fl.length + "건 미완료: " + fl.map(function (f) { return f.id; }).slice(0, 4).join(", "), page: "flow" };
+    return { step: "프로토타입 통합본 검토", detail: "설계가 모두 완료되었습니다. 통합본을 넘기며 확인하고 산출물을 내려받으세요", page: "proto", done: true };
+  }
   function protoGuide(p, sw) {
     var code = sw.code;
     var tasks = allTasks(p).filter(function (t) { return t.systemCode === code; });

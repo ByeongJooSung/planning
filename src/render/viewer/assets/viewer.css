@@ -1304,3 +1304,12 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .ocell em { font-style: normal; color: var(--ink-2); }
 .ocell .btn-sm { padding: 2px 7px; font-size: 11.5px; }
 .section h2 .btn-primary { margin-left: auto; }
+
+/* 대시보드 지금 할 일 */
+.todos { display: flex; flex-direction: column; }
+.todo { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 10px 12px; border-top: 1px solid var(--line); border-left: 4px solid var(--st-prog); }
+.todo:first-child { border-top: 0; }
+.todo.warn { border-left-color: var(--crit); }
+.todo.done { border-left-color: var(--st-done); }
+.todo .tstep { font-weight: 700; min-width: 140px; }
+.todo .tdetail { flex: 1; min-width: 200px; color: var(--ink-2); font-size: 13px; }
