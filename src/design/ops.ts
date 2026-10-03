@@ -14,6 +14,20 @@ export function getSystemDesign(m: Model, systemCode: string): SystemDesign | un
   return m.design.systems.find((d) => d.systemCode === systemCode);
 }
 
+/** 카탈로그에 새로 생긴 기본 컴포넌트(예: 차트)를 이미 고른 디자인 시스템에도 채운다. 바뀐 것이 있으면 true */
+export function syncBaseComponents(m: Model): boolean {
+  let changed = false;
+  for (const d of m.design.systems) {
+    if (d.status !== "SELECTED") continue;
+    for (const b of BASE_COMPONENTS) {
+      if (d.components.some((x) => x.id === b.id)) continue;
+      d.components.push({ ...structuredClone(b), origin: "BASE" });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export function proposeDesign(m: Model, systemCode: string): SystemDesign {
   const system = m.systems.find((s) => s.code === systemCode);
   if (!system) throw new Error(`등록되지 않은 시스템입니다: ${systemCode}`);

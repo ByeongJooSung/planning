@@ -50,6 +50,13 @@ describe("서비스 코어", () => {
     r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output: odd }, now);
     const comps = r.state.model.storyboard.screens.find((x) => x.screenId === id)!.components;
     expect(comps.map((c) => c.ui?.component)).toEqual(["data-table", "text-input", undefined]);
+    // 그래프 요청: graph·차트 같은 이름은 chart 컴포넌트로 — 예전에 고른 디자인 시스템에도 카탈로그의 새 기본 컴포넌트가 채워진다
+    const ds = r.state.model.design.systems.find((d) => d.systemCode === "PUB")!;
+    ds.components = ds.components.filter((c) => c.id !== "chart");
+    const graph = { components: [{ no: 1, label: "월별 처리 건수", kind: "graph", ui: { component: "graph", props: { type: "bar", labels: ["1월", "2월"], series: [{ name: "접수", values: [3, 5] }] } } }, { no: 2, label: "비율", kind: "chart", ui: { component: "원그래프" } }] };
+    r = execute(r.state, { op: "gen.apply", kind: "sb", target: id, output: graph }, now);
+    expect(r.state.model.storyboard.screens.find((x) => x.screenId === id)!.components.map((c) => c.ui?.component)).toEqual(["chart", "chart"]);
+    expect(r.state.model.design.systems.find((d) => d.systemCode === "PUB")!.components.some((c) => c.id === "chart")).toBe(true);
   });
 
   it("화면설계서 항목은 이 화면에서만 쓰는 프레임 모양(ui.tree)을 가질 수 있고, 복제·AI 재생성에도 유지된다", () => {

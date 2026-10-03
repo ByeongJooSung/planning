@@ -51,6 +51,7 @@ const PROPS_GUIDE = `컴포넌트별 props 형식 (ui.props):
 - checkbox-group: {"label":"…","options":["…"],"values":["…"]} · date-range: {"label":"기간"} · file-upload: {"label":"첨부파일","hint":"PDF, 20MB"}
 - 이어지는 입력 항목(text-input·textarea·select·radio-group·checkbox-group·date-range·file-upload)은 화면에서 왼쪽 항목명·오른쪽 입력칸 폼 표로 묶여 보인다. 따로 떼어 위에 라벨을 두려면 "stacked":true
 - button-group: {"buttons":[{"label":"임시저장","variant":"secondary","action":"toast","message":"임시저장했습니다."},{"label":"신청","variant":"primary","action":"submit","confirm":"신청할까요?","message":"접수했습니다.","link":"이동 화면 ID"}]}. 제목 줄 오른쪽에 둘 버튼(예: [삭제][저장])은 "placement":"title"
+- chart(그래프·통계·추이): {"type":"bar|line|area|pie|donut","title":"월별 처리 건수","labels":["1월","2월"],"series":[{"name":"접수","values":[12,18]},{"name":"처리","values":[10,15]}],"unit":"건"}. 그래프를 요청받으면 반드시 chart 컴포넌트로 넣고 라벨·수치 예시를 채운다
 - stat-cards: {"items":[["신규","12"]]} · notice-list: {"title":"공지사항","items":[["제목","09-24"]]} · hero-banner: {"title":"…","text":"…"} · quick-links: {"items":["…"]}
 - 그 밖의 컴포넌트(추가 컴포넌트 포함): {"items":[["일시","처리자","상태","내용"]]} 처럼 표시할 데이터만`;
 

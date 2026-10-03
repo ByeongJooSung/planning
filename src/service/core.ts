@@ -20,7 +20,7 @@ import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
-import { addDesignComponent, ensureDesign, mixDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign, STAGE_LABEL, updateStage, type DesignStage } from "../design/ops.js";
+import { syncBaseComponents, addDesignComponent, ensureDesign, mixDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign, STAGE_LABEL, updateStage, type DesignStage } from "../design/ops.js";
 import { toChunks } from "../knowledge/chunk.js";
 import type { Segment } from "../knowledge/extract-text.js";
 import type { Chunk } from "../knowledge/search.js";
@@ -188,6 +188,7 @@ export function newProjectState(input: CreateProjectInput, now = new Date()): Pr
 /** 명령을 사본에 적용한다. 실패하면 예외를 던지고 원래 state는 그대로다. */
 export function execute(state: ProjectState, cmd: Command, now = new Date()): ExecResult {
   const m = structuredClone(state.model);
+  syncBaseComponents(m);
   let chunks = state.chunks;
   let snapshots = state.snapshots;
   const c = { now };
@@ -701,6 +702,7 @@ function touchStoryboard(m: Model, screenId: string, now: Date) {
 /** 화면 데이터 — RTM, 마지막 스냅샷 대비 변경, AI 요청·생성 프롬프트 */
 export function deriveProject(state: ProjectState, now = new Date(), opts: { viewerUrl?: string } = {}): ViewerProject {
   const { model, chunks } = state;
+  syncBaseComponents(model);
   const last = state.snapshots.at(-1);
   const specs = Object.fromEntries(specItems(model, chunks, model.requirements.filter((r) => r.status !== "DELETED").map((r) => r.id)).map((x) => [x.id, x]));
   return {

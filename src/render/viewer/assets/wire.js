@@ -134,6 +134,57 @@
   C["stat-cards"] = function (ds, p) {
     return '<div class="wf-stats">' + (p.items || []).map(function (s) { return '<div class="wf-stat"><span>' + esc(s[0]) + "</span><b>" + esc(s[1]) + "</b></div>"; }).join("") + "</div>";
   };
+  /** 차트(그래프) 와이어프레임: 막대·선·영역·원형·도넛. props: {type,title,labels,series:[{name,values}],unit} 또는 items:[[라벨,값…]] */
+  C.chart = function (ds, p) {
+    var labels = Array.isArray(p.labels) ? p.labels.map(String) : [], series = [];
+    var rows = Array.isArray(p.items) ? p.items : Array.isArray(p.data) ? p.data : Array.isArray(p.rows) ? p.rows : null;
+    if (rows && rows.length && Array.isArray(rows[0])) {
+      labels = rows.map(function (r) { return String(r[0]); });
+      var nSer = Math.max.apply(null, rows.map(function (r) { return r.length - 1; }));
+      for (var si = 0; si < nSer; si++) series.push({ name: Array.isArray(p.columns) ? p.columns[si + 1] : p.series && p.series[si] && p.series[si].name || (nSer > 1 ? "계열 " + (si + 1) : ""), values: rows.map(function (r) { return Number(r[si + 1]) || 0; }) });
+    } else if (Array.isArray(p.series) && p.series.length) {
+      series = p.series.map(function (s0, i) { return Array.isArray(s0) ? { name: "계열 " + (i + 1), values: s0.map(Number) } : { name: s0.name || s0.label || "계열 " + (i + 1), values: (s0.values || s0.data || []).map(Number) }; });
+    } else if (Array.isArray(p.values)) series = [{ name: p.name || "", values: p.values.map(Number) }];
+    if (!series.length) { labels = ["1월", "2월", "3월", "4월", "5월", "6월"]; series = [{ name: "", values: [32, 45, 38, 56, 49, 61] }]; }
+    var n = Math.max(labels.length, series[0].values.length);
+    while (labels.length < n) labels.push(String(labels.length + 1));
+    var type = String(p.type || p.variant || "bar").toLowerCase();
+    if (/pie|원/.test(type)) type = "pie"; else if (/donut|도넛/.test(type)) type = "donut"; else if (/area|영역/.test(type)) type = "area"; else if (/line|선|추이/.test(type)) type = "line"; else type = "bar";
+    var W = 600, H = 220, padL = 40, padR = 12, padT = 12, padB = 30, unit = p.unit ? String(p.unit) : "";
+    var max = 0; series.forEach(function (s0) { s0.values.forEach(function (v) { if (v > max) max = v; }); });
+    max = max || 1;
+    var nice = Math.pow(10, Math.floor(Math.log10(max))); max = Math.ceil(max / nice) * nice;
+    var cw = W - padL - padR, ch = H - padT - padB, svg = "";
+    var X = function (i) { return padL + cw * (n === 1 ? 0.5 : i / (n - 1)); }, Y = function (v) { return padT + ch - ch * v / max; };
+    var cls = function (i) { return "s" + (i % 3); };
+    if (type === "pie" || type === "donut") {
+      var vals = series[0].values.slice(0, n), tot = vals.reduce(function (a, b) { return a + b; }, 0) || 1, cx = 130, cy = H / 2, r = 86, a0 = -Math.PI / 2;
+      svg += vals.map(function (v, i) {
+        var a1 = a0 + Math.PI * 2 * v / tot, x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1), lg = a1 - a0 > Math.PI ? 1 : 0;
+        var d = "M" + cx + " " + cy + " L" + x0.toFixed(1) + " " + y0.toFixed(1) + " A" + r + " " + r + " 0 " + lg + " 1 " + x1.toFixed(1) + " " + y1.toFixed(1) + " Z";
+        a0 = a1;
+        return '<path class="' + cls(i) + '" style="opacity:' + (1 - Math.floor(i / 3) * 0.3) + '" d="' + d + '"/>';
+      }).join("");
+      if (type === "donut") svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.58) + '" class="hole"/><text x="' + cx + '" y="' + (cy + 5) + '" text-anchor="middle" class="tot">' + esc(String(tot)) + esc(unit) + "</text>";
+      svg += vals.map(function (v, i) { var y = 40 + i * 22; return '<rect class="' + cls(i) + '" style="opacity:' + (1 - Math.floor(i / 3) * 0.3) + '" x="260" y="' + (y - 9) + '" width="12" height="12" rx="2"/><text x="280" y="' + (y + 1) + '" class="lb">' + esc(labels[i]) + "</text><text x=\"" + (W - 20) + '" y="' + (y + 1) + '" text-anchor="end" class="lb">' + esc(String(v)) + esc(unit) + " · " + Math.round(v / tot * 100) + "%</text>"; }).join("");
+    } else {
+      for (var g = 0; g <= 4; g++) { var gy = padT + ch * g / 4; svg += '<line class="grid" x1="' + padL + '" y1="' + gy + '" x2="' + (W - padR) + '" y2="' + gy + '"/><text x="' + (padL - 6) + '" y="' + (gy + 4) + '" text-anchor="end" class="ax">' + Math.round(max * (4 - g) / 4) + "</text>"; }
+      labels.forEach(function (l, i) { svg += '<text x="' + (type === "bar" ? padL + cw * (i + 0.5) / n : X(i)) + '" y="' + (H - 10) + '" text-anchor="middle" class="ax">' + esc(l) + "</text>"; });
+      if (type === "bar") {
+        var gw = cw / n, bw = Math.min(28, gw * 0.7 / series.length);
+        series.forEach(function (s0, si) { s0.values.forEach(function (v, i) { var x = padL + gw * i + (gw - bw * series.length) / 2 + bw * si; svg += '<rect class="' + cls(si) + '" x="' + x.toFixed(1) + '" y="' + Y(v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (padT + ch - Y(v)).toFixed(1) + '" rx="2"/>'; }); });
+      } else {
+        series.forEach(function (s0, si) {
+          var pts = s0.values.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); });
+          if (type === "area") svg += '<path class="' + cls(si) + ' area" d="M' + pts.join(" L") + " L" + X(s0.values.length - 1).toFixed(1) + "," + (padT + ch) + " L" + X(0) + "," + (padT + ch) + ' Z"/>';
+          svg += '<polyline class="' + cls(si) + ' ln" points="' + pts.join(" ") + '"/>' + s0.values.map(function (v, i) { return '<circle class="' + cls(si) + ' dot" cx="' + X(i).toFixed(1) + '" cy="' + Y(v).toFixed(1) + '" r="3.5"/>'; }).join("");
+        });
+      }
+    }
+    var legend = series.length > 1 || (series[0].name && type !== "pie" && type !== "donut") ? '<div class="wf-legend">' + series.map(function (s0, i) { return '<span><i class="' + cls(i) + '"></i>' + esc(s0.name || "계열 " + (i + 1)) + "</span>"; }).join("") + "</div>" : "";
+    return '<div class="wf-chart wf-chart-' + type + '">' + (p.title ? '<div class="wf-ch"><b>' + esc(p.title) + "</b>" + (unit ? "<span>단위: " + esc(unit) + "</span>" : "") + "</div>" : "") + legend +
+      '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + esc(p.title || "차트") + '">' + svg + "</svg></div>";
+  };
   C["notice-list"] = function (ds, p) {
     return '<div class="wf-notice"><div class="wf-nh"><b>' + esc(p.title || "공지사항") + '</b><span>더보기 +</span></div><ul>' +
       (p.items || []).map(function (it) { return "<li><span>" + esc(it[0]) + "</span><em>" + esc(it[1] || "") + "</em></li>"; }).join("") + "</ul></div>";

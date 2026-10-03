@@ -1844,6 +1844,7 @@
     "status-badge": { label: "심사중" },
     "file-list": { files: ["수질측정결과_2026-09.pdf (840KB)"] },
     "stat-cards": { items: [["신규", "12"], ["심사중", "8"], ["반려", "3"], ["공개", "124"]] },
+    chart: { type: "bar", title: "월별 처리 건수", labels: ["4월", "5월", "6월", "7월", "8월", "9월"], series: [{ name: "접수", values: [42, 51, 38, 64, 58, 71] }, { name: "처리", values: [36, 47, 35, 60, 55, 66] }], unit: "건" },
     "notice-list": { title: "공지사항", items: [["시스템 점검 안내", "09-24"], ["심사 기준 개정", "09-20"]] },
     "empty-state": { message: "조회된 자료가 없습니다." },
     "hero-banner": { title: "누구나 쉽게 찾아보는 공공 정보", text: "정보공개 · 민원신청 · 처리 현황" },
@@ -1864,7 +1865,7 @@
     modal: { title: "승인·반려 처리", body: "<p style=\"margin:0\">처리 결과를 선택하세요.</p>" }
   };
   var FULLW = { gnb: 1, footer: 1 };
-  var WIDE = /search-panel|data-table|card-list|hero-banner|quick-links|stat-cards|step-indicator|tabs|detail-table|notice-list|breadcrumb|review/;
+  var WIDE = /search-panel|data-table|card-list|hero-banner|quick-links|stat-cards|chart|step-indicator|tabs|detail-table|notice-list|breadcrumb|review/;
   function sampleRaw(ds, c, ctx) {
     var props = SAMPLE_PROPS[c.id];
     if (!props) {
@@ -3394,7 +3395,7 @@
     for (var k in o) if (keys.indexOf(k) < 0 && o[k] && typeof o[k] === "object") { var r2 = findComps(o[k], depth + 1); if (r2) return r2; }
     return null;
   }
-  var COMP_ALIAS = { table: "data-table", list: "data-table", grid: "data-table", "board-list": "notice-list", board: "notice-list", input: "text-input", "text-field": "text-input", textfield: "text-input", password: "text-input", email: "text-input", number: "text-input", "text-area": "textarea", dropdown: "select", combobox: "select", radio: "radio-group", checkbox: "checkbox-group", date: "date-range", datepicker: "date-range", "date-picker": "date-range", period: "date-range", upload: "file-upload", file: "file-upload", btn: "button", buttons: "button-group", actions: "button-group", "action-bar": "button-group", header: "gnb", nav: "gnb", navigation: "gnb", menu: "gnb", sidebar: "lnb", "side-menu": "lnb", location: "breadcrumb", tab: "tabs", steps: "step-indicator", stepper: "step-indicator", search: "search-bar", filter: "search-panel", "filter-panel": "search-panel", cards: "card-list", card: "card-list", paging: "pagination", detail: "detail-table", "detail-view": "detail-table", badge: "status-badge", status: "status-badge", attachments: "file-list", stats: "stat-cards", dashboard: "stat-cards", empty: "empty-state", banner: "hero-banner", hero: "hero-banner", login: "login-form", dialog: "modal", popup: "modal", confirm: "confirm-dialog", alert: "alert-dialog", notice: "notice-list", links: "quick-links", "quick-menu": "quick-links" };
+  var COMP_ALIAS = { table: "data-table", list: "data-table", grid: "data-table", "board-list": "notice-list", board: "notice-list", input: "text-input", "text-field": "text-input", textfield: "text-input", password: "text-input", email: "text-input", number: "text-input", "text-area": "textarea", dropdown: "select", combobox: "select", radio: "radio-group", checkbox: "checkbox-group", date: "date-range", datepicker: "date-range", "date-picker": "date-range", period: "date-range", upload: "file-upload", file: "file-upload", btn: "button", buttons: "button-group", actions: "button-group", "action-bar": "button-group", header: "gnb", nav: "gnb", navigation: "gnb", menu: "gnb", sidebar: "lnb", "side-menu": "lnb", location: "breadcrumb", tab: "tabs", steps: "step-indicator", stepper: "step-indicator", search: "search-bar", filter: "search-panel", "filter-panel": "search-panel", cards: "card-list", card: "card-list", paging: "pagination", detail: "detail-table", "detail-view": "detail-table", badge: "status-badge", status: "status-badge", attachments: "file-list", stats: "stat-cards", dashboard: "stat-cards", empty: "empty-state", banner: "hero-banner", hero: "hero-banner", login: "login-form", dialog: "modal", popup: "modal", confirm: "confirm-dialog", alert: "alert-dialog", notice: "notice-list", links: "quick-links", "quick-menu": "quick-links", graph: "chart", charts: "chart", "bar-chart": "chart", "line-chart": "chart", "pie-chart": "chart", "area-chart": "chart", "donut-chart": "chart", donut: "chart", statistics: "chart", stat: "chart", trend: "chart", "그래프": "chart", "차트": "chart", "통계": "chart", "추이": "chart" };
   /** 디자인 시스템에 없는 컴포넌트 이름 → 가까운 컴포넌트 ID (서버 fitUi와 같은 규칙) */
   function fitComp(ds, name, kind) {
     var ids = {};

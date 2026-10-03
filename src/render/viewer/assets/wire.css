@@ -302,3 +302,26 @@ p.fr-n { margin: 0; }
 .wf.wf-t .wf-2col { grid-template-columns: 1fr; }
 .wf.wf-t .wf-fr { grid-template-columns: 160px minmax(0, 1fr); }
 .wf.wf-t .wf-c[data-cmp="data-table"] { overflow-x: auto; }
+
+/* 차트(그래프) */
+.wf-chart { background: var(--w-chart-bg, var(--w-surface)); border: 1px solid var(--w-border); border-radius: var(--w-r-md); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--w-shadow); }
+.wf-chart svg { width: 100%; height: auto; display: block; font-family: var(--w-font); }
+.wf-ch { display: flex; justify-content: space-between; align-items: baseline; }
+.wf-ch b { font-size: var(--w-body); }
+.wf-ch span { font-size: var(--w-caption); color: var(--w-muted); }
+.wf-chart .s0 { fill: var(--w-chart-1, var(--w-primary, #1f5e8c)); stroke: var(--w-chart-1, var(--w-primary, #1f5e8c)); }
+.wf-chart .s1 { fill: var(--w-chart-2, var(--w-accent, #e8842c)); stroke: var(--w-chart-2, var(--w-accent, #e8842c)); }
+.wf-chart .s2 { fill: var(--w-chart-3, var(--w-info, #4b7bb0)); stroke: var(--w-chart-3, var(--w-info, #4b7bb0)); }
+.wf-chart rect, .wf-chart path { stroke: none; }
+.wf-chart .ln { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.wf-chart .area { opacity: .18; }
+.wf-chart .dot { stroke: var(--w-surface); stroke-width: 1.5; }
+.wf-chart .grid { stroke: var(--w-chart-grid, var(--w-border)); stroke-width: 1; }
+.wf-chart .ax, .wf-chart .lb { font-size: 11px; fill: var(--w-muted); }
+.wf-chart .lb { fill: var(--w-text); }
+.wf-chart .hole { fill: var(--w-chart-bg, var(--w-surface)); }
+.wf-chart .tot { font-size: 16px; font-weight: 700; fill: var(--w-text); }
+.wf-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--w-caption); color: var(--w-muted); }
+.wf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.wf-legend .s0 { background: var(--w-chart-1, var(--w-primary)); } .wf-legend .s1 { background: var(--w-chart-2, var(--w-accent)); } .wf-legend .s2 { background: var(--w-chart-3, var(--w-info)); }
+.wf.wf-m .wf-chart { padding: 10px 8px; }

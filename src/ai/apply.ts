@@ -182,6 +182,8 @@ const ALIAS: Record<string, string> = {
   "detail-view": "detail-table", badge: "status-badge", status: "status-badge", attachments: "file-list", stats: "stat-cards", dashboard: "stat-cards",
   empty: "empty-state", banner: "hero-banner", hero: "hero-banner", login: "login-form", dialog: "modal", popup: "modal", confirm: "confirm-dialog",
   alert: "alert-dialog", notice: "notice-list", links: "quick-links", "quick-menu": "quick-links",
+  graph: "chart", charts: "chart", "bar-chart": "chart", "line-chart": "chart", "pie-chart": "chart", "area-chart": "chart", "donut-chart": "chart", donut: "chart", "stat-chart": "chart",
+  statistics: "chart", stat: "chart", trend: "chart", 그래프: "chart", 차트: "chart", 통계: "chart", 통계그래프: "chart", 추이: "chart", 막대그래프: "chart", 원그래프: "chart",
 };
 
 /**

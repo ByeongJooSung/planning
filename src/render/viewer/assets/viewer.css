@@ -569,6 +569,8 @@ h3.cat small { color: var(--ink-3); font-weight: 400; }
 .tune { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; border-color: var(--st-done); }
 .tune-h { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
 .tune textarea, #gen-in { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); resize: vertical; }
+#gen-in { min-height: 132px; flex: 0 0 auto; box-sizing: border-box; line-height: 1.5; }
+.layer-box.full #gen-in, .layer-box.wide #gen-in { min-height: 160px; }
 .tune textarea:focus, #gen-in:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .tune-f { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .gen-body { display: grid; grid-template-columns: 340px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }

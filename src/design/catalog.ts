@@ -25,6 +25,7 @@ export const BASE_COMPONENTS: Base[] = [
   { id: "status-badge", name: "상태 뱃지", category: "data", description: "처리 상태 표시 (공통 상태값 사용)", variants: ["neutral", "info", "success", "warning", "danger"] },
   { id: "file-list", name: "첨부파일 목록", category: "data", description: "파일명·용량·내려받기", variants: [] },
   { id: "stat-cards", name: "요약 수치 카드", category: "data", description: "대시보드 건수 요약", variants: [] },
+  { id: "chart", name: "차트(그래프)", category: "data", description: "통계·추이를 그래프로. 막대·선·영역·원형·도넛. 라벨과 수치 계열을 props로", variants: ["bar", "line", "area", "pie", "donut"] },
   { id: "notice-list", name: "게시물 요약 목록", category: "content", description: "공지·새소식 최근 N건", variants: [] },
   { id: "empty-state", name: "빈 화면 안내", category: "feedback", description: "데이터가 없을 때 안내 문구", variants: [] },
   // 콘텐츠
@@ -109,6 +110,7 @@ export const COMPONENT_STYLE_VARS: Record<string, StyleVar[]> = {
   "status-badge": [v("--w-badge-r", "뱃지 모서리", "px", "999px"), v("--w-badge-bg", "뱃지 배경", "color", "투명")],
   "file-list": [v("--w-file-bg", "첨부 목록 배경", "color", "color.surface")],
   "stat-cards": [v("--w-stat-color", "수치 색", "color", "color.primary"), v("--w-stat-bg", "카드 배경", "color", "color.surface")],
+  chart: [v("--w-chart-1", "계열 1 색", "color", "color.primary"), v("--w-chart-2", "계열 2 색", "color", "color.accent"), v("--w-chart-3", "계열 3 색", "color", "color.info"), v("--w-chart-grid", "격자 색", "color", "color.border"), v("--w-chart-bg", "배경", "color", "color.surface")],
   "notice-list": [v("--w-notice-bg", "배경", "color", "color.surface")],
   "empty-state": [v("--w-empty-color", "안내 글자 색", "color", "color.textMuted")],
   "hero-banner": [v("--w-hero-bg", "배경", "color", "주 색 10%"), v("--w-hero-r", "모서리", "px", "radius.lg")],
