@@ -367,7 +367,7 @@
       var nFl = p.model.flows.filter(function (f) { return f.lanes.some(function (l) { return l.systemCode === s.code; }); }).length;
       return '<div class="orow">' + sysChip(s.code) + "<b>" + esc(s.name) + "</b>" +
         '<span class="ocell"><span class="ol">정보구조도</span><em>' + nSc + '화면</em><button class="btn-sm" data-iaxlsx="1">xlsx</button></span>' +
-        '<span class="ocell"><span class="ol">화면설계서</span><em>' + nSb + "/" + nSc + "</em>" + (nSb ? '<button class="btn-sm" data-sbx="' + esc(s.code) + '|pptx">PPTX</button><button class="btn-sm" data-sbx="' + esc(s.code) + '|pdf">PDF</button>' : '<span class="hint">없음</span>') + "</span>" +
+        '<span class="ocell"><span class="ol">화면설계서</span><em>' + nSb + "/" + nSc + "</em>" + (nSb ? '<button class="btn-sm" data-sbx="' + esc(s.code) + '|pptx">PPTX</button><button class="btn-sm" data-sbx="' + esc(s.code) + '|pdf">PDF</button><button class="btn-sm" data-sbxlsx="' + esc(s.code) + '">xlsx</button>' : '<span class="hint">없음</span>') + "</span>" +
         '<span class="ocell"><span class="ol">프로토타입</span>' + (nSb && d ? '<button class="btn-sm" data-protox="' + esc(s.code) + '">HTML</button>' : '<span class="hint">' + (d ? "화면설계서 없음" : "디자인 미선택") + "</span>") + "</span>" +
         '<span class="ocell"><span class="ol">플로우</span><em>' + nFl + '개</em><button class="btn-sm" data-page="flows">보기</button></span>' +
         '<span class="ocell"><span class="ol">테스트</span><button class="btn-sm" data-qaxlsx="' + esc(s.code) + '">xlsx</button></span>' +
@@ -727,7 +727,7 @@
       return '<button class="sb-row' + (n.id === sel ? " on" : "") + '" data-sbsel="' + esc(n.id) + '"><span class="mono">' + esc(n.id) + "</span><b>" + esc(n.name) + '</b><span class="tk">' + tk + "</span>" + (has ? workPill(p, "sb:" + n.id) : '<span class="pill NOT_STARTED">미작성</span>') + "</button>";
     }).join("");
     var nSb = screens.filter(function (n) { return p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; }); }).length;
-    var xbtns = nSb ? '<span class="xgrp"><b>⬇ 화면설계서 문서</b><button class="btn-sm" data-sbx="' + esc(code) + '|pptx" title="화면 이미지 + 편집 가능한 Description 표, 화면마다 한 장">PPTX</button><button class="btn-sm" data-sbx="' + esc(code) + '|pdf">PDF</button><button class="btn-sm" data-sbx="' + esc(code) + '|print" title="새 창에서 인쇄용 문서 열기">인쇄용 HTML</button><span class="hint">' + nSb + "개 화면</span></span>" : "";
+    var xbtns = nSb ? '<span class="xgrp"><b>⬇ 화면설계서 문서</b><button class="btn-sm" data-sbx="' + esc(code) + '|pptx" title="화면 이미지 + 편집 가능한 Description 표, 화면마다 한 장">PPTX</button><button class="btn-sm" data-sbx="' + esc(code) + '|pdf">PDF</button><button class="btn-sm" data-sbx="' + esc(code) + '|print" title="새 창에서 인쇄용 문서 열기">인쇄용 HTML</button><button class="btn-sm" data-sbxlsx="' + esc(code) + '" title="기관 제출용 엑셀: 화면 목록 · Description 상세 · 기능 요구사항 반영 현황">엑셀 양식</button><span class="hint">' + nSb + "개 화면</span></span>" : "";
     return '<section class="section"><div class="toolbar">' + chips + (ed ? actBtn("screen-new", "+ 새 화면", "|" + code) : "") + '<button class="btn-sm fe-open" data-iaedit="' + esc(code) + '"' + (sel ? ' data-iasel="' + esc(sel) + '"' : "") + ">▣ 정보구조도 캔버스에서 Task 연결·구조 편집</button>" + xbtns + "</div>" +
       (noTask ? '<div class="note row"><div><b>Task가 없는 화면 ' + noTask + '개</b><p class="hint">Task 자동 연결이 맞지 않으면 화면을 고른 뒤 ‘Task 연결 편집’으로 직접 연결하세요. Task 없이도 화면설계서를 작성·AI 생성할 수 있습니다.</p></div></div>' : "") +
       '<div class="sb-page"><nav class="sb-list" aria-label="' + esc(code) + ' 화면 목록">' + (rows || '<div class="empty">정보구조도에 화면이 없습니다.</div>') + "</nav>" +
@@ -1320,6 +1320,7 @@
       var ia = iaXlsxBytes(); files.push({ name: safe(ia.name) + ".xlsx", data: ia.bytes });
       var qa = qaXlsxBytes(code || null); files.push({ name: safe(qa.name) + ".xlsx", data: qa.bytes });
       var rt = rtmXlsxBytes(); files.push({ name: safe(rt.name) + ".xlsx", data: rt.bytes });
+      var sx = sbXlsxBytes(code || null); if (sx) files.push({ name: safe(sx.name) + ".xlsx", data: sx.bytes });
     } catch (e) { notes.push("엑셀: " + e.message); }
     // 플로우 PPTX (시스템 레인이 있는 플로우)
     p.model.flows.forEach(function (f) {
@@ -1346,7 +1347,7 @@
       });
     });
     chain.then(function () {
-      var readme = ["# " + pr.name + " 기획 산출물 패키지", "", "- 만든 날짜: " + date + " · 작업 버전 v" + pr.version, "- 시스템: " + systems.map(function (s) { return s.code + " " + s.name; }).join(", "), "", "## 파일", ""].concat(files.map(function (f) { return "- " + f.name; })).concat(notes.length ? ["", "## 만들지 못한 것", ""].concat(notes.map(function (n) { return "- " + n; })) : []).concat(["", "정보구조도·요구사항 추적표·테스트는 엑셀, 화면설계서는 PPTX(편집 가능)와 PDF, 프로토타입은 HTML 한 파일(브라우저에서 열어 클릭), 플로우는 PPTX·SVG, 디자인 토큰은 DTCG JSON(Figma 변수)입니다."]).join("\n");
+      var readme = ["# " + pr.name + " 기획 산출물 패키지", "", "- 만든 날짜: " + date + " · 작업 버전 v" + pr.version, "- 시스템: " + systems.map(function (s) { return s.code + " " + s.name; }).join(", "), "", "## 파일", ""].concat(files.map(function (f) { return "- " + f.name; })).concat(notes.length ? ["", "## 만들지 못한 것", ""].concat(notes.map(function (n) { return "- " + n; })) : []).concat(["", "정보구조도·요구사항 추적표·테스트는 엑셀, 화면설계서는 PPTX(편집 가능)·PDF와 기관 제출용 엑셀(화면 목록·Description·요구사항 반영), 프로토타입은 HTML 한 파일(브라우저에서 열어 클릭), 플로우는 PPTX·SVG, 디자인 토큰은 DTCG JSON(Figma 변수)입니다."]).join("\n");
       files.unshift({ name: "README.md", data: readme });
       FlowExport.download(new Blob([FlowExport.zip(files)], { type: "application/zip" }), safe(pr.code + (code ? "_" + code : "") + "_기획산출물_" + date) + ".zip");
       toast("산출물 " + files.length + "개를 묶어 내려받았습니다" + (notes.length ? " (일부 실패: " + notes.length + ")" : ""));
@@ -2683,6 +2684,50 @@
         widths: [20, 18, 22, 22, 8, 28, 18, 36, 30, 16, 8].concat(ch.map(function () { return 16; })), merges: ["A1:F1"] };
     });
     return { bytes: xlsx(sheets), name: pr.code + "_테스트_" + (code || "전체") + "_" + new Date().toISOString().slice(0, 10) };
+  }
+
+  /** 화면설계서 엑셀(기관 제출용): 화면 목록 · 시스템별 Description 상세 · 기능 요구사항 반영 현황 */
+  function sbXlsx(code) { var r = sbXlsxBytes(code); if (!r) return toast("작성된 화면설계서가 없습니다", "err"); saveXlsx(r.bytes, r.name); }
+  var TPL_LABEL = { login: "로그인", dashboard: "대시보드", main: "메인", list: "목록", detail: "상세", form: "입력·등록", popup: "팝업" };
+  function sbXlsxBytes(code) {
+    var p = P(), pr = p.model.project, date = new Date().toISOString().slice(0, 10);
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens && (!code || s.code === code); });
+    var SBST = { DRAFT: "초안", REVIEWED: "검토 완료" }, SRC = { spec: "기능 명세", task: "Task", req: "요구사항" }, HOW = { manual: "직접 지정", ai: "AI 답", auto: "자동 추정", none: "" };
+    var reqOf = function (tid) { var out = []; p.model.requirements.forEach(function (r) { if (r.tasks.some(function (t) { return t.id === tid; }) && out.indexOf(r.id) < 0) out.push(r.id); }); return out; };
+    var list = [], detail = [], cov = [], n = 0;
+    systems.forEach(function (s) {
+      var rows = [], crows = [];
+      systemScreens(p, s.code).forEach(function (node) {
+        var sb = p.model.storyboard.screens.find(function (x) { return x.screenId === node.id; });
+        var ctx = wireCtx(p, s.code, node.id), loc = ctx.crumbs.slice(0, -1).join(" > ");
+        var tasks = (sb && sb.taskIds && sb.taskIds.length ? sb.taskIds : node.taskIds) || [], reqs = [];
+        tasks.forEach(function (t) { reqOf(t).forEach(function (r) { if (reqs.indexOf(r) < 0) reqs.push(r); }); });
+        var rep = sb ? covReport(p, node.id, sb.components, null, sb.coverage) : { total: 0, done: 0, rows: [] };
+        list.push([++n, s.code + " " + s.name, node.id, node.name, loc, KIND[node.kind] || node.kind, sb && sb.template ? TPL_LABEL[sb.template] || sb.template : "", sb ? sb.components.length : 0, sb ? SBST[sb.status] || sb.status : "미작성", WORK_LABEL[workOf(p, "sb:" + node.id).status], tasks.join(", "), reqs.join(", "), rep.total ? rep.done + "/" + rep.total : "", node.note || ""]);
+        if (!sb) return;
+        if (!sb.components.length) rows.push([node.id, node.name, loc, "", "", "", "", "(항목 없음)", "", "", "", "", "", tasks.join(", ")]);
+        sb.components.forEach(function (c, i) {
+          var v = c.validation, vparts = [], msgs = [];
+          if (v) {
+            vparts.push(v.required ? "필수" : "선택");
+            if (v.minLength != null || v.maxLength != null) vparts.push((v.minLength != null ? v.minLength : 0) + "~" + (v.maxLength != null ? v.maxLength : "") + "자");
+            if (v.format) vparts.push(v.format);
+            if (v.allowedChars) vparts.push("허용: " + v.allowedChars);
+            if (v.timing && v.timing.length) vparts.push("검증 " + v.timing.map(function (t) { return { ON_INPUT: "입력 중", ON_BLUR: "포커스 아웃", ON_SUBMIT: "제출 시" }[t] || t; }).join("·"));
+            (v.messages || []).forEach(function (m) { msgs.push((m.condition ? m.condition + " → " : "") + m.text); });
+          }
+          var opt = c.options && Array.isArray(c.options.values) && c.options.values.length ? c.options.values.join(" / ") + (c.options.default ? " (기본: " + c.options.default + ")" : "") + (c.options.note ? "\n" + c.options.note : "") : "";
+          rows.push([i === 0 ? node.id : "", i === 0 ? node.name : "", i === 0 ? loc : "", c.no, c.label, c.kind || "", c.ui ? c.ui.component + (c.ui.tree ? " (직접 그림)" : "") : "", c.planner || "", c.customer || "", opt, vparts.join(" · "), msgs.join("\n"), c.ui && c.ui.link ? c.ui.link : "", i === 0 ? tasks.join(", ") : ""]);
+        });
+        rep.rows.forEach(function (r) { crows.push([node.id, node.name, r.reqId, SRC[r.source] || r.source, r.text, r.ok ? (r.na ? "해당 없음" : "반영") : "미반영", r.by.join(", "), HOW[r.how], r.note || ""]); });
+      });
+      if (rows.length) detail.push({ name: s.code + " 화면설계서", title: pr.name + " - 화면설계서 (Description) / " + s.name, head: [["화면 ID", "화면명", "메뉴 위치", "No", "항목", "유형", "UI 컴포넌트", "기획 설명 (정책·규칙·예외)", "고객 설명 (보이는 것·할 수 있는 것)", "옵션·선택지", "유효성", "안내 메시지", "이동 화면", "연결 Task"]], rows: rows,
+        widths: [20, 16, 22, 5, 18, 10, 14, 44, 40, 24, 20, 30, 18, 16], merges: ["A1:H1"] });
+      if (crows.length) cov.push({ name: s.code + " 요구사항 반영", title: pr.name + " - 기능 요구사항 반영 현황 / " + s.name, head: [["화면 ID", "화면명", "요구사항 ID", "출처", "요구 내용", "반영 여부", "반영 항목 No", "판정 근거", "비고"]], rows: crows, widths: [20, 16, 12, 10, 60, 10, 14, 10, 24], merges: ["A1:F1"] });
+    });
+    if (!detail.length) return null;
+    var sheets = [{ name: "화면 목록", title: pr.name + " - 화면설계서 목록 (" + date + ")", head: [["No", "시스템", "화면 ID", "화면명", "메뉴 위치", "화면 유형", "템플릿", "항목 수", "작성 상태", "작업 상태", "연결 Task", "요구사항 ID", "요구 반영", "비고"]], rows: list, widths: [5, 22, 20, 18, 26, 8, 10, 7, 10, 10, 20, 20, 9, 24], merges: ["A1:F1"] }].concat(detail, cov);
+    return { bytes: xlsx(sheets), name: pr.code + "_화면설계서_" + (code || "전체") + "_" + date };
   }
 
   // ── 통합: 시스템별 프로세스 플로우 ─────────────
@@ -5032,11 +5077,12 @@
     if (cgb) { commentGen(cgb.dataset.cmtgen); return; }
     var udb = target.closest && target.closest("[data-dsundo]");
     if (udb) { dsUndo(udb.dataset.dsundo); return; }
-    var qb = target.closest && target.closest("[data-iaxlsx],[data-qaxlsx],[data-qago],[data-qadraft],[data-qaai],[data-iaview]");
+    var qb = target.closest && target.closest("[data-iaxlsx],[data-qaxlsx],[data-sbxlsx],[data-qago],[data-qadraft],[data-qaai],[data-iaview]");
     if (qb) {
       var qd = qb.dataset;
       if (qd.iaxlsx) iaXlsx();
       else if (qd.qaxlsx) qaXlsx(qd.qaxlsx);
+      else if (qd.sbxlsx != null) sbXlsx(qd.sbxlsx || null);
       else if (qd.qago) { var qn = P().model.ia.nodes.find(function (x) { return x.id === qd.qago; }); if (qn) { state.dsSys[P().model.project.code] = qn.systemCode; state.qaSel = state.qaSel || {}; state.qaSel[qn.systemCode] = qn.id; } go({ view: "project", p: state.route.p, page: "qa" }); }
       else if (qd.qadraft) { qb.disabled = true; cmd({ op: "qa.draft", screenId: qd.qadraft }).catch(function (e) { toast(e.message, "err"); render(); }); }
       else if (qd.qaai) qaAi(qd.qaai, qb);
