@@ -356,8 +356,21 @@
       return '<div class="wsys">' + sysChip(x.code) + "<b>" + esc(x.name) + '</b><span class="wcell"><span class="wl">정보구조도</span>' + workPill(p, "ia:" + x.code) + '</span><span class="wcell"><span class="wl">디자인</span>' + workPill(p, "ds:" + x.code) + "</span>" +
         '<div class="wcell grow"><span class="wl">화면설계서 ' + x.screens.length + "</span>" + workStack(x.counts, x.screens.length) + "</div>" + protoLink(p, x.code) + "</div>";
     }).join("");
+    var outRows = p.model.systems.filter(function (s) { return s.hasScreens; }).map(function (s) {
+      var nSb = p.model.storyboard.screens.filter(function (x) { return x.systemCode === s.code; }).length, nSc = systemScreens(p, s.code).length, d = selectedDesign(p, s.code);
+      var nFl = p.model.flows.filter(function (f) { return f.lanes.some(function (l) { return l.systemCode === s.code; }); }).length;
+      return '<div class="orow">' + sysChip(s.code) + "<b>" + esc(s.name) + "</b>" +
+        '<span class="ocell"><span class="ol">정보구조도</span><em>' + nSc + '화면</em><button class="btn-sm" data-iaxlsx="1">xlsx</button></span>' +
+        '<span class="ocell"><span class="ol">화면설계서</span><em>' + nSb + "/" + nSc + "</em>" + (nSb ? '<button class="btn-sm" data-sbx="' + esc(s.code) + '|pptx">PPTX</button><button class="btn-sm" data-sbx="' + esc(s.code) + '|pdf">PDF</button>' : '<span class="hint">없음</span>') + "</span>" +
+        '<span class="ocell"><span class="ol">프로토타입</span>' + (nSb && d ? '<button class="btn-sm" data-protox="' + esc(s.code) + '">HTML</button>' : '<span class="hint">' + (d ? "화면설계서 없음" : "디자인 미선택") + "</span>") + "</span>" +
+        '<span class="ocell"><span class="ol">플로우</span><em>' + nFl + '개</em><button class="btn-sm" data-page="flows">보기</button></span>' +
+        '<span class="ocell"><span class="ol">테스트</span><button class="btn-sm" data-qaxlsx="' + esc(s.code) + '">xlsx</button></span>' +
+        '<span class="ocell"><span class="ol">디자인</span>' + (d ? '<button class="btn-sm" data-figx="' + esc(s.code) + '|tokens">토큰 JSON</button>' : '<span class="hint">미선택</span>') + "</span>" +
+        '<span class="sp"></span><button class="btn-sm btn-primary" data-pkg="' + esc(s.code) + '" title="이 시스템의 모든 산출물을 zip 하나로">⬇ 패키지</button></div>';
+    }).join("");
     return '<section class="section"><h2>단계 진행' + (canEdit() ? " <small>단계를 누르면 상태를 바꿉니다</small>" : "") + '</h2><div class="box stages">' + stages + "</div></section>" +
       (wrows ? '<section class="section"><h2>시스템별 설계 진행 <small>미진행 · 진행중 · 재검토 필요 · 완료 — AI가 만든 결과는 검토 후 완료로 표시합니다</small></h2><div class="box wsyss">' + wrows + "</div></section>" : "") +
+      (outRows ? '<section class="section"><h2>산출물 내려받기 <small>정보구조도 · 화면설계서 · 프로토타입 · 플로우 · 테스트 · 디자인 토큰</small><button class="btn-sm btn-primary" data-pkg="" title="모든 시스템의 산출물을 zip 하나로">⬇ 전체 패키지 (zip)</button></h2><div class="box outs">' + outRows + "</div></section>" : "") +
       '<section class="kpis">' + kpis + "</section>" +
       '<div class="dash-3">' +
       '<section class="section"><h2>참조자료 <small>프로젝트 지식</small></h2><button class="box tile" data-page="kb"><b>' + p.model.sources.length + "<small>건</small></b><span>검색 색인 " + chunks + "조각</span></button></section>" +
@@ -1149,6 +1162,105 @@
       kind === "print" ? SbExport.printHtml(items, opts, step).then(function (html) { var w = window.open("", "_blank"); if (!w) throw new Error("팝업이 막혔습니다 — 이 사이트의 팝업을 허용하세요"); w.document.open(); w.document.write(html); w.document.close(); }) :
       SbExport.deck(items, opts, step).then(function (bytes) { FlowExport.download(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }), base + ".pptx"); });
     job.then(function () { done(); toast("화면설계서 " + items.length + "개 화면을 " + { pdf: "PDF", print: "인쇄용 문서", pptx: "PPTX" }[kind] + "로 만들었습니다"); }, function (e) { done(); toast("내보내기 실패: " + (e && e.message || e), "err"); });
+  }
+
+  // ── 프로토타입 독립 HTML (한 파일, 클릭 이동·확인 창·토스트 동작) ──
+  function protoHtml(code) {
+    var p = P(), s = sysOf(p, code), list = systemScreens(p, code).filter(function (n) { return p.model.storyboard.screens.some(function (x) { return x.screenId === n.id; }); });
+    if (!list.length) return null;
+    var ds = wireDesign(p, code);
+    if (!ds) return null;
+    var css = (window.SbExport && SbExport.pageCss ? SbExport.pageCss() : "");
+    var screens = list.map(function (n) {
+      var sb = p.model.storyboard.screens.find(function (x) { return x.screenId === n.id; });
+      return { id: n.id, name: n.name, kind: KIND[n.kind] || "", path: wireCtx(p, code, n.id).crumbs.join(" > "), html: screenWire(p, sb, false) || "" };
+    });
+    var nav = (function () {
+      var nodes = p.model.ia.nodes.filter(function (n) { return n.systemCode === code; }), ids = {}; nodes.forEach(function (n) { ids[n.id] = true; });
+      var has = {}; screens.forEach(function (x) { has[x.id] = true; });
+      var out = "";
+      (function walk(pid, d) {
+        nodes.filter(function (n) { return (n.parentId && ids[n.parentId] ? n.parentId : null) === pid; }).forEach(function (n) {
+          out += n.kind === "MENU" ? '<div class="m" style="padding-left:' + (8 + d * 12) + 'px">' + esc(n.name) + "</div>" : '<button class="s' + (has[n.id] ? "" : " off") + '" data-go="' + esc(n.id) + '" style="padding-left:' + (8 + d * 12) + 'px"' + (has[n.id] ? "" : " disabled") + ">" + esc(n.name) + (has[n.id] ? "" : " <i>미작성</i>") + "</button>";
+          walk(n.id, d + 1);
+        });
+      })(null, 0);
+      return out;
+    })();
+    var confirmT = Wire.component(null, "confirm-dialog", { title: "확인", message: "{{MSG}}", confirm: "확인", cancel: "취소" }), alertT = Wire.component(null, "alert-dialog", { title: "입력 내용을 확인해 주세요", message: "{{MSG}}", tone: "danger" }), toastT = Wire.component(null, "toast", { message: "{{MSG}}", tone: "success" });
+    var title = p.model.project.name + " · " + code + " " + (s ? s.name : "") + " 프로토타입";
+    var app = [
+      "(function(){",
+      "var S=" + JSON.stringify(screens).replace(/<\//g, "<\\/") + ",T=" + JSON.stringify({ confirm: confirmT, alert: alertT, toast: toastT }).replace(/<\//g, "<\\/") + ",vars=" + JSON.stringify(Wire.vars(ds)) + ",cur=null,pend=null;",
+      "var fr=document.getElementById('fr'),vp=document.getElementById('vp'),hd=document.getElementById('hd');",
+      "function esc(s){return String(s==null?'':s).replace(/[&<>\"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c];});}",
+      "function fit(){var w=fr.clientWidth,z=Math.min(1,w/" + VW + ");vp.style.transform='scale('+z+')';fr.style.height=Math.round(" + VH + "*z)+'px';document.getElementById('pct').textContent=Math.round(z*100)+'%';}",
+      "function go(id,msg){var sc=S.find(function(x){return x.id===id;});if(!sc){toast('화면설계서가 없는 화면입니다: '+id,'danger');return;}cur=id;vp.innerHTML=sc.html;hd.innerHTML='<b>'+esc(sc.id)+'</b> '+esc(sc.name)+' <span>'+esc(sc.path)+' · '+esc(sc.kind)+'</span>';document.querySelectorAll('#nav [data-go]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===id);});history.replaceState(null,'','#'+id);if(msg)toast(msg);var i=S.indexOf(sc);document.getElementById('prev').disabled=i<=0;document.getElementById('next').disabled=i>=S.length-1;document.getElementById('pos').textContent=(i+1)+' / '+S.length;}",
+      "function overlay(html){var o=document.createElement('div');o.className='wf-overlay';o.innerHTML=html;vp.appendChild(o);}",
+      "function toast(msg,tone){var w=document.createElement('div');w.className='wf-toast-wrap';w.innerHTML=T.toast.replace('{{MSG}}',esc(msg)).replace('success',tone||'success');vp.appendChild(w);setTimeout(function(){if(w.parentNode)w.parentNode.removeChild(w);},2200);}",
+      "document.addEventListener('click',function(ev){var el=ev.target;var g=el.closest('[data-go]');if(g){go(g.getAttribute('data-go'));return;}",
+      "if(el.closest('[data-close]')){var o=el.closest('.wf-overlay');if(o)o.parentNode.removeChild(o);return;}",
+      "if(el.closest('[data-ok]')){var ov=el.closest('.wf-overlay');if(ov)ov.parentNode.removeChild(ov);if(pend){var pd=pend;pend=null;if(pd.link)go(pd.link,pd.message);else toast(pd.message||'처리했습니다.');}return;}",
+      "var b=el.closest('[data-action]');if(b){var act=b.getAttribute('data-action'),msg=b.getAttribute('data-message');if(act==='toast'){toast(msg||'저장했습니다.');return;}if(act==='submit'){var bad=[];vp.querySelectorAll('[data-required]').forEach(function(inp){var err=inp.parentNode.querySelector('.wf-err');if(!inp.value.trim()){bad.push(inp);inp.classList.add('invalid');if(err){err.textContent=inp.getAttribute('data-msg');err.hidden=false;}}else{inp.classList.remove('invalid');if(err)err.hidden=true;}});if(bad.length){overlay(T.alert.replace('{{MSG}}',esc(bad[0].getAttribute('data-msg'))));return;}pend={link:b.getAttribute('data-link'),message:msg};overlay(T.confirm.replace('{{MSG}}',esc(b.getAttribute('data-confirm')||'진행할까요?')));return;}}",
+      "var l=el.closest('[data-link]');if(l&&vp.contains(l)){go(l.getAttribute('data-link'));}});",
+      "document.getElementById('prev').onclick=function(){var i=S.findIndex(function(x){return x.id===cur;});if(i>0)go(S[i-1].id);};document.getElementById('next').onclick=function(){var i=S.findIndex(function(x){return x.id===cur;});if(i<S.length-1)go(S[i+1].id);};",
+      "vp.setAttribute('style',vars);window.addEventListener('resize',fit);go((location.hash||'').slice(1)||S[0].id);fit();",
+      "})();"
+    ].join("\n");
+    return "<!doctype html><" + "html lang=\"ko\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + esc(title) + "</title><style>" + css.replace(/<\//g, "<\\/") +
+      "\nhtml,body{margin:0;height:100%;background:#eef1f5;font-family:Pretendard,'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#16202c}.top{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #d9dee5}.top h1{font-size:15px;margin:0}.top .sp{flex:1}.top button{font:inherit;font-size:12px;padding:5px 10px;border:1px solid #d9dee5;border-radius:6px;background:#fff;cursor:pointer}.top button:disabled{opacity:.4;cursor:default}.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;padding:14px 16px;box-sizing:border-box;min-height:calc(100% - 50px)}#nav{background:#fff;border:1px solid #d9dee5;border-radius:10px;padding:8px 0;align-self:start;position:sticky;top:14px;max-height:calc(100vh - 80px);overflow:auto}#nav .m{font-size:12px;font-weight:700;color:#4a5566;padding:8px 8px 4px}#nav .s{display:block;width:100%;text-align:left;font:inherit;font-size:13px;padding:6px 8px;border:0;background:none;cursor:pointer;border-left:3px solid transparent}#nav .s.on{background:#e3edf5;border-left-color:#1f5e8c;font-weight:600}#nav .s.off{color:#9aa3af;cursor:default}#nav .s i{font-style:normal;font-size:11px}#hd{font-size:13px;padding:0 0 8px}#hd b{font-family:ui-monospace,Menlo,monospace;color:#1f5e8c}#hd span{color:#6b7280;margin-left:8px}#fr{position:relative;width:100%;overflow:hidden;background:#fff;border:1px solid #d9dee5;border-radius:8px}#vp{position:absolute;left:0;top:0;width:" + VW + "px;height:" + VH + "px;transform-origin:0 0}.cap{font-size:11px;color:#6b7280;padding:6px 2px;display:flex;justify-content:space-between}@media(max-width:800px){.wrap{grid-template-columns:1fr}#nav{position:static;max-height:none}}" +
+      "</style></head><body><div class=\"top\"><h1>" + esc(title) + "</h1><span class=\"sp\"></span><span id=\"pos\"></span><button id=\"prev\">← 이전</button><button id=\"next\">다음 →</button></div><div class=\"wrap\"><nav id=\"nav\">" + nav + "</nav><div><div id=\"hd\"></div><div id=\"fr\"><div id=\"vp\" class=\"wf-vp\"></div></div><div class=\"cap\"><span>" + VW + " × " + VH + " 뷰포트 · 목록 행·버튼을 눌러 이동, 필수 항목을 비우고 신청하면 설계한 오류 문구</span><span id=\"pct\"></span></div></div></div><script>" + app + "</" + "script></body></" + "html>";
+  }
+  function protoExport(code, btn) {
+    var p = P(), html = protoHtml(code);
+    if (!html) return toast("프로토타입으로 만들 화면설계서가 없습니다", "err");
+    FlowExport.download(new Blob([html], { type: "text/html;charset=utf-8" }), (p.model.project.code + "_" + code + "_프로토타입_" + new Date().toISOString().slice(0, 10)).replace(/[\\/:*?"<>|\s]+/g, "_") + ".html");
+    toast(code + " 프로토타입을 HTML 한 파일로 내려받았습니다 — 브라우저에서 열면 바로 클릭해 볼 수 있습니다");
+  }
+
+  // ── 산출물 패키지 (zip): 정보구조도 xlsx · 화면설계서 PPTX·PDF · 프로토타입 HTML · 테스트 xlsx · 플로우 PPTX · 디자인 토큰 ──
+  function packageExport(code, btn) {
+    var p = P(), pr = p.model.project, date = new Date().toISOString().slice(0, 10), label = btn ? btn.textContent : "";
+    var systems = p.model.systems.filter(function (s) { return s.hasScreens && (!code || s.code === code); });
+    if (!systems.length) return toast("화면이 있는 시스템이 없습니다", "err");
+    if (btn) { btn.disabled = true; btn.textContent = "묶는 중…"; }
+    var step = function (t) { if (btn) btn.textContent = t; };
+    var files = [], notes = [];
+    var safe = function (n) { return String(n).replace(/[\\/:*?"<>|]+/g, "_"); };
+    try {
+      var ia = iaXlsxBytes(); files.push({ name: safe(ia.name) + ".xlsx", data: ia.bytes });
+      var qa = qaXlsxBytes(code || null); files.push({ name: safe(qa.name) + ".xlsx", data: qa.bytes });
+    } catch (e) { notes.push("엑셀: " + e.message); }
+    // 플로우 PPTX (시스템 레인이 있는 플로우)
+    p.model.flows.forEach(function (f) {
+      if (code && !f.lanes.some(function (l) { return l.systemCode === code; })) return;
+      try { var b = FlowExport.build(f, { project: pr.name }); files.push({ name: "플로우/" + safe(FlowExport.fileName(f, "pptx")), data: FlowExport.pptx(f, b, { project: pr.name }) }); files.push({ name: "플로우/" + safe(FlowExport.fileName(f, "svg")), data: b.svg }); } catch (e) { notes.push("플로우 " + f.id + ": " + e.message); }
+    });
+    var chain = Promise.resolve();
+    systems.forEach(function (s) {
+      var dir = safe(s.code + "_" + s.name) + "/";
+      chain = chain.then(function () {
+        var d = selectedDesign(p, s.code);
+        if (d) files.push({ name: dir + "디자인토큰_" + s.code + ".json", data: Frames.tokensJson(d, pr.name + " · " + s.code) });
+        var ph = protoHtml(s.code);
+        if (ph) files.push({ name: dir + "프로토타입_" + s.code + ".html", data: ph });
+        var items = sbExportItems(p, s.code, null);
+        if (!items.length) return;
+        measureMarks(items);
+        var opts = { project: pr.name, system: s.code + " " + s.name, date: date, version: pr.version, vw: VW };
+        return SbExport.deck(items, opts, function (i, n) { step(s.code + " 화면설계서 " + i + "/" + n); }).then(function (bytes) {
+          files.push({ name: dir + "화면설계서_" + s.code + "_" + date + ".pptx", data: bytes });
+          // PDF는 같은 그림을 다시 쓰므로 빠르다
+          return SbExport.pdf(items, opts, function () {}).then(function (bl) { return bl.arrayBuffer(); }).then(function (ab) { files.push({ name: dir + "화면설계서_" + s.code + "_" + date + ".pdf", data: new Uint8Array(ab) }); });
+        });
+      });
+    });
+    chain.then(function () {
+      var readme = ["# " + pr.name + " 기획 산출물 패키지", "", "- 만든 날짜: " + date + " · 작업 버전 v" + pr.version, "- 시스템: " + systems.map(function (s) { return s.code + " " + s.name; }).join(", "), "", "## 파일", ""].concat(files.map(function (f) { return "- " + f.name; })).concat(notes.length ? ["", "## 만들지 못한 것", ""].concat(notes.map(function (n) { return "- " + n; })) : []).concat(["", "정보구조도·테스트는 엑셀, 화면설계서는 PPTX(편집 가능)와 PDF, 프로토타입은 HTML 한 파일(브라우저에서 열어 클릭), 플로우는 PPTX·SVG, 디자인 토큰은 DTCG JSON(Figma 변수)입니다."]).join("\n");
+      files.unshift({ name: "README.md", data: readme });
+      FlowExport.download(new Blob([FlowExport.zip(files)], { type: "application/zip" }), safe(pr.code + (code ? "_" + code : "") + "_기획산출물_" + date) + ".zip");
+      toast("산출물 " + files.length + "개를 묶어 내려받았습니다" + (notes.length ? " (일부 실패: " + notes.length + ")" : ""));
+    }).catch(function (e) { toast("패키지 실패: " + (e && e.message || e), "err"); }).then(function () { if (btn) { btn.disabled = false; btn.textContent = label; } });
   }
 
   // ── 화면설계서 캔버스 편집 도구: 항목 고르기 · 모양(프레임) 편집 · 내용(props) 편집 · 복제 · 순서 · 새 항목 그리기 ──
@@ -2366,7 +2478,7 @@
     return FlowExport.zip(files);
   }
   function saveXlsx(bytes, name) { FlowExport.download(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), name.replace(/[\\/:*?"<>|\s]+/g, "_") + ".xlsx"); }
-  function iaXlsx() {
+  function iaXlsxBytes() {
     var p = P(), pr = p.model.project;
     var sheets = p.model.systems.filter(function (s) { return s.hasScreens; }).map(function (s) {
       var rows = iaRows(p, s.code), D = maxDepth(rows), ch = testChs(p, s.code);
@@ -2389,9 +2501,11 @@
       return { name: s.name + "(" + s.code + ")", title: pr.name + " - 메뉴구성도 / " + s.name, head: [h1, h2], rows: body, merges: merges,
         widths: [].concat(Array.apply(null, Array(D)).map(function () { return 16; }), [30, 8, 22, 12, 9, 8, 10, 10, 10, 10, 12, 20, 24, 24], ch.map(function () { return 8; }), ch.map(function () { return 12; })) };
     });
-    saveXlsx(xlsx(sheets), pr.code + "_정보구조도_" + new Date().toISOString().slice(0, 10));
+    return { bytes: xlsx(sheets), name: pr.code + "_정보구조도_" + new Date().toISOString().slice(0, 10) };
   }
-  function qaXlsx(code) {
+  function iaXlsx() { var r = iaXlsxBytes(); saveXlsx(r.bytes, r.name); }
+  function qaXlsx(code) { var r = qaXlsxBytes(code); saveXlsx(r.bytes, r.name); }
+  function qaXlsxBytes(code) {
     var p = P(), pr = p.model.project;
     var systems = p.model.systems.filter(function (s) { return s.hasScreens && (!code || s.code === code); });
     var sheets = systems.map(function (s) {
@@ -2410,7 +2524,7 @@
       return { name: s.name + " 테스트", title: pr.name + " - 테스트 케이스 / " + s.name, head: [["화면 ID", "화면명", "메뉴 위치", "케이스 ID", "유형", "테스트 항목", "사전 조건", "절차", "기대 결과", "Task", "설명 번호"].concat(ch.map(function (c) { return c.label + " 결과"; }))], rows: rows,
         widths: [20, 18, 22, 22, 8, 28, 18, 36, 30, 16, 8].concat(ch.map(function () { return 16; })), merges: ["A1:F1"] };
     });
-    saveXlsx(xlsx(sheets), pr.code + "_테스트_" + (code || "전체") + "_" + new Date().toISOString().slice(0, 10));
+    return { bytes: xlsx(sheets), name: pr.code + "_테스트_" + (code || "전체") + "_" + new Date().toISOString().slice(0, 10) };
   }
 
   // ── 통합: 시스템별 프로세스 플로우 ─────────────
@@ -4570,6 +4684,10 @@
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
+    var pxb = target.closest && target.closest("[data-protox]");
+    if (pxb) { protoExport(pxb.getAttribute("data-protox"), pxb); return; }
+    var pkb = target.closest && target.closest("[data-pkg]");
+    if (pkb) { packageExport(pkb.getAttribute("data-pkg") || null, pkb); return; }
     var sbx = target.closest && target.closest("[data-sbx]");
     if (sbx) { var sxa = sbx.getAttribute("data-sbx").split("|"); sbExport(sxa[0], sxa[1], sxa[2] || null, sbx); return; }
     var dst = target.closest && target.closest("[data-dstab]");

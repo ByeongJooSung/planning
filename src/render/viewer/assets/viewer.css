@@ -1291,3 +1291,15 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .dgen-t td.act .btn-sm + .btn-sm { margin-left: 4px; }
 .mixbar .pmini { max-width: 340px; opacity: .85; } .mixbar .pmini.on { opacity: 1; }
 .xgrp { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px dashed var(--line-strong); border-radius: 8px; } .xgrp > b { font-size: 12px; color: var(--ink-2); }
+
+/* 대시보드 산출물 내려받기 */
+.outs { display: flex; flex-direction: column; }
+.orow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.orow:first-child { border-top: 0; }
+.orow > b { min-width: 0; white-space: nowrap; }
+.orow .sp { flex: 1; }
+.ocell { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.ocell .ol { color: var(--ink-3); }
+.ocell em { font-style: normal; color: var(--ink-2); }
+.ocell .btn-sm { padding: 2px 7px; font-size: 11.5px; }
+.section h2 .btn-primary { margin-left: auto; }

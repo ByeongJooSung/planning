@@ -221,7 +221,7 @@
 
   /** 디자인 시스템에 추가된 컴포넌트: 기본 렌더러가 없으면 이름과 항목으로 그린다 */
   function generic(ds, id, p) {
-    var comp = (ds.components || []).find(function (c) { return c.id === id; });
+    var comp = (ds && ds.components || []).find(function (c) { return c.id === id; });
     var name = comp ? comp.name : id;
     var items = p.items || [];
     return '<div class="wf-generic"><div class="wf-gh"><b>' + esc(name) + "</b><code>" + esc(id) + "</code></div>" +
@@ -234,11 +234,11 @@
   /** 컴포넌트 하나. data-cmp로 감싸 댓글 핀·번호 라벨이 어떤 컴포넌트인지 알 수 있게 한다 */
   function component(ds, id, props, ctx, link, spec) {
     // 이 화면에서만 고친 모양(항목 프레임)이 있으면 그 모양 그대로
-    if (spec && spec.ui && spec.ui.tree && window.Frames) {
+    if (ds && spec && spec.ui && spec.ui.tree && window.Frames) {
       return '<div class="wf-c wf-frc" data-cmp="' + esc(id) + '" data-own="1"' + (link ? ' data-link="' + esc(link) + '"' : "") + ">" + window.Frames.html(spec.ui.tree, { ds: ds, props: Object.assign({}, props || {}), comps: ds.components }) + "</div>";
     }
     // 프레임 편집기로 그린 모양이 있으면 그 모양으로 (props는 텍스트 bind에 들어간다)
-    var fc = (ds.components || []).find(function (c) { return c.id === id && c.tree; });
+    var fc = (ds && ds.components || []).find(function (c) { return c.id === id && c.tree; });
     if (fc && window.Frames) {
       var p2 = Object.assign({}, props || {});
       if (spec && spec.label) { if (p2.label == null) p2.label = spec.label; if (p2.title == null) p2.title = spec.label; }

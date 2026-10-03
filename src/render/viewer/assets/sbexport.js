@@ -322,5 +322,5 @@
     });
   }
 
-  root.SbExport = { capture: capture, deck: deck, pdf: pdf, printHtml: printHtml, descRows: descRows, buildPdfPages: buildPdfPages };
+  root.SbExport = { pageCss: pageCss, capture: capture, deck: deck, pdf: pdf, printHtml: printHtml, descRows: descRows, buildPdfPages: buildPdfPages };
 })(typeof window !== "undefined" ? window : globalThis);
