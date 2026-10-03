@@ -1230,6 +1230,7 @@
     try {
       var ia = iaXlsxBytes(); files.push({ name: safe(ia.name) + ".xlsx", data: ia.bytes });
       var qa = qaXlsxBytes(code || null); files.push({ name: safe(qa.name) + ".xlsx", data: qa.bytes });
+      var rt = rtmXlsxBytes(); files.push({ name: safe(rt.name) + ".xlsx", data: rt.bytes });
     } catch (e) { notes.push("엑셀: " + e.message); }
     // 플로우 PPTX (시스템 레인이 있는 플로우)
     p.model.flows.forEach(function (f) {
@@ -1256,7 +1257,7 @@
       });
     });
     chain.then(function () {
-      var readme = ["# " + pr.name + " 기획 산출물 패키지", "", "- 만든 날짜: " + date + " · 작업 버전 v" + pr.version, "- 시스템: " + systems.map(function (s) { return s.code + " " + s.name; }).join(", "), "", "## 파일", ""].concat(files.map(function (f) { return "- " + f.name; })).concat(notes.length ? ["", "## 만들지 못한 것", ""].concat(notes.map(function (n) { return "- " + n; })) : []).concat(["", "정보구조도·테스트는 엑셀, 화면설계서는 PPTX(편집 가능)와 PDF, 프로토타입은 HTML 한 파일(브라우저에서 열어 클릭), 플로우는 PPTX·SVG, 디자인 토큰은 DTCG JSON(Figma 변수)입니다."]).join("\n");
+      var readme = ["# " + pr.name + " 기획 산출물 패키지", "", "- 만든 날짜: " + date + " · 작업 버전 v" + pr.version, "- 시스템: " + systems.map(function (s) { return s.code + " " + s.name; }).join(", "), "", "## 파일", ""].concat(files.map(function (f) { return "- " + f.name; })).concat(notes.length ? ["", "## 만들지 못한 것", ""].concat(notes.map(function (n) { return "- " + n; })) : []).concat(["", "정보구조도·요구사항 추적표·테스트는 엑셀, 화면설계서는 PPTX(편집 가능)와 PDF, 프로토타입은 HTML 한 파일(브라우저에서 열어 클릭), 플로우는 PPTX·SVG, 디자인 토큰은 DTCG JSON(Figma 변수)입니다."]).join("\n");
       files.unshift({ name: "README.md", data: readme });
       FlowExport.download(new Blob([FlowExport.zip(files)], { type: "application/zip" }), safe(pr.code + (code ? "_" + code : "") + "_기획산출물_" + date) + ".zip");
       toast("산출물 " + files.length + "개를 묶어 내려받았습니다" + (notes.length ? " (일부 실패: " + notes.length + ")" : ""));
@@ -2066,7 +2067,7 @@
     }).join("") + "</div>" + sysFilters() + "</div>";
     var body = state.rtmView === "req" ? rtmReq() : state.rtmView === "reverse" ? rtmReverse() : rtmMatrix();
     return '<section class="section">' + bar + '<div class="box twrap">' + body + "</div>" +
-      '<p class="hint">CSV·JSON 파일: <code>planning rtm --write</code> → 프로젝트 <code>rtm/</code> 폴더</p></section>';
+      '<p class="hint"><button class="btn-sm" data-rtmxlsx="1">⬇ 요구사항 추적표(.xlsx)</button> 요구사항별 Task 시트와 요구사항×시스템 매트릭스 시트 · CLI는 <code>planning rtm --write</code></p></section>';
   }
   function rtmMatrix() {
     var p = P(), systems = p.model.systems.filter(function (s) { return sysOn(s.code); });
@@ -2081,6 +2082,30 @@
       return "<tr" + (r.status === "EXCLUDED" ? ' class="muted"' : "") + '><td class="req-cell"><span class="id">' + esc(r.requirementId) + "</span><br>" + esc(r.title) + "<br>" + specBtn(p, r.requirementId) + "</td>" + cells + "<td>" + pill(r.status) + "</td></tr>";
     }).join("");
     return "<table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>";
+  }
+  /** 요구사항 추적표 엑셀: 요구사항별 Task 시트 + 요구사항×시스템 매트릭스 시트 */
+  function rtmXlsxBytes() {
+    var p = P(), pr = p.model.project, systems = p.model.systems;
+    var rows = [];
+    p.rtm.rows.forEach(function (r) {
+      var sp = specOf(p, r.requirementId), spec = sp.saved != null ? sp.saved : (sp.draft || "");
+      if (!r.tasks.length) { rows.push([r.requirementId, r.title, STATUS[r.status] || r.status, r.status === "EXCLUDED" ? "제외: " + (r.excludeReason || "") : "Task 미분해", "", "", "", "", "", "", "", "", "", spec]); return; }
+      r.tasks.forEach(function (t, i) {
+        rows.push([i ? "" : r.requirementId, i ? "" : r.title, i ? "" : (STATUS[r.status] || r.status), t.taskId, t.systemCode, t.actor || "", t.action, t.planSections.concat(t.features).join("\n"), t.screenless && !t.screens.length ? "화면 없음" : t.screens.join("\n"), t.flowNodes.join("\n"), t.storyboard.join("\n"), STATUS[t.status] || t.status, t.reviewer || "", i ? "" : spec]);
+      });
+    });
+    var mat = p.rtm.rows.map(function (r) {
+      return [r.requirementId, r.title].concat(systems.map(function (s) {
+        var c = p.rtm.matrix[r.requirementId][s.code];
+        if (!c || !c.taskIds.length) return "—";
+        return c.taskIds.map(function (t) { return shortTask(t, r.requirementId); }).join(", ") + "\n" + (c.screens.length ? c.screens.join(", ") : c.screenless ? "화면 없음" : "화면 미연결") + "\n" + (STATUS[c.status] || c.status);
+      })).concat([STATUS[r.status] || r.status]);
+    });
+    var sheets = [
+      { name: "요구사항별 Task", title: pr.name + " - 요구사항 추적표 (요구사항별 Task)", head: [["요구사항 ID", "요구사항", "상태", "Task ID", "시스템", "주체", "처리 내용", "기획안·기능", "화면 ID", "플로우", "스토리보드", "Task 상태", "확인", "기능 명세"]], rows: rows, widths: [12, 28, 9, 14, 8, 10, 36, 22, 22, 18, 18, 10, 10, 50], merges: ["A1:G1"] },
+      { name: "요구사항×시스템", title: pr.name + " - 요구사항 × 시스템 매트릭스", head: [["요구사항 ID", "요구사항"].concat(systems.map(function (s) { return s.code + " " + s.name; })).concat(["충족"])], rows: mat, widths: [12, 28].concat(systems.map(function () { return 26; })).concat([10]), merges: ["A1:D1"] }
+    ];
+    return { bytes: xlsx(sheets), name: pr.code + "_요구사항추적표_" + new Date().toISOString().slice(0, 10) };
   }
   function rtmReq() {
     var p = P();
@@ -4684,6 +4709,7 @@
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
+    if (target.closest && target.closest("[data-rtmxlsx]")) { var rx = rtmXlsxBytes(); saveXlsx(rx.bytes, rx.name); return; }
     var pxb = target.closest && target.closest("[data-protox]");
     if (pxb) { protoExport(pxb.getAttribute("data-protox"), pxb); return; }
     var pkb = target.closest && target.closest("[data-pkg]");
