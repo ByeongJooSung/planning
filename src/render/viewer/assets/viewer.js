@@ -647,7 +647,7 @@
   }
   function ruleCell(c) {
     var out = [];
-    if (c.options) out.push('<p><b>옵션</b> ' + c.options.values.map(esc).join(" / ") + (c.options.default ? ' <span class="hint">(기본: ' + esc(c.options.default) + ")</span>" : "") + (c.options.note ? ' <span class="hint">' + esc(c.options.note) + "</span>" : "") + "</p>");
+    if (c.options && Array.isArray(c.options.values) && c.options.values.length) out.push('<p><b>옵션</b> ' + c.options.values.map(esc).join(" / ") + (c.options.default ? ' <span class="hint">(기본: ' + esc(c.options.default) + ")</span>" : "") + (c.options.note ? ' <span class="hint">' + esc(c.options.note) + "</span>" : "") + "</p>");
     var v = c.validation;
     if (v) {
       var parts = [v.required ? "필수" : "선택"];
@@ -1299,7 +1299,7 @@
     sel.hidden = false;
     sel.setAttribute("style", boxCss(b));
     sel.innerHTML = '<div class="sbc-bar' + (b.y < 44 ? " below" : "") + '" role="toolbar" aria-label="' + esc(c.no + "번 " + c.label + " 편집") + '"><b>' + c.no + ". " + esc(c.label) + "</b>" +
-      actBtn("sb-frame", "✎ 모양 편집", a, "btn-sm btn-primary") + (c.ui && !own ? actBtn("sb-props", "내용", a) : "") + actBtn("sb-edit", "설명·컴포넌트", a) +
+      actBtn("sb-frame", "✎ 모양 편집", a, "btn-sm btn-primary") + actBtn("sb-aione", "✦ AI로 이 항목만", a, "btn-sm ai") + (c.ui && !own ? actBtn("sb-props", "내용", a) : "") + actBtn("sb-edit", "설명·컴포넌트", a) +
       (c.no > 1 ? actBtn("sb-up", "↑", a) : "") + (c.no < n ? actBtn("sb-down", "↓", a) : "") + actBtn("sb-dup", "복제", a) +
       (own && c.ui.component !== "frame" ? actBtn("sb-frame-reset", "기본 모양으로", a) : "") + actBtn("sb-rm", "삭제", a, "btn-sm danger") + "</div>" +
       (own ? '<span class="sbc-own">직접 그린 모양</span>' : "");
@@ -1370,6 +1370,27 @@
     });
   }
   ACTIONS_LATE["sb-frame"] = function (arg) { var a = arg.split("|"); openItemFrame(a[0], Number(a[1])); };
+  /** 이 항목만 AI로 고치기: 저장본을 기준 버전으로 삼고(없으면 지금 화면설계서로 v1을 만든다) 대상 항목을 그 번호로 고정해 연다 */
+  ACTIONS_LATE["sb-aione"] = function (arg) {
+    var a = arg.split("|"), sid = a[0], no = Number(a[1]), key = "sb:" + sid, p = P(), sb = sbOf(sid);
+    if (!sb) return;
+    var doc = overlayOf(key), ready;
+    var cur = { template: sb.template, components: sb.components };
+    var same = doc && doc.versions.length && doc.applied != null && JSON.stringify((doc.versions.find(function (v) { return v.n === doc.applied; }) || {}).output) === JSON.stringify(cur);
+    if (same) ready = Promise.resolve(doc);
+    else {
+      // 캔버스에서 직접 고친 뒤라 버전과 다르면 지금 저장본을 새 기준 버전으로 넣는다
+      var d2 = doc ? JSON.parse(JSON.stringify(doc)) : { project: p.model.project.code, kind: "sb", target: sid, versions: [], applied: null };
+      var n = d2.versions.reduce(function (m, v) { return Math.max(m, v.n); }, 0) + 1;
+      d2.versions = d2.versions.concat([{ n: n, instruction: "(지금 저장본)", at: new Date().toISOString(), output: JSON.parse(JSON.stringify(cur)) }]).slice(-10);
+      d2.applied = n; d2.updatedAt = new Date().toISOString();
+      ready = saveOverlay(key, d2).then(function () { return overlayOf(key); });
+    }
+    ready.then(function (d3) {
+      var idx = Math.max(0, d3.versions.findIndex(function (v) { return v.n === d3.applied; }));
+      openLayer({ kind: "gen", key: key, sel: idx, focus: [no], draft: "" });
+    }).catch(function (e) { toast(e.message, "err"); });
+  };
   ACTIONS_LATE["sb-frame-reset"] = function (arg) {
     var a = arg.split("|"), c = sbItem(a[0], a[1]);
     if (!c || !c.ui) return;
@@ -2842,6 +2863,7 @@
   function validateOutput(kind, target, out, p, scope) {
     var errs = [], warns = [];
     if (!out || typeof out !== "object") return { errs: ["JSON 객체가 아닙니다"], warns: warns };
+    if (kind === "sb") out = normSbItems(out);
     if (kind === "ia") {
       if (!Array.isArray(out.nodes) || !out.nodes.length) errs.push("nodes 배열이 없습니다");
       else {
@@ -3100,6 +3122,53 @@
     var m = ds.components.find(function (x) { var n = key(x.name); return n.indexOf(raw) >= 0 || (raw.length > 1 && n.split(/[()-]/).indexOf(raw) >= 0); });
     return m ? m.id : null;
   }
+  /** 화면설계서 결과를 서버와 같은 규칙으로 정리 — 미리보기·검사가 raw 결과(options: null, props: null, 글자 번호 …)에 걸려 넘어지지 않게 */
+  function normSbItems(out) {
+    if (!out || typeof out !== "object") return out;
+    var comps = Array.isArray(out.components) ? out.components : null;
+    if (!comps) return out;
+    var isObj = function (v) { return !!v && typeof v === "object" && !Array.isArray(v); };
+    var str = function (v) { if (v == null) return undefined; if (typeof v === "string") return v; if (typeof v === "number" || typeof v === "boolean") return String(v); if (Array.isArray(v)) return v.map(function (x) { return str(x) || ""; }).filter(Boolean).join("\n"); if (isObj(v)) return str(v.label != null ? v.label : v.name != null ? v.name : v.text != null ? v.text : v.value != null ? v.value : v.title); return undefined; };
+    var bool = function (v) { return v === true || v === "true" || v === "Y" || v === "필수" || v === 1; };
+    var list = comps.filter(isObj).map(function (c, i) {
+      var o = {};
+      Object.keys(c).forEach(function (k) { o[k] = c[k]; });
+      var no = Number(String(c.no == null ? "" : c.no).replace(/[^0-9.-]/g, ""));
+      o.no = isFinite(no) && no > 0 ? Math.round(no) : i + 1;
+      o.label = str(c.label != null ? c.label : c.name != null ? c.name : c.title) || (i + 1) + "번 항목";
+      o.kind = str(c.kind != null ? c.kind : c.type) || (isObj(c.ui) && str(c.ui.component)) || "text";
+      o.planner = str(c.planner) || ""; o.customer = str(c.customer) || "";
+      // 옵션: null·빈 객체는 지우고, 배열·문자열은 values로
+      var v = c.options, values, def, note;
+      if (Array.isArray(v)) values = v; else if (typeof v === "string") values = v.split(/[,/|·]\s*/); else if (isObj(v)) { values = v.values != null ? v.values : v.items != null ? v.items : v.options != null ? v.options : v.choices; if (typeof values === "string") values = values.split(/[,/|·]\s*/); def = v.default != null ? v.default : v.defaultValue != null ? v.defaultValue : v.value; note = v.note != null ? v.note : v.description; }
+      var vl = Array.isArray(values) ? values.map(str).filter(function (x) { return x && x.trim(); }) : [];
+      var d = str(def); if (!vl.length && d) vl.push(d);
+      if (vl.length) { o.options = { values: vl }; if (d) o.options.default = d; if (str(note)) o.options.note = str(note); } else delete o.options;
+      // 유효성: null은 지우고, 글자 불리언·문자열 timing·messages 보정
+      var va = c.validation;
+      if (va == null || (!isObj(va) && typeof va !== "boolean" && typeof va !== "string")) delete o.validation;
+      else {
+        var vo = isObj(va) ? va : { required: va };
+        var tm = (Array.isArray(vo.timing) ? vo.timing : vo.timing ? [vo.timing] : []).map(function (x) { return String(x).toUpperCase().replace(/^(INPUT|BLUR|SUBMIT)$/, "ON_$1"); }).filter(function (x) { return /^ON_(INPUT|BLUR|SUBMIT)$/.test(x); });
+        var ms = Array.isArray(vo.messages) ? vo.messages : isObj(vo.messages) ? Object.keys(vo.messages).map(function (k) { return { condition: k, text: vo.messages[k] }; }) : typeof vo.messages === "string" ? [vo.messages] : [];
+        var n2 = { required: bool(vo.required), timing: tm, messages: ms.map(function (x) { return isObj(x) ? { condition: str(x.condition != null ? x.condition : x.when) || "", text: str(x.text != null ? x.text : x.message) || "" } : { condition: "", text: str(x) || "" }; }).filter(function (m) { return m.text; }) };
+        ["minLength", "maxLength"].forEach(function (k) { var nn = Number(String(vo[k] == null ? "" : vo[k]).replace(/[^0-9]/g, "")); if (vo[k] != null && isFinite(nn) && String(vo[k]).trim() !== "") n2[k] = nn; });
+        if (str(vo.format)) n2.format = str(vo.format);
+        o.validation = n2;
+      }
+      // ui: 문자열이면 컴포넌트 ID, props가 null이면 빈 객체, component 없으면 kind
+      var u = c.ui != null ? c.ui : c.component != null ? { component: c.component, props: c.props } : undefined;
+      if (typeof u === "string") u = u.trim() ? { component: u.trim(), props: {} } : undefined;
+      if (isObj(u)) { var cid = str(u.component != null ? u.component : u.id != null ? u.id : u.type) || o.kind; o.ui = { component: cid, props: isObj(u.props) ? u.props : {} }; if (str(u.link) && str(u.link).trim()) o.ui.link = str(u.link).trim(); if (isObj(u.tree)) o.ui.tree = u.tree; } else delete o.ui;
+      return o;
+    });
+    var tpl = str(out.template); tpl = tpl ? tpl.toLowerCase() : undefined;
+    var o2 = {};
+    Object.keys(out).forEach(function (k) { o2[k] = out[k]; });
+    o2.components = list;
+    if (tpl && ["login", "dashboard", "main", "list", "detail", "form", "popup"].indexOf(tpl) >= 0) o2.template = tpl; else delete o2.template;
+    return o2;
+  }
   function normSbOut(out, prev) {
     var comps = findComps(out, 0);
     if (!comps && looksComp(out) && out.no != null) comps = [out];
@@ -3115,7 +3184,7 @@
     }
     var o2 = { components: comps };
     if (tpl) o2.template = tpl;
-    return { out: o2, note: note };
+    return { out: normSbItems(o2), note: note };
   }
   function sbAsk(input, prev, ctl, onText) {
     return AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (out) {
@@ -3142,17 +3211,41 @@
     var tpl = g.kind === "ds" ? fillDs(g.prompt, p, g.target, scope, cids) : fillSpecs(g.prompt, g);
     var rootText = base ? base.root || "" : instruction || (cids.length ? "위 댓글을 모두 반영해 주세요." : "");
     var first = tpl + (g.requiresInstruction ? rootText : (!base && instruction ? "\n## 추가 지시\n" + instruction + "\n" : ""));
-    var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: DATA.refine + instruction }] : first;
+    // 화면설계서 미세조정: 대상 항목을 고르면 그 항목만 고치게 하고(프레임 단위 수정), 나머지는 합칠 때 원본을 지킨다
+    var focus = g.kind === "sb" && base && layer.focus && layer.focus.length ? layer.focus.slice() : null;
+    var refine = DATA.refine + instruction + (focus ? focusNote(base.output, focus) : "");
+    var input = base ? [{ role: "user", content: first }, { role: "assistant", content: JSON.stringify(base.output) }, { role: "user", content: refine }] : first;
     // 한 번에 붙여 넣을 글 (claude.ai용): 이전 결과와 고칠 내용을 이어 붙인다
-    var text = base ? first + "\n\n## 이전 결과 (v" + base.n + ")\n```json\n" + JSON.stringify(base.output, null, 1) + "\n```\n\n## 고칠 내용\n" + DATA.refine + instruction : first;
-    return { p: p, key: key, g: g, doc: doc, base: base, scope: scope, cids: cids, rootText: rootText, input: input, text: text, instruction: instruction };
+    var text = base ? first + "\n\n## 이전 결과 (v" + base.n + ")\n```json\n" + JSON.stringify(base.output, null, 1) + "\n```\n\n## 고칠 내용\n" + refine : first;
+    return { p: p, key: key, g: g, doc: doc, base: base, scope: scope, cids: cids, rootText: rootText, input: input, text: text, instruction: instruction, focus: focus };
+  }
+  function focusNote(baseOut, focus) {
+    var comps = (baseOut && baseOut.components) || [], max = comps.reduce(function (a, c) { return Math.max(a, Number(c.no) || 0); }, 0);
+    var names = focus.map(function (no) { var c = comps.find(function (x) { return String(x.no) === String(no); }); return no + "번" + (c ? "(" + c.label + ")" : ""); }).join(", ");
+    return "\n\n[대상 항목 제한] " + names + " 항목만 고치세요. 다른 번호의 항목은 번호·label·설명·ui 모두 그대로 두고, 바뀐 항목만 components 배열에 담아 보내도 됩니다. 새 항목이 꼭 필요하면 " + (max + 1) + "번부터 추가하세요. 대상 항목의 번호는 바꾸지 마세요.";
+  }
+  /** 대상 항목 잠금 합치기: 고른 번호만 AI 결과로 바꾸고 나머지는 이전 버전 그대로. 새 번호는 요청에 추가 뜻이 있을 때만 */
+  function lockItems(baseOut, out, focus, instruction) {
+    var pcs = (baseOut && baseOut.components) || [], by = {};
+    ((out && out.components) || []).forEach(function (c) { if (c && c.no != null) by[String(c.no)] = c; });
+    var max = pcs.reduce(function (a, c) { return Math.max(a, Number(c.no) || 0); }, 0), fset = {};
+    focus.forEach(function (n) { fset[String(n)] = true; });
+    var kept = 0, changed = 0;
+    var comps = pcs.map(function (c) { var k = String(c.no); if (fset[k] && by[k]) { changed++; return by[k]; } if (!fset[k]) kept++; return JSON.parse(JSON.stringify(c)); });
+    var wantNew = /추가|넣|새 |새로|더 |하나 더|생성/.test(instruction || "");
+    var added = 0;
+    if (wantNew) Object.keys(by).forEach(function (k) { if (Number(k) > max) { comps.push(by[k]); added++; } });
+    comps.sort(function (a, b) { return Number(a.no) - Number(b.no); });
+    var o2 = { components: comps };
+    if (baseOut && baseOut.template) o2.template = baseOut.template;
+    return { out: o2, note: "대상 " + focus.join(", ") + "번만 바꿨습니다 (바뀜 " + changed + " · 그대로 " + kept + (added ? " · 추가 " + added : "") + ")" };
   }
   /** 결과를 새 버전으로 저장 */
   function genSave(c, out, via) {
     var g = c.g, doc = c.doc;
     if (g.kind === "ds") out = normDsPatch(out, selectedDesign(c.p, g.target));
     var n = doc.versions.reduce(function (a, v) { return Math.max(a, v.n); }, 0) + 1;
-    var v = { n: n, scope: c.scope, scopeLabel: scopeInfo(c.scope).label, commentIds: c.cids, instruction: (c.instruction || (c.cids.length ? "댓글 " + c.cids.length + "개 반영" : "(1차 생성)")) + (via ? " · " + via : ""), from: c.base ? c.base.n : null, root: g.requiresInstruction ? c.rootText : null, output: out, at: new Date().toISOString() };
+    var v = { n: n, focus: c.focus || undefined, scope: c.scope, scopeLabel: scopeInfo(c.scope).label, commentIds: c.cids, instruction: (c.instruction || (c.cids.length ? "댓글 " + c.cids.length + "개 반영" : "(1차 생성)")) + (via ? " · " + via : ""), from: c.base ? c.base.n : null, root: g.requiresInstruction ? c.rootText : null, output: out, at: new Date().toISOString() };
     if (g.kind !== "ds") { delete v.scope; delete v.scopeLabel; delete v.commentIds; }
     doc = Object.assign({}, doc, { versions: doc.versions.concat([v]).slice(-10), updatedAt: v.at });
     layer.sel = doc.versions.length - 1;
@@ -3190,6 +3283,7 @@
       if (!Array.isArray(r.out.components) || !r.out.components.length) { layer.err = "붙여 넣은 JSON에 components 배열이 없습니다. Claude에 ‘JSON 전체를 다시 출력해 줘’라고 요청한 뒤 다시 붙여 넣으세요."; renderLayer(); return; }
       out = r.out;
       if (r.note) toast(r.note);
+      if (c.focus) { var lk = lockItems(c.base.output, out, c.focus, c.instruction); out = lk.out; toast(lk.note); }
     }
     layer.err = "";
     layer.pasteOpen = false;
@@ -3208,8 +3302,11 @@
       if (ctl.signal.aborted) { var ab = new Error("cancelled"); ab.code = "cancelled"; throw ab; }
       var onText = function (u) { var b = document.getElementById("gen-busy"); if (b) b.textContent = "작성 중… " + u.text.length.toLocaleString() + "자"; };
       if (g.kind === "sb") {
-        // 바뀐 항목만 합치기는 미세조정(이전 버전이 있을 때)에만
-        return sbAsk(input, base && !/삭제|제거|빼|없애|지워/.test(instruction || "") ? base.output : null, ctl, onText);
+        // 바뀐 항목만 합치기는 미세조정(이전 버전이 있을 때)에만. 대상 항목을 골랐으면 그 항목만 바꾼다
+        return sbAsk(input, base && !/삭제|제거|빼|없애|지워/.test(instruction || "") ? base.output : null, ctl, onText).then(function (res) {
+          if (c.focus) { var lk = lockItems(base.output, res.out, c.focus, instruction); res.out = lk.out; res.note = lk.note; }
+          return res;
+        });
       }
       return g.kind === "ds" && selectedDesign(p, g.target) ? dsAsk(input, p, g, scope, ctl, onText) : AI.sample.json(input, { signal: ctl.signal, cache: false, onText: onText }).then(function (o) { return { out: o }; });
     }, function (e) { if (!e.code) e.code = "server"; throw e; })
@@ -3225,7 +3322,7 @@
   /** 서비스 모드: 생성 결과를 서버 모델에 바로 반영한다. 디자인은 적용 전 디자인을 기록해 되돌릴 수 있다 */
   function genApplySrv(apply) {
     var p = P(), key = layer.key, doc = JSON.parse(JSON.stringify(overlayOf(key))), v = doc.versions[layer.sel];
-    var out = doc.kind === "ds" ? sanitizeDsPatch(normDsPatch(v.output, selectedDesign(p, doc.target)), selectedDesign(p, doc.target), v.scope).patch : v.output;
+    var out = doc.kind === "ds" ? sanitizeDsPatch(normDsPatch(v.output, selectedDesign(p, doc.target)), selectedDesign(p, doc.target), v.scope).patch : doc.kind === "sb" ? normSbItems(v.output) : v.output;
     if (doc.kind === "ds") delete out.comments;
     var chk = apply ? validateOutput(doc.kind, doc.target, out, p, v.scope) : { errs: [] };
     if (chk.errs.length) { layer.err = "적용할 수 없습니다: " + chk.errs[0]; renderLayer(); return; }
@@ -3340,6 +3437,7 @@
     try { return genPreviewRaw(p, g, out); } catch (e) { return '<div class="empty">결과 형식이 올바르지 않아 미리보기를 그릴 수 없습니다. 왼쪽 검사 결과를 확인하고 다시 생성하거나 ‘이 버전 고치기’로 고치세요.</div>'; }
   }
   function genPreviewRaw(p, g, out) {
+    if (g.kind === "sb") out = normSbItems(out);
     if (!out) return '<div class="empty">아직 생성한 결과가 없습니다. 왼쪽에서 생성하세요.</div>';
     if (g.kind === "ia") {
       var before = {};
@@ -3421,6 +3519,7 @@
       (SRV ? '<span class="hint">결과는 프로젝트 멤버와 공유되고, 적용하면 저장소 모델이 바로 바뀝니다</span><span class="gen-ai"><label for="gen-ai-switch">AI</label>' + (aiCache.code === P().model.project.code ? aiSwitch("gen-ai-switch") : '<span class="hint">' + esc(effLabel(P().ai)) + "</span>") + "</span>" : AI.db ? (AI.dbWrite ? '<span class="hint">결과와 적용 상태는 이 페이지를 보는 모두에게 공유됩니다</span>' : '<span class="hint warn-t">저장 권한이 없어 이 화면에서만 보입니다</span>') : '<span class="hint">저장 공간이 없어 새로고침하면 사라집니다</span>') + "</div>" +
       (vlist ? '<div class="ver-list">' + vlist + "</div>" : "") +
       (g.specs ? specSummary(g) : "") +
+      (g.kind === "sb" && sel ? focusBar(sel) : "") +
       (canGen || (SRV && canEdit()) ? '<label class="gen-label" for="gen-in">' + label + '</label><textarea id="gen-in" rows="4" placeholder="' + esc(ph) + '">' + esc(layer.draft || "") + "</textarea>" +
         (canGen ? '<div class="gen-actions">' + (layer.busy ? '<span id="gen-busy" class="hint">생각 중… (5~60초)</span><button class="btn-sm" data-gstop>멈춤</button>' : '<button class="btn-primary" data-grun>' + (!sel ? (g.requiresInstruction ? "조정안 만들기" : "1차 생성") : "✦ 이 버전 고치기") + "</button>" + (sel ? '<button class="btn-sm" data-gnew>처음부터 다시 생성</button>' : "")) + "</div>"
           : '<div class="note warn"><b>AI 연결이 없습니다</b><p class="hint">아래 ‘Claude 구독으로 만들기’로 claude.ai에서 만들어 붙여 넣거나, AI 설정에서 Claude API 키 등 연결을 등록하세요.</p></div>') +
@@ -3437,10 +3536,19 @@
     return '<header class="layer-h"><div><span class="eyebrow">AI 생성 · 고치기</span><h2 id="layer-t">' + esc(g.title) + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
       '<div class="gen-body">' + left + right + "</div>" + foot;
   }
+  /** 미세조정 대상 항목 고르기 — 고른 항목만 바뀌고 나머지는 그대로 (프레임 단위 수정) */
+  function focusBar(sel) {
+    var comps = (sel.output && sel.output.components) || [], f = layer.focus || [];
+    if (!comps.length) return "";
+    var on = function (no) { return f.some(function (x) { return String(x) === String(no); }); };
+    return '<div class="focus-bar"><span class="gen-label">고칠 항목' + (f.length ? ' <b>' + f.length + '개</b>' : "") + '</span><div class="focus-chips"><button class="fchip' + (f.length ? "" : " on") + '" data-gfocus="*" aria-pressed="' + !f.length + '">전체</button>' +
+      comps.map(function (c) { return '<button class="fchip' + (on(c.no) ? " on" : "") + '" data-gfocus="' + esc(c.no) + '" aria-pressed="' + on(c.no) + '" title="' + esc(c.label) + '">' + esc(c.no) + ". " + esc(String(c.label).slice(0, 10)) + "</button>"; }).join("") +
+      '</div><span class="hint">' + (f.length ? "고른 항목만 바뀌고 나머지 항목은 번호·내용 그대로 둡니다. 새 항목은 요청에 ‘추가’가 있을 때만 들어갑니다." : "전체를 고치면 AI가 다른 항목까지 손댈 수 있습니다. 한 항목만 고치려면 번호를 고르세요.") + "</span></div>";
+  }
   /** Claude 구독(claude.ai)으로 만들기: 같은 프롬프트를 복사해 claude.ai에서 만들고, 답을 붙여 넣어 새 버전으로 */
   function claudeBox(sel) {
     return '<details class="gen-claude"' + (layer.pasteOpen ? " open" : "") + '><summary><span class="cl-logo" aria-hidden="true">✳</span> Claude 구독(claude.ai)으로 만들기</summary>' +
-      '<ol class="cl-steps"><li><button class="btn-sm" data-gclaude>① 프롬프트 복사 · claude.ai 열기</button><span class="hint">' + (sel ? "v" + sel.n + " 결과와 위 ‘고칠 내용’까지 함께 복사합니다" : "위 ‘추가 지시’와 기능 명세까지 함께 복사합니다") + "</span></li>" +
+      '<ol class="cl-steps"><li><button class="btn-sm" data-gclaude>① 프롬프트 복사 · claude.ai 열기</button><span class="hint">' + (sel ? "v" + sel.n + " 결과와 위 ‘고칠 내용’까지 함께 복사합니다" : "위 ‘추가 지시’와 기능 명세까지 함께 복사합니다") + "</span>" + (sel ? ' <button class="btn-sm" data-gnew title="이전 결과를 넣지 않고 처음부터 만드는 프롬프트로 바꿉니다">처음부터 다시</button>' : "") + "</li>" +
       '<li><span class="hint">claude.ai 새 대화에 붙여 넣고 보냅니다. Opus 등 원하는 모델을 고를 수 있습니다.</span></li>' +
       '<li><label class="gen-label" for="gen-paste">② Claude 답을 그대로 붙여 넣기</label><textarea id="gen-paste" rows="4" placeholder="Claude가 준 답 전체(```json … ``` 포함)를 붙여 넣으세요"></textarea><button class="btn-primary" data-gpaste>붙여 넣은 결과를 새 버전으로</button></li></ol>' +
       '<p class="hint">Claude Pro·Max 구독 로그인을 다른 서비스에 연결하는 것은 Anthropic 정책상 허용되지 않아, 구독은 이렇게 복사·붙여넣기로 씁니다. 버튼 한 번으로 만들려면 AI 설정에 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
@@ -4670,6 +4778,11 @@
       if (lb && layer.kind === "gen") {
         var gin = document.getElementById("gen-in");
         if (lb.dataset.gsel != null) { layer.sel = Number(lb.dataset.gsel); layer.fresh = false; layer.specEdit = false; layer.err = ""; renderLayer(); return; }
+        if (lb.dataset.gfocus != null) {
+          var gf = lb.dataset.gfocus, cur = layer.focus || [];
+          if (gf === "*") layer.focus = []; else { var k = String(gf); layer.focus = cur.some(function (x) { return String(x) === k; }) ? cur.filter(function (x) { return String(x) !== k; }) : cur.concat([Number(gf) || gf]); }
+          layer.draft = (gin && gin.value) || layer.draft; renderLayer(); return;
+        }
         if (lb.hasAttribute("data-grun")) { genRun(gin ? gin.value.trim() : ""); return; }
         if (lb.hasAttribute("data-gclaude")) {
           var gc = genInput(gin ? gin.value.trim() : "");
@@ -4681,7 +4794,7 @@
           return;
         }
         if (lb.hasAttribute("data-gpaste")) { var gpt = document.getElementById("gen-paste"); if (gpt && gpt.value.trim()) genPaste(gpt.value); else { layer.err = "Claude 답을 붙여 넣어 주세요."; renderLayer(); } return; }
-        if (lb.hasAttribute("data-gnew")) { var cur0 = (overlayOf(layer.key) || { versions: [] }).versions[layer.sel]; if (cur0 && cur0.scope) { layer.scope = cur0.scope; layer.commentIds = cur0.commentIds; } layer.sel = null; layer.fresh = true; layer.err = ""; renderLayer(); return; }
+        if (lb.hasAttribute("data-gnew")) { var cur0 = (overlayOf(layer.key) || { versions: [] }).versions[layer.sel]; if (cur0 && cur0.scope) { layer.scope = cur0.scope; layer.commentIds = cur0.commentIds; } layer.sel = null; layer.fresh = true; layer.err = ""; layer.focus = []; if (lb.closest(".gen-claude")) layer.pasteOpen = true; renderLayer(); return; }
         if (lb.hasAttribute("data-gstop")) { if (layer.ctl) layer.ctl.abort(); return; }
         if (lb.hasAttribute("data-gapply")) { genApply(true); return; }
         if (lb.hasAttribute("data-gunapply")) { genApply(false); return; }

@@ -1328,3 +1328,7 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
   .fx .fe-side { grid-column: 1 / -1; }
 }
 .ie .fe-canvas { width: max-content; }
+.focus-bar { margin: 8px 0 2px; }
+.focus-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.focus-chips .fchip { padding: 2px 8px; font-size: 12px; }
+.focus-chips .fchip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
