@@ -95,7 +95,7 @@
   }
 
   // ── 슬라이드 모델: 각 화면 → [{kind:"screen"|"cont", …}] ──
-  var LAY = { padX: 28, headH: 70, imgX: 28, imgY: 86, imgW: 760, imgH: 596, tabX: 812, tabY: 86, tabW: 440, colNo: 34, colItem: 112, foot: 700 };
+  var LAY0 = { padX: 28, headH: 70, imgX: 28, imgY: 86, imgW: 760, imgH: 596, tabX: 812, tabY: 86, tabW: 440, colNo: 34, colItem: 112, foot: 700 }, LAY = Object.assign({}, LAY0);
   function slidesOf(it, idx, total, opts) {
     var rows = descRows(it.sb), descW = LAY.tabW - LAY.colNo - LAY.colItem - 16;
     var chunks = chunkRows(rows, LAY.imgH - 30, descW, 11, 10);
@@ -273,6 +273,8 @@
   /** items: [{sb, head:{system,location,kind,tasks}, html(와이어프레임 HTML, 없으면 null), marks:[{no,x,y}]}] */
   function prepare(items, opts, onStep) {
     var i = 0;
+    // 모바일·태블릿 보기: 세로로 긴 화면이라 이미지 칸을 좁히고 표를 넓힌다
+    if (opts.vw && opts.vw < 1200) { var iw0 = opts.vw < 600 ? 360 : 520; LAY = Object.assign({}, LAY0, { imgW: iw0, tabX: 28 + iw0 + 24, tabW: SW - (28 + iw0 + 24) - 28 }); } else LAY = Object.assign({}, LAY0);
     return items.reduce(function (p, it) {
       return p.then(function () {
         i++;

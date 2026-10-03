@@ -1379,3 +1379,11 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .cmp-t del { color: var(--del); background: color-mix(in srgb, var(--del) 12%, transparent); text-decoration: line-through; }
 .cmp-t ins { color: var(--add); background: color-mix(in srgb, var(--add) 14%, transparent); text-decoration: none; }
 @media (max-width: 900px) { .cmp-panes { grid-template-columns: 1fr; } }
+
+/* 채널(뷰포트) 보기 전환 */
+.sbc-seg button { padding: 4px 10px; font-size: 12px; }
+.sbc-seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.sb-canvas.v-mobile .sbc-board, .sb-canvas.v-tablet .sbc-board { margin: 0 auto; }
+.sb-canvas.v-mobile .sbc-frame { border-radius: 22px; box-shadow: 0 0 0 6px #1b1f26, 0 8px 24px rgba(0,0,0,.25); overflow: hidden; }
+.layer-stage.narrow .stage { width: 480px; max-width: 100%; margin: 0 auto; }
+.layer-stage.narrow .stage-cap { width: 480px; max-width: 100%; margin: 6px auto 0; }

@@ -253,8 +253,15 @@
 
   // ── 프레임 ───────────────────────────────────
   function logo(ctx) { return '<span class="wf-logo"><i></i><b>' + esc(ctx.systemName || "서비스명") + "</b></span>"; }
+  /** 모바일 머리: 로고 + 검색·메뉴 아이콘 한 줄, 그 아래 현재 메뉴 가로 스크롤 탭 */
+  function mobileHeader(ds, ctx) {
+    var menus = ctx.menus || [];
+    return '<header class="wf-header wf-mhead" data-cmp="gnb"><div class="wf-hbar"><div class="wf-container">' + icon("menu", 20) + logo(ctx) + '<span class="wf-utl">' + icon("search", 18) + icon("user", 18) + "</span></div></div>" +
+      (menus.length ? '<nav class="wf-mtabs">' + menus.map(function (m, i) { return '<span class="' + (i === (ctx.activeMenu || 0) ? "on" : "") + '">' + esc(m) + "</span>"; }).join("") + "</nav>" : "") + "</header>";
+  }
   function header(ds, ctx) {
     var L = ds.layout, menus = ctx.menus || [];
+    if (ctx.view === "mobile") return mobileHeader(ds, ctx);
     var menuHtml = '<nav class="wf-menu">' + menus.map(function (m, i) { return '<span class="' + (i === (ctx.activeMenu || 0) ? "on" : "") + '">' + esc(m) + "</span>"; }).join("") + "</nav>";
     var util = ctx.profile === "admin" ? '<span class="wf-utl">' + icon("bell") + icon("user") + "<em>" + esc(ctx.userName || "심사자 정○○") + "</em></span>" :
       '<span class="wf-utl"><em>로그인</em><em>회원가입</em>' + icon("menu") + "</span>";
@@ -270,7 +277,7 @@
   }
   function footer(ds, ctx) {
     if (ds.layout.footer === "none") return "";
-    if (ds.layout.footer === "simple") return '<footer class="wf-footer simple" data-cmp="footer"><div class="wf-container"><span>' + esc(ctx.systemName || "") + "</span><span>개인정보처리방침 · 이용약관 · © 2026</span></div></footer>";
+    if (ds.layout.footer === "simple" || ctx.view === "mobile") return '<footer class="wf-footer simple" data-cmp="footer"><div class="wf-container"><span>' + esc(ctx.systemName || "") + "</span><span>개인정보처리방침 · 이용약관 · © 2026</span></div></footer>";
     return '<footer class="wf-footer" data-cmp="footer"><div class="wf-container">' + logo(ctx) + '<div><span>개인정보처리방침 · 저작권정책 · 웹 접근성 정책</span><span>(04500) 서울특별시 ○○구 ○○로 00 · 대표전화 000-0000</span><span>© 2026 ○○기관. All rights reserved.</span></div></div></footer>';
   }
   function sideShell(ds, ctx, inner) {
@@ -289,9 +296,10 @@
     var body = title + '<div class="wf-blocks">' + blocksHtml + "</div>";
     var frame;
     if (ctx.bare) frame = '<div class="wf-bare">' + blocksHtml + "</div>";
-    else if (ds.layout.nav === "side") frame = sideShell(ds, ctx, body);
+    else if (ds.layout.nav === "side" && ctx.view !== "mobile") frame = sideShell(ds, ctx, body);
     else frame = header(ds, ctx) + '<main class="wf-main"><div class="wf-container">' + body + "</div></main>" + footer(ds, ctx);
-    return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + (scopeCls(ds) ? " " + useCss(ds) : "") + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
+    var viewCls = ctx.view === "mobile" ? " wf-m" : ctx.view === "tablet" ? " wf-t" : "";
+    return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + viewCls + (scopeCls(ds) ? " " + useCss(ds) : "") + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
   }
 
   /** 입력 항목: 이어서 나오면 실제 신청 화면처럼 왼쪽 항목명 · 오른쪽 입력칸 표(폼 테이블)로 묶는다 */
@@ -325,6 +333,8 @@
   /** 스토리보드 화면 렌더링. ctx: {systemName, profile, menus, crumbs, markers, parent (팝업일 때 부모 화면)} */
   /** 제목 줄 오른쪽에 둘 버튼 묶음 (props.placement: "title") — 실제 화면처럼 [삭제][저장]을 제목 옆에 */
   function isTitleAct(c) { return c.ui && c.ui.component === "button-group" && c.ui.props && c.ui.props.placement === "title"; }
+  /** 채널(뷰포트) 규격: 화면설계서·내보내기·프로토타입이 같은 값을 쓴다 */
+  var VIEWS = { pc: { id: "pc", label: "PC", w: 1920, h: 1080, ch: ["WEB", "PC_WEB", "PC"] }, tablet: { id: "tablet", label: "태블릿", w: 1024, h: 1366, ch: ["TABLET"] }, mobile: { id: "mobile", label: "모바일", w: 390, h: 844, ch: ["MOBILE", "MOBILE_WEB", "APP", "MOBILE_APP"] } };
   function screen(ds, sb, ctx) {
     var tops = ctx.popup ? [] : sb.components.filter(isTitleAct);
     if (tops.length) {
@@ -438,5 +448,5 @@
     return cls;
   }
 
-  window.Wire = { screen: screen, template: template, component: component, icon: icon, iconLabel: ICON_LABEL, vars: vars, page: page, useCss: useCss, scopeCss: scopeCss };
+  window.Wire = { screen: screen, template: template, component: component, icon: icon, iconLabel: ICON_LABEL, vars: vars, page: page, useCss: useCss, scopeCss: scopeCss, VIEWS: VIEWS };
 })();

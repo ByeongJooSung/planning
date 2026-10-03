@@ -252,3 +252,53 @@ p.fr-n { margin: 0; }
 .fr-missing { padding: 6px 8px; border: 1px dashed var(--w-danger, #c00); color: var(--w-danger, #c00); font-size: 12px; }
 .wf-frc { display: block; }
 .wf-frc > .fr-root { display: block; }
+
+/* ── 모바일(390) · 태블릿(1024) 뷰포트: 같은 화면설계서를 채널별 레이아웃으로 ── */
+.wf.wf-m { --w-pad: 16px; --w-max: none; --w-h1: 20px; --w-display: 24px; font-size: var(--w-small); }
+.wf.wf-m .wf-container { max-width: none; padding: 0 16px; gap: 10px; }
+.wf.wf-m .wf-mhead .wf-hbar .wf-container { height: 52px; }
+.wf.wf-m .wf-mhead .wf-logo b { font-size: var(--w-body); }
+.wf.wf-m .wf-mhead .wf-utl { gap: 10px; }
+.wf.wf-m .wf-mtabs { display: flex; gap: 18px; padding: 0 16px; height: 40px; align-items: center; overflow: hidden; white-space: nowrap; font-weight: 600; font-size: var(--w-small); border-top: 1px solid color-mix(in srgb, var(--w-on-nav) 15%, transparent); }
+.wf.wf-m .wf-mtabs span.on { color: var(--w-gnb-active, var(--w-primary)); box-shadow: inset 0 -2px 0 var(--w-gnb-active, var(--w-primary)); padding-bottom: 4px; }
+.wf.wf-m .wf-header[style] .wf-mtabs span.on { color: inherit; }
+.wf.wf-m .wf-main { padding-block: 14px 28px; }
+.wf.wf-m .wf-ptitle { flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 14px; padding-bottom: 10px; }
+.wf.wf-m .wf-tacts { width: 100%; justify-content: flex-end; }
+.wf.wf-m .wf-blocks { gap: 16px; }
+.wf.wf-m .wf-2col, .wf.wf-m .wf-sgrid, .wf.wf-m .wf-cards, .wf.wf-m .wf-stats { grid-template-columns: 1fr; }
+.wf.wf-m .wf-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wf.wf-m .wf-fr { grid-template-columns: 1fr; min-height: 0; padding: 8px 0 10px; }
+.wf.wf-m .wf-fth { background: none; padding: 0 0 6px; font-size: var(--w-caption); }
+.wf.wf-m .wf-ftd { padding: 0; }
+.wf.wf-m .wf-search { flex-direction: column; }
+.wf.wf-m .wf-search .wf-btn, .wf.wf-m .wf-search .wf-input { width: 100%; }
+.wf.wf-m .wf-btns { flex-wrap: wrap; }
+.wf.wf-m .wf-btns .wf-btn { flex: 1 1 40%; }
+.wf.wf-m .wf-tw, .wf.wf-m .wf-table-wrap { overflow-x: auto; }
+.wf.wf-m .wf-table { min-width: 560px; }
+.wf.wf-m .wf-c[data-cmp="data-table"] { overflow-x: auto; }
+.wf.wf-m .wf-dtable th { width: 34%; padding: 10px; }
+.wf.wf-m .wf-dtable td { padding: 10px; }
+.wf.wf-m .wf-steps { flex-wrap: wrap; }
+.wf.wf-m .wf-steps li { flex: 1 1 45%; padding: 8px 10px; }
+.wf.wf-m .wf-tabs { overflow: hidden; }
+.wf.wf-m .wf-hero { padding: 20px 16px; }
+.wf.wf-m .wf-login { width: 100%; padding: 20px 16px; border: 0; box-shadow: none; }
+.wf.wf-m .wf-footer .wf-container { flex-direction: column; align-items: flex-start; gap: 6px; padding-block: 16px; font-size: var(--w-caption); }
+.wf.wf-m .wf-notice li { flex-direction: column; align-items: flex-start; gap: 2px; }
+.wf.wf-m .wf-modal, .wf.wf-m .wf-dialog { width: calc(100% - 32px); }
+.wf.wf-m .wf-form .wf-input { max-width: none; }
+.wf.wf-m .wf-bare { padding: 16px; min-height: 420px; }
+.wf.wf-t { --w-pad: 24px; --w-max: none; }
+.wf.wf-t .wf-container { max-width: none; }
+.wf.wf-t .wf-menu { gap: 18px; }
+.wf.wf-t .wf-hsearch { min-width: 120px; }
+.wf.wf-t .wf-mega { display: none; }
+.wf.wf-t .wf-sshell { grid-template-columns: 200px 1fr; }
+.wf.wf-t .wf-sgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wf.wf-t .wf-cards, .wf.wf-t .wf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wf.wf-t .wf-quick { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wf.wf-t .wf-2col { grid-template-columns: 1fr; }
+.wf.wf-t .wf-fr { grid-template-columns: 160px minmax(0, 1fr); }
+.wf.wf-t .wf-c[data-cmp="data-table"] { overflow-x: auto; }
