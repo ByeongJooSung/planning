@@ -263,6 +263,14 @@ describe("시나리오", () => {
   it("스냅샷·프로젝트 삭제", async () => {
     const s = await editor.req("POST", "/api/projects/PUBINFO/commands", { cmd: { op: "snapshot", note: "기준선" } });
     expect(s.body.project.snapshots).toHaveLength(1);
+    // 버전 간 화면 비교: 스냅샷 시점의 화면설계서를 받는다
+    const ver = s.body.project.snapshots[0].version;
+    const sid = "PUB_X_010";
+    const snap = await viewer.req("GET", `/api/projects/PUBINFO/snapshots/${ver}/screens/${sid}`);
+    expect(snap.status).toBe(200);
+    expect(snap.body).toMatchObject({ version: ver, note: "기준선", screen: null, node: null });
+    expect((await viewer.req("GET", `/api/projects/PUBINFO/snapshots/9.9.9/screens/${sid}`)).status).toBe(404);
+    expect((await stranger.req("GET", `/api/projects/PUBINFO/snapshots/${ver}/screens/${sid}`)).status).toBe(404);
     expect((await editor.req("DELETE", "/api/projects/PUBINFO", { confirm: "PUBINFO" })).status).toBe(403);
     expect((await owner.req("DELETE", "/api/projects/PUBINFO", { confirm: "WRONG" })).status).toBe(400);
     expect((await owner.req("DELETE", "/api/projects/PUBINFO", { confirm: "PUBINFO" })).status).toBe(200);

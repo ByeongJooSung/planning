@@ -704,7 +704,7 @@
       var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + (wire ? actBtn("sb-frame", "모양", sid + "|" + c.no) : "") + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
       return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
     }).join("") || '<tr><td colspan="3" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
-    var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + '<button class="btn-sm" data-sbx="' + esc(sb.systemCode) + "|pptx|" + esc(sid) + '" title="이 화면만 PPTX로">⬇ PPTX</button>' + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
+    var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + '<button class="btn-sm" data-sbx="' + esc(sb.systemCode) + "|pptx|" + esc(sid) + '" title="이 화면만 PPTX로">⬇ PPTX</button>' + (SRV && p.snapshots.length ? '<button class="btn-sm" data-sbcmp="' + esc(sid) + '" title="스냅샷 시점과 지금의 화면설계서를 나란히 비교">⇄ 버전 비교</button>' : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
     var cov = covTable(p, sid, covReport(p, sid, sb.components, null, sb.coverage), {});
     return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div>" + cov + "</article>";
   }
@@ -2751,6 +2751,110 @@
   }
 
   // ── 버전 ───────────────────────────────────────
+  // ── 버전 간 화면 비교: 스냅샷 시점의 화면설계서 ↔ 지금 ─────────
+  var cmpCache = {};
+  function openSbCmp(sid, ver) {
+    var p = P(), snaps = p.snapshots;
+    if (!snaps.length) return toast("비교할 스냅샷이 없습니다. 버전 이력에서 스냅샷을 먼저 찍으세요", "err");
+    ver = ver || (layer && layer.kind === "sbcmp" && layer.ver) || snaps[snaps.length - 1].version;
+    var l = layer && layer.kind === "sbcmp" ? layer : null;
+    if (l) { l.sid = sid; l.ver = ver; renderLayer(); } else openLayer({ kind: "sbcmp", sid: sid, ver: ver });
+    loadSnapScreen(p.model.project.code, ver, sid);
+  }
+  function loadSnapScreen(code, ver, sid) {
+    var key = code + "|" + ver + "|" + sid;
+    if (cmpCache[key]) return Promise.resolve(cmpCache[key]);
+    var url = SHARE ? "/api/share/" + enc(SHARE) : "/api/projects/" + enc(code);
+    return api("GET", url + "/snapshots/" + enc(ver) + "/screens/" + enc(sid)).then(function (r) { cmpCache[key] = r; if (layer && layer.kind === "sbcmp" && layer.ver === ver && layer.sid === sid) renderLayer(); return r; }, function (e) { cmpCache[key] = { error: e.message }; if (layer && layer.kind === "sbcmp") renderLayer(); });
+  }
+  /** 낱말 단위 차이 (LCS) → <del>/<ins> */
+  function wdiff(a, b) {
+    var A = String(a || "").split(/(\s+)/), B = String(b || "").split(/(\s+)/);
+    if (A.length * B.length > 250000) return "<del>" + esc(a) + "</del> <ins>" + esc(b) + "</ins>";
+    var n = A.length, m = B.length, L = [], i, j;
+    for (i = 0; i <= n; i++) { L.push(new Array(m + 1).fill(0)); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    var out = [], da = [], ib = [];
+    var flush = function () { if (da.length) out.push("<del>" + esc(da.join("")) + "</del>"); if (ib.length) out.push("<ins>" + esc(ib.join("")) + "</ins>"); da = []; ib = []; };
+    i = 0; j = 0;
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { flush(); out.push(esc(A[i])); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) { da.push(A[i]); i++; }
+      else { ib.push(B[j]); j++; }
+    }
+    while (i < n) da.push(A[i++]);
+    while (j < m) ib.push(B[j++]);
+    flush();
+    return out.join("");
+  }
+  function cmpText(c) {
+    if (!c) return {};
+    var v = c.validation, vp = [];
+    if (v) {
+      vp.push(v.required ? "필수" : "선택");
+      if (v.minLength != null || v.maxLength != null) vp.push((v.minLength != null ? v.minLength : 0) + "~" + (v.maxLength != null ? v.maxLength : "") + "자");
+      if (v.format) vp.push(v.format);
+      if (v.allowedChars) vp.push("허용: " + v.allowedChars);
+      if (v.timing && v.timing.length) vp.push("검증 " + v.timing.join("·"));
+      (v.messages || []).forEach(function (m) { vp.push((m.condition ? m.condition + " → " : "") + m.text); });
+    }
+    return {
+      "항목": c.label || "", "유형": c.kind || "", "UI": c.ui ? c.ui.component + (c.ui.tree ? " (직접 그림)" : "") : "", "기획": c.planner || "", "고객": c.customer || "",
+      "옵션": c.options && Array.isArray(c.options.values) ? c.options.values.join(" / ") + (c.options.default ? " (기본 " + c.options.default + ")" : "") : "", "유효성": vp.join(" · "), "이동": c.ui && c.ui.link ? c.ui.link : ""
+    };
+  }
+  var CMP_FIELDS = ["항목", "유형", "UI", "기획", "고객", "옵션", "유효성", "이동"];
+  /** 항목 짝 맞추기: 같은 이름 → 같은 번호(이름 비슷) 순 */
+  function cmpPairs(oldC, newC) {
+    var used = {}, pairs = [], norm = function (t) { return String(t || "").replace(/\s+/g, "").toLowerCase(); };
+    newC.forEach(function (c) {
+      var o = oldC.find(function (x) { return !used[x.no] && norm(x.label) === norm(c.label); });
+      if (!o) o = oldC.find(function (x) { return !used[x.no] && x.no === c.no && (x.ui && c.ui && x.ui.component === c.ui.component || covMatch(c.label, [{ no: x.no, label: x.label }]).length); });
+      if (o) used[o.no] = true;
+      pairs.push({ o: o || null, n: c });
+    });
+    oldC.forEach(function (x) { if (!used[x.no]) pairs.push({ o: x, n: null }); });
+    return pairs;
+  }
+  function renderSbCmp() {
+    var p = P(), pr = p.model.project, sid = layer.sid, cur = sbOf(sid), node = p.model.ia.nodes.find(function (n) { return n.id === sid; }) || {};
+    var snap = cmpCache[pr.code + "|" + layer.ver + "|" + sid];
+    var head = '<header class="layer-h"><div><span class="eyebrow">버전 간 화면 비교</span><h2 id="layer-t">' + esc(sid) + " " + esc(node.name || (cur && cur.title) || "") + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>';
+    var pick = '<div class="layer-tools cmp-tools"><label>기준 <select data-cmpver>' + p.snapshots.map(function (sn) { return '<option value="' + esc(sn.version) + '"' + (sn.version === layer.ver ? " selected" : "") + ">v" + esc(sn.version) + " · " + esc(fmtDate(sn.takenAt)) + (sn.note ? " · " + esc(sn.note) : "") + "</option>"; }).join("") + '</select></label><span class="hint">↔ 지금 v' + esc(pr.version) + " (마지막 저장 " + esc(fmtDate(pr.updatedAt)) + ")</span>" +
+      (SRV && canEdit() ? '<span class="sp"></span>' + actBtn("snapshot", "+ 지금을 스냅샷으로", null, "btn-sm") : "") + "</div>";
+    if (!snap) return head + pick + '<div class="box empty">v' + esc(layer.ver) + " 화면을 불러오는 중…</div>";
+    if (snap.error) return head + pick + '<div class="box empty">' + esc(snap.error) + "</div>";
+    var old = snap.screen, oldC = old ? old.components : [], newC = cur ? cur.components : [];
+    var pane = function (title, sub, sb) {
+      var w = sb ? screenWire(p, sb, "pos") : null;
+      return '<div class="cmp-pane"><div class="cmp-ph"><b>' + title + '</b><span class="hint">' + sub + "</span></div>" + (w ? stage(w, { w: VW, page: true, cap: false }) : '<div class="box empty">' + (sb ? "와이어프레임을 그릴 수 없습니다" : "이 버전에는 이 화면의 화면설계서가 없습니다") + "</div>") + "</div>";
+    };
+    var panes = '<div class="cmp-panes">' + pane("v" + esc(snap.version), esc(fmtDate(snap.takenAt)) + (snap.note ? " · " + esc(snap.note) : ""), old) + pane("지금 v" + esc(pr.version), (cur ? cur.components.length + "개 항목" : "화면설계서 없음"), cur) + "</div>";
+    // 화면 수준 변경
+    var top = [];
+    var oldNode = snap.node || {};
+    if (old && cur) {
+      [["화면명", oldNode.name || old.title, node.name || cur.title], ["템플릿", old.template || "", cur.template || ""], ["연결 Task", (old.taskIds || []).join(", "), (cur.taskIds || []).join(", ")], ["상태", old.status, cur.status]].forEach(function (f) { if (String(f[1] || "") !== String(f[2] || "")) top.push("<tr><td>" + f[0] + "</td><td>" + wdiff(f[1], f[2]) + "</td></tr>"); });
+    }
+    var pairs = cmpPairs(oldC, newC), added = 0, removed = 0, changed = 0, same = 0;
+    var rows = pairs.map(function(pr2) {
+      var o = cmpText(pr2.o), n = cmpText(pr2.n), kind, cells;
+      if (!pr2.o) { added++; kind = "add"; cells = CMP_FIELDS.filter(function (f) { return n[f]; }).map(function (f) { return "<div><span class=\"fk\">" + f + "</span><ins>" + esc(n[f]) + "</ins></div>"; }).join(""); }
+      else if (!pr2.n) { removed++; kind = "del"; cells = CMP_FIELDS.filter(function (f) { return o[f]; }).map(function (f) { return "<div><span class=\"fk\">" + f + "</span><del>" + esc(o[f]) + "</del></div>"; }).join(""); }
+      else {
+        var diffs = CMP_FIELDS.filter(function (f) { return (o[f] || "") !== (n[f] || ""); });
+        if (!diffs.length) { same++; return ""; }
+        changed++; kind = "chg";
+        cells = diffs.map(function (f) { return "<div><span class=\"fk\">" + f + "</span>" + wdiff(o[f], n[f]) + "</div>"; }).join("");
+      }
+      var no = pr2.n ? pr2.n.no : pr2.o.no, label = pr2.n ? pr2.n.label : pr2.o.label, moved = pr2.o && pr2.n && pr2.o.no !== pr2.n.no ? ' <small class="hint">(' + pr2.o.no + "번 → " + pr2.n.no + "번)</small>" : "";
+      return '<tr class="' + kind + '"><td class="ck"><span class="ck ' + kind + '">' + { add: "추가", del: "삭제", chg: "변경" }[kind] + '</span></td><td class="cno">' + no + "</td><td><b>" + esc(label) + "</b>" + moved + "</td><td class=\"cf\">" + cells + "</td></tr>";
+    }).join("");
+    var sum = !old && !cur ? "두 버전 모두 화면설계서가 없습니다" : !old ? "v" + esc(snap.version) + "에는 없던 화면설계서입니다 (지금 " + newC.length + "개 항목 신규)" : !cur ? "지금은 삭제된 화면설계서입니다" :
+      (added + removed + changed + top.length ? "추가 " + added + " · 삭제 " + removed + " · 변경 " + changed + " · 같음 " + same + (top.length ? " · 화면 정보 " + top.length + "건" : "") : "내용이 같습니다 (" + same + "개 항목)");
+    var table = old && cur && (rows || top.length) ? '<table class="cmp-t"><thead><tr><th></th><th>No</th><th>항목</th><th>달라진 내용 <small class="hint">(<del>이전</del> → <ins>지금</ins>)</small></th></tr></thead><tbody>' + (top.length ? '<tr class="chg"><td class="ck"><span class="ck chg">변경</span></td><td class="cno">—</td><td><b>화면 정보</b></td><td class="cf">' + top.map(function (r) { return r.replace(/<\/?tr>/g, "").replace(/<td>([^<]*)<\/td><td>(.*)<\/td>/, '<div><span class="fk">$1</span>$2</div>'); }).join("") + "</td></tr>" : "") + rows + "</tbody></table>" : "";
+    return head + pick + '<div class="layer-stage cmp-body"><div class="cmp-sum"><b>달라진 점</b> ' + sum + "</div>" + panes + table + "</div>";
+  }
   function renderVer() {
     var p = P(), pr = p.model.project;
     var snaps = p.snapshots.map(function (s) {
@@ -3878,6 +3982,8 @@
       body = renderGenLayer();
     } else if (layer.kind === "sbfull") {
       body = renderSbFull();
+    } else if (layer.kind === "sbcmp") {
+      body = renderSbCmp();
     } else if (layer.kind === "ai") {
       var ps = P().prompts[layer.key], text = ps[layer.target];
       var TARGET = {
@@ -5016,6 +5122,8 @@
     }
     var sfb = target.closest && target.closest("[data-sbfull]");
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
+    var scb = target.closest && target.closest("[data-sbcmp]");
+    if (scb) { openSbCmp(scb.getAttribute("data-sbcmp")); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
     if (target.closest && target.closest("[data-rtmxlsx]")) { var rx = rtmXlsxBytes(); saveXlsx(rx.bytes, rx.name); return; }
@@ -5163,6 +5271,7 @@
       quietCmd({ op: "qa.result", id: qa[0], device: qa[1], status: tg.value || null });
       return;
     }
+    if (tg.hasAttribute && tg.hasAttribute("data-cmpver") && layer && layer.kind === "sbcmp") { openSbCmp(layer.sid, tg.value); return; }
     if (tg.dataset && tg.dataset.memrole) {
       api("PATCH", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(tg.dataset.memrole), { role: tg.value }).then(function () { toast("권한을 바꿨습니다"); renderMembersAsync(); }, function (e) { toast(e.message, "err"); renderMembersAsync(); });
       return;

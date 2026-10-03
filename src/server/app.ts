@@ -416,12 +416,25 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     return shareView(c, s);
   });
   on("DELETE", "/api/projects/:code/share", async (c, p) => (await need(c, p.code!, "OWNER"), await dropShare(p.code!), { ok: true }));
+  async function shareCode(token: string) {
+    const code = token && token.length >= 20 ? await kv.get(`sharetok:${token}`) : null;
+    if (!code || !(await repo.exists(code))) throw new HttpError(404, "공유 링크가 없거나 끊겼습니다");
+    return code;
+  }
+  /** 스냅샷 시점의 화면 하나 (버전 간 화면 비교) */
+  async function snapshotScreen(code: string, version: string, sid: string) {
+    const st = await repo.load(code, "all");
+    const snap = st.snapshots.find((x) => x.meta.version === version);
+    if (!snap?.model) throw new HttpError(404, `스냅샷이 없습니다: v${version}`);
+    return { ...snap.meta, screen: snap.model.storyboard.screens.find((x) => x.screenId === sid) ?? null, node: snap.model.ia.nodes.find((n) => n.id === sid) ?? null };
+  }
+  on("GET", "/api/projects/:code/snapshots/:version/screens/:sid", async (c, p) => (await need(c, p.code!, "VIEWER"), snapshotScreen(p.code!, p.version!, p.sid!)));
+  on("GET", "/api/share/:token/snapshots/:version/screens/:sid", async (_c, p) => snapshotScreen(await shareCode(p.token!), p.version!, p.sid!), false);
   on(
     "GET",
     "/api/share/:token",
     async (_c, p) => {
-      const code = p.token && p.token.length >= 20 ? await kv.get(`sharetok:${p.token}`) : null;
-      if (!code || !(await repo.exists(code))) throw new HttpError(404, "공유 링크가 없거나 끊겼습니다");
+      const code = await shareCode(p.token!);
       const v = await projectView(code, "", true);
       const parse = (h: Record<string, string>) => Object.fromEntries(Object.entries(h).map(([k, x]) => [k, JSON.parse(x)]));
       return { project: { ...v, role: "VIEWER", ai: null, shared: true }, kv: { gens: parse(await kv.hgetall(`${KV_PREFIX.gens}:${code}`)), reviews: parse(await kv.hgetall(`${KV_PREFIX.reviews}:${code}`)) } };

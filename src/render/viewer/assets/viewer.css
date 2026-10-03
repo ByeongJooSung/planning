@@ -1357,3 +1357,25 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 /* 읽기 전용 공유 보기 */
 .share-badge { margin: 4px 8px 6px; padding: 5px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700; letter-spacing: .02em; display: inline-block; }
 .side-foot a { color: var(--accent); font-weight: 600; text-decoration: none; }
+
+/* 버전 간 화면 비교 */
+.cmp-tools { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.cmp-tools label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.cmp-tools select { font: inherit; font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); }
+.cmp-body { display: flex; flex-direction: column; gap: 14px; }
+.cmp-sum { font-size: 13px; }
+.cmp-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.cmp-pane { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-width: 0; }
+.cmp-pane .stage { padding: 0; border: 0; }
+.cmp-ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.cmp-t { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 12.5px; }
+.cmp-t th, .cmp-t td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+.cmp-t th { background: var(--surface-2); font-size: 12px; }
+.cmp-t td.cno { font-family: var(--mono); color: var(--ink-3); width: 34px; }
+.cmp-t td.ck { width: 46px; white-space: nowrap; }
+.cmp-t .ck.add { color: var(--add); font-weight: 700; } .cmp-t .ck.del { color: var(--del); font-weight: 700; } .cmp-t .ck.chg { color: var(--chg); font-weight: 700; }
+.cmp-t td.cf > div { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; white-space: pre-wrap; word-break: break-word; }
+.cmp-t .fk { flex: 0 0 42px; font-size: 11px; color: var(--ink-3); font-weight: 600; }
+.cmp-t del { color: var(--del); background: color-mix(in srgb, var(--del) 12%, transparent); text-decoration: line-through; }
+.cmp-t ins { color: var(--add); background: color-mix(in srgb, var(--add) 14%, transparent); text-decoration: none; }
+@media (max-width: 900px) { .cmp-panes { grid-template-columns: 1fr; } }
