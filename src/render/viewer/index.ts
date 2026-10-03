@@ -64,7 +64,7 @@ const FONTS =
 
 const CSS_FILES = ["viewer.css", "wire.css"];
 /** 순서 중요: viewer.js가 앞의 전역(KB, Flow, Wire)을 쓴다 */
-const JS_FILES = ["search.js", "flowlayout.js", "flow.js", "flowexport.js", "flowedit.js", "iaedit.js", "frames.js", "wire.js", "dsedit.js", "viewer.js"];
+const JS_FILES = ["search.js", "flowlayout.js", "flow.js", "flowexport.js", "sbexport.js", "flowedit.js", "iaedit.js", "frames.js", "wire.js", "dsedit.js", "viewer.js"];
 
 /**
  * @param standalone true면 <!doctype html> 문서 전체, false면 본문 조각(<title>부터).

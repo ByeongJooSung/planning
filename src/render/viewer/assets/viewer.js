@@ -684,7 +684,7 @@
       var rowTools = ed ? '<div class="row-tools">' + actBtn("sb-edit", "편집", sid + "|" + c.no) + (wire ? actBtn("sb-frame", "모양", sid + "|" + c.no) : "") + actBtn("sb-desc", "AI 설명", sid + "|" + c.no) + (i ? actBtn("sb-up", "↑", sid + "|" + c.no) : "") + (i < n - 1 ? actBtn("sb-down", "↓", sid + "|" + c.no) : "") + actBtn("sb-rm", "삭제", sid + "|" + c.no) + "</div>" : "";
       return '<tr data-dno="' + esc(sid + "|" + c.no) + '"' + (state.sbHl === sid + "|" + c.no ? ' class="hl"' : "") + '><td><span class="no">' + c.no + '</span></td><td class="d-item"><b>' + esc(c.label) + '</b><span class="hint mono">' + esc(c.ui ? c.ui.component : c.kind) + "</span>" + (c.ui && c.ui.link ? '<span class="hint">→ ' + esc(c.ui.link) + "</span>" : "") + rowTools + '</td><td class="d-text">' + descCell(c) + (ruleCell(c).indexOf("dash") < 0 ? '<div class="d-rules">' + ruleCell(c) + "</div>" : "") + "</td></tr>";
     }).join("") || '<tr><td colspan="3" class="empty">항목이 없습니다. ‘+ 항목 추가’로 직접 적거나 AI로 생성하세요.</td></tr>') + "</tbody></table>" + (ed ? '<div class="desc-tools">' + actBtn("sb-add", "+ 항목 추가", sid) + (n ? actBtn("sb-desc", "✦ 설명 전체 AI 작성", sid + "|", "btn-sm ai") : "") + '<span class="hint">설명을 직접 고치거나, AI에게 기능 명세·요구사항을 근거로 설명만 다시 쓰게 합니다. 항목·와이어프레임은 그대로 둡니다.</span></div>' : "");
-    var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
+    var bar = '<div class="sheet-bar"><b>화면설계서</b><span class="hint mono">' + esc(sid) + '</span><span class="sp"></span>' + (opts.full ? "" : '<button class="btn-sm fe-open" data-sbfull="' + esc(sid) + '">▣ 전체 화면으로 편집</button>') + (wire ? previewBtn(sid + " " + sb.title, wire, null, "실제 규격 크게 보기") : "") + '<button class="btn-sm" data-sbx="' + esc(sb.systemCode) + "|pptx|" + esc(sid) + '" title="이 화면만 PPTX로">⬇ PPTX</button>' + genBtn("sb:" + sid, appliedOverlay("sb:" + sid) ? "AI 적용본 v" + appliedOverlay("sb:" + sid).applied + " · 조정" : "AI 생성·조정") + aiBtn("sb:" + sid, "AI 요청 · Figma / Claude") + "</div>" + workCtl(p, "sb:" + sid, "화면설계서") + revBadge(p, sb);
     return '<article class="box sheet' + (opts.full ? " full" : "") + '" data-sheet="' + esc(sid) + '">' + bar + headRow + '<div class="sheet-body">' + left + '<div class="desc-wrap">' + desc + "</div></div></article>";
   }
 
@@ -705,7 +705,9 @@
       var tk = (n.taskIds || []).length ? n.taskIds.map(function (id) { return '<span class="tag mono">' + esc(id) + "</span>"; }).join("") : '<span class="warn-t">Task 없음</span>';
       return '<button class="sb-row' + (n.id === sel ? " on" : "") + '" data-sbsel="' + esc(n.id) + '"><span class="mono">' + esc(n.id) + "</span><b>" + esc(n.name) + '</b><span class="tk">' + tk + "</span>" + (has ? workPill(p, "sb:" + n.id) : '<span class="pill NOT_STARTED">미작성</span>') + "</button>";
     }).join("");
-    return '<section class="section"><div class="toolbar">' + chips + (ed ? actBtn("screen-new", "+ 새 화면", "|" + code) : "") + '<button class="btn-sm fe-open" data-iaedit="' + esc(code) + '"' + (sel ? ' data-iasel="' + esc(sel) + '"' : "") + ">▣ 정보구조도 캔버스에서 Task 연결·구조 편집</button></div>" +
+    var nSb = screens.filter(function (n) { return p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; }); }).length;
+    var xbtns = nSb ? '<span class="xgrp"><b>⬇ 화면설계서 문서</b><button class="btn-sm" data-sbx="' + esc(code) + '|pptx" title="화면 이미지 + 편집 가능한 Description 표, 화면마다 한 장">PPTX</button><button class="btn-sm" data-sbx="' + esc(code) + '|pdf">PDF</button><button class="btn-sm" data-sbx="' + esc(code) + '|print" title="새 창에서 인쇄용 문서 열기">인쇄용 HTML</button><span class="hint">' + nSb + "개 화면</span></span>" : "";
+    return '<section class="section"><div class="toolbar">' + chips + (ed ? actBtn("screen-new", "+ 새 화면", "|" + code) : "") + '<button class="btn-sm fe-open" data-iaedit="' + esc(code) + '"' + (sel ? ' data-iasel="' + esc(sel) + '"' : "") + ">▣ 정보구조도 캔버스에서 Task 연결·구조 편집</button>" + xbtns + "</div>" +
       (noTask ? '<div class="note row"><div><b>Task가 없는 화면 ' + noTask + '개</b><p class="hint">Task 자동 연결이 맞지 않으면 화면을 고른 뒤 ‘Task 연결 편집’으로 직접 연결하세요. Task 없이도 화면설계서를 작성·AI 생성할 수 있습니다.</p></div></div>' : "") +
       '<div class="sb-page"><nav class="sb-list" aria-label="' + esc(code) + ' 화면 목록">' + (rows || '<div class="empty">정보구조도에 화면이 없습니다.</div>') + "</nav>" +
       '<div class="sb-main">' + (sel ? sheetHtml(p, sel, code) : '<div class="box empty">화면을 고르세요.</div>') + "</div></div></section>";
@@ -1099,6 +1101,54 @@
     document.querySelectorAll('.sb-canvas[data-sbc="' + sid + '"] .sbc-mk[data-mk="' + no + '"]').forEach(function (e) { e.classList.add("hl"); });
     var row = document.querySelector('tr[data-dno="' + sid + "|" + no + '"]');
     if (row) { row.classList.add("hl"); row.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  }
+
+  // ── 화면설계서 문서 내보내기 (PPTX·PDF·인쇄용 HTML) ──
+  function sbExportItems(p, code, onlyId) {
+    var list = systemScreens(p, code).filter(function (n) { return (!onlyId || n.id === onlyId) && p.model.storyboard.screens.some(function (s) { return s.screenId === n.id; }); });
+    return list.map(function (n) {
+      var sb = p.model.storyboard.screens.find(function (s) { return s.screenId === n.id; }), ctx = wireCtx(p, code, n.id);
+      var html = screenWire(p, sb, "pos");
+      // 설명 번호 위치: 캔버스에서 옮긴 위치가 있으면 그대로, 없으면 요소 왼쪽 위 (그릴 때 잰다)
+      return { sb: sb, html: html, head: { system: code + " " + ctx.systemName, location: ctx.crumbs.join(" > "), kind: KIND[n.kind] || "", tasks: n.taskIds || [] }, marks: null };
+    });
+  }
+  /** 번호 위치 재기: 와이어프레임을 실제 폭으로 잠깐 그려 data-no 요소 좌표를 얻는다 */
+  function measureMarks(items) {
+    var host = document.createElement("div");
+    host.setAttribute("style", "position:fixed;left:-30000px;top:0;width:" + VW + "px;z-index:-1");
+    document.body.appendChild(host);
+    items.forEach(function (it) {
+      if (!it.html) return;
+      host.innerHTML = it.html;
+      var r0 = host.getBoundingClientRect(), by = {};
+      host.querySelectorAll("[data-no]").forEach(function (e) { var r = e.getBoundingClientRect(); if ((!r.width || !r.height) && e.firstElementChild) r = e.firstElementChild.getBoundingClientRect(); by[e.getAttribute("data-no")] = { x: r.left - r0.left, y: r.top - r0.top }; });
+      it.marks = it.sb.components.map(function (c) { var m = c.marker || by[String(c.no)]; return m ? { no: c.no, x: m.x, y: m.y } : null; }).filter(Boolean);
+      // 본문 영역만 잘라 크게 (캔버스와 같은 기준): 컨테이너·항목 상자의 좌우 끝 ± 48px
+      var L = VW, R = 0, cons = host.querySelectorAll(".wf-container, [data-no]");
+      if (cons.length && !host.querySelector(".wf-sshell")) {
+        Array.prototype.forEach.call(cons, function (e) { var r = e.getBoundingClientRect(); if (r.width) { L = Math.min(L, r.left - r0.left); R = Math.max(R, r.right - r0.left); } });
+        L = Math.max(0, Math.floor(L - 48)); R = Math.min(VW, Math.ceil(R + 48));
+        if (R - L >= 600) it.crop = { x: L, w: R - L };
+      }
+    });
+    document.body.removeChild(host);
+  }
+  function sbExport(code, kind, onlyId, btn) {
+    var p = P(), items = sbExportItems(p, code, onlyId), s = sysOf(p, code);
+    if (!items.length) return toast("내보낼 화면설계서가 없습니다", "err");
+    if (!window.SbExport) return toast("내보내기 모듈이 없습니다 — 새로고침하세요", "err");
+    measureMarks(items);
+    var opts = { project: p.model.project.name, system: code + " " + (s ? s.name : ""), date: new Date().toISOString().slice(0, 10), version: p.model.project.version, vw: VW };
+    var base = (p.model.project.code + "_" + code + "_화면설계서" + (onlyId ? "_" + onlyId : "") + "_" + opts.date).replace(/[\\/:*?"<>|\s]+/g, "_");
+    var label = btn ? btn.textContent : "";
+    var step = function (i, n, id) { if (btn) btn.textContent = "그리는 중 " + i + "/" + n; };
+    if (btn) btn.disabled = true;
+    var done = function () { if (btn) { btn.disabled = false; btn.textContent = label; } };
+    var job = kind === "pdf" ? SbExport.pdf(items, opts, step).then(function (bl) { FlowExport.download(bl, base + ".pdf"); }) :
+      kind === "print" ? SbExport.printHtml(items, opts, step).then(function (html) { var w = window.open("", "_blank"); if (!w) throw new Error("팝업이 막혔습니다 — 이 사이트의 팝업을 허용하세요"); w.document.open(); w.document.write(html); w.document.close(); }) :
+      SbExport.deck(items, opts, step).then(function (bytes) { FlowExport.download(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }), base + ".pptx"); });
+    job.then(function () { done(); toast("화면설계서 " + items.length + "개 화면을 " + { pdf: "PDF", print: "인쇄용 문서", pptx: "PPTX" }[kind] + "로 만들었습니다"); }, function (e) { done(); toast("내보내기 실패: " + (e && e.message || e), "err"); });
   }
 
   // ── 화면설계서 캔버스 편집 도구: 항목 고르기 · 모양(프레임) 편집 · 내용(props) 편집 · 복제 · 순서 · 새 항목 그리기 ──
@@ -4520,6 +4570,8 @@
     if (sfb) { openLayer({ kind: "sbfull", sid: sfb.getAttribute("data-sbfull") }); return; }
     var ieb = target.closest && target.closest("[data-iaedit]");
     if (ieb) { openIaEditor(ieb.getAttribute("data-iaedit"), ieb.getAttribute("data-iasel") || undefined); return; }
+    var sbx = target.closest && target.closest("[data-sbx]");
+    if (sbx) { var sxa = sbx.getAttribute("data-sbx").split("|"); sbExport(sxa[0], sxa[1], sxa[2] || null, sbx); return; }
     var dst = target.closest && target.closest("[data-dstab]");
     if (dst) { var dsa = dst.getAttribute("data-dstab").split("|"); state.dsTab[dsa[0]] = dsa[1]; render(); return; }
     var dpk = target.closest && target.closest("[data-dspick]");
