@@ -198,6 +198,38 @@
             "type": "integer",
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
+          },
+          "coverage": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "req": {
+                  "type": "string",
+                  "maxLength": 400
+                },
+                "by": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "manual": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "req"
+              ]
+            }
           }
         },
         "required": [

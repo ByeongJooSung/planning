@@ -826,6 +826,8 @@
       var f = F.find(T(), S.ai.onlyId);
       if (!f || !f.parent) throw new Error("고칠 요소를 찾지 못했습니다 — 요소를 다시 고르세요");
       var idx = f.parent.children.indexOf(f.node), old = f.node;
+      // sanitize가 프레임이 아닌 요소를 프레임으로 감싼 경우: 원래 요소가 프레임이 아니었으면 벗긴다
+      if (old.type !== "frame" && tree.type === "frame" && (tree.children || []).length === 1 && !tree.fill && !tree.stroke) tree = tree.children[0];
       snap();
       f.parent.children.splice(idx, 1);
       reId(tree, T());
