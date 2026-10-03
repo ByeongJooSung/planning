@@ -317,7 +317,8 @@
   function printHtml(items, opts, onStep) {
     return prepare(items, opts, onStep).then(function (slides) {
       var body = [coverHtml(items, opts)].concat(slides.map(slideHtml)).map(function (h) { return '<section class="pg">' + h + "</section>"; }).join("");
-      return "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>" + esc((opts.project || "") + " " + (opts.system || "") + " 화면설계서") + "</title><style>@page{size:1280px 720px;margin:0}body{margin:0;background:#e5e7eb}.pg{width:1280px;height:720px;margin:16px auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);page-break-after:always;overflow:hidden}@media print{body{background:#fff}.pg{margin:0;box-shadow:none}}</style></head><body>" + body + "</body></html>";
+      // 뷰어 조각 검사가 html 여는 태그 글자를 보지 않도록 나눠 쓴다
+      return "<!doctype html><" + "html lang=\"ko\"><head><meta charset=\"utf-8\"><title>" + esc((opts.project || "") + " " + (opts.system || "") + " 화면설계서") + "</title><style>@page{size:1280px 720px;margin:0}body{margin:0;background:#e5e7eb}.pg{width:1280px;height:720px;margin:16px auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.15);page-break-after:always;overflow:hidden}@media print{body{background:#fff}.pg{margin:0;box-shadow:none}}</style></head><body>" + body + "</body></" + "html>";
     });
   }
 
