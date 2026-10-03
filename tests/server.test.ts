@@ -233,6 +233,33 @@ describe("시나리오", () => {
     expect(Object.keys(kv.body.gens)).toEqual(["PUBINFO__ia__PUB"]);
   });
 
+  it("읽기 전용 공유 링크: 운영자만 만들고 끊는다, 링크는 로그인 없이 보기만", async () => {
+    expect((await editor.req("POST", "/api/projects/PUBINFO/share")).status).toBe(403);
+    expect((await owner.req("GET", "/api/projects/PUBINFO/share")).body).toEqual({ link: null });
+    const made = await owner.req("POST", "/api/projects/PUBINFO/share");
+    expect(made.status).toBe(200);
+    expect(made.body.link).toMatch(/\/s\/[A-Za-z0-9_-]{20,}$/);
+    const token = made.body.link.split("/s/")[1];
+    expect((await owner.req("GET", "/api/projects/PUBINFO/share")).body.link).toBe(made.body.link);
+    // 로그인 없이 읽기 전용으로 받는다 (AI 설정은 숨김, 생성 결과 KV 포함)
+    const anon = await stranger.req("GET", `/api/share/${token}`);
+    expect(anon.status).toBe(200);
+    expect(anon.body.project.model.project.code).toBe("PUBINFO");
+    expect(anon.body.project).toMatchObject({ role: "VIEWER", shared: true, ai: null });
+    expect(Object.keys(anon.body.kv.gens)).toEqual(["PUBINFO__ia__PUB"]);
+    expect((await fetch(`${base}/s/${token}/sb`)).status).toBe(200);
+    expect((await stranger.req("GET", "/api/share/not-a-real-token-xxxxxxxxxx")).status).toBe(404);
+    // 다시 만들면 예전 링크는 끊긴다
+    const again = await owner.req("POST", "/api/projects/PUBINFO/share");
+    expect(again.body.link).not.toBe(made.body.link);
+    expect((await stranger.req("GET", `/api/share/${token}`)).status).toBe(404);
+    expect((await stranger.req("GET", `/api/share/${again.body.link.split("/s/")[1]}`)).status).toBe(200);
+    // 끊기
+    expect((await owner.req("DELETE", "/api/projects/PUBINFO/share")).status).toBe(200);
+    expect((await stranger.req("GET", `/api/share/${again.body.link.split("/s/")[1]}`)).status).toBe(404);
+    expect((await owner.req("GET", "/api/projects/PUBINFO/share")).body).toEqual({ link: null });
+  });
+
   it("스냅샷·프로젝트 삭제", async () => {
     const s = await editor.req("POST", "/api/projects/PUBINFO/commands", { cmd: { op: "snapshot", note: "기준선" } });
     expect(s.body.project.snapshots).toHaveLength(1);

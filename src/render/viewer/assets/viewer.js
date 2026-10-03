@@ -5,6 +5,8 @@
   DATA.projects.forEach(function (p) { p.base = JSON.parse(JSON.stringify(p.model)); });
   // server: `planning serve` 웹 서비스(로그인·편집), 그 밖: 파일 하나로 여는 읽기 전용 뷰어
   var SRV = DATA.mode === "server";
+  /** 읽기 전용 공유 링크(/s/토큰)로 들어온 상태 — 로그인 없이 보기만 */
+  var SHARE = null;
   var Wire = window.Wire, Flow = window.Flow, KB = window.KB;
 
   var STATUS = { NOT_STARTED: "미착수", IN_DESIGN: "설계중", DESIGNED: "설계완료", REVIEWED: "검토완료", EXCLUDED: "제외" };
@@ -150,7 +152,7 @@
   }
   function aiBtn(key, label) {
     var p = P();
-    if (!p.prompts || !p.prompts[key]) return "";
+    if (SHARE || !p.prompts || !p.prompts[key]) return "";
     return '<button class="ai-btn" data-ai="' + esc(key) + '"><span aria-hidden="true">✦</span> ' + esc(label || "AI 요청") + "</button>";
   }
 
@@ -190,27 +192,27 @@
       var p = P(), pr = p.model.project, page = r.view === "task" ? "req" : r.page;
       var ds = p.model.systems.filter(function (s) { return s.hasScreens; });
       var sel = ds.filter(function (s) { return selectedDesign(p, s.code); }).length;
-      html += '<button class="back" data-nav="home">← 전체 프로젝트</button>';
+      html += SHARE ? '<div class="share-badge">읽기 전용 공유 보기</div>' : '<button class="back" data-nav="home">← 전체 프로젝트</button>';
       html += '<div class="proj-id"><span class="code">' + esc(pr.code) + " · v" + esc(pr.version) + '</span><b>' + esc(pr.name) + "</b></div>";
       var groups = [
         ["프로젝트", [["dash", null], ["kb", p.model.sources.length], ["req", p.rtm.rows.length], ["design", sel + "/" + ds.length]]],
         ["통합 산출물", [["ia", null], ["sb", p.model.storyboard.screens.length + "/" + p.model.ia.nodes.filter(function (n) { return n.kind !== "MENU"; }).length], ["rtm", p.rtm.gaps.length + p.rtm.orphans.length || null], ["flow", null], ["qa", (p.model.ia.tests || []).length || null], ["proto", (p.work ? p.work.systems.filter(function (x) { return x.designDone; }).length : 0) + "/" + ds.length]]],
         ["이력", [["ver", p.snapshots.length]]]
       ];
-      if (SRV) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
+      if (SRV && !SHARE) groups.push(["설정 · " + ROLE_LABEL[p.role], [["members", null], ["aiset", null]]]);
       groups.forEach(function (g) {
         html += '<nav class="nav-group"><span class="side-label">' + g[0] + "</span>" + g[1].map(function (it) {
           opts.push([it[0], g[0] + " · " + PAGES[it[0]][0]]);
           return navItem(PAGES[it[0]][0], 'data-page="' + it[0] + '"', page === it[0], it[1]);
         }).join("") + "</nav>";
       });
-      opts.unshift(["home", "← 전체 프로젝트"]);
+      if (!SHARE) opts.unshift(["home", "← 전체 프로젝트"]);
     }
     var cur = r.view === "home" || r.view === "account" || r.view === "admin" ? "home" : r.view === "task" ? "req" : r.page;
     html += '<label class="sr" for="lnb-select">메뉴</label><select id="lnb-select" class="lnb-select">' + opts.map(function (o) {
       return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + esc(o[1]) + "</option>";
     }).join("") + "</select>";
-    html += SRV && ME ? '<div class="side-foot user-foot">' + (installEvt ? actBtn("install", "⤓ 앱으로 설치", null, "btn-primary install-btn") : "") + "<b>" + esc(ME.name) + "</b><span>" + esc(ME.email) + '</span><span class="row-actions">' + actBtn("account", "내 계정") + actBtn("logout", "로그아웃") + "</span></div>" :
+    html += SHARE ? '<div class="side-foot">공유 링크로 보는 화면입니다. 편집·댓글·AI 생성은 할 수 없습니다.<br>' + (ME ? '<a href="/p/' + enc(P().model.project.code) + '/dash">내 계정으로 열기 →</a>' : '<a href="/">로그인 →</a>') + "</div>" : SRV && ME ? '<div class="side-foot user-foot">' + (installEvt ? actBtn("install", "⤓ 앱으로 설치", null, "btn-primary install-btn") : "") + "<b>" + esc(ME.name) + "</b><span>" + esc(ME.email) + '</span><span class="row-actions">' + actBtn("account", "내 계정") + actBtn("logout", "로그아웃") + "</span></div>" :
       '<div class="side-foot">생성 ' + esc(fmtDate(DATA.generatedAt)) + "<br><code>planning view</code></div>";
     document.getElementById("side").innerHTML = html;
   }
@@ -3878,6 +3880,7 @@
   var SOURCE_LABEL = { project: "프로젝트 설정", personal: "내 개인 설정", server: "서버 기본 설정" };
   function enc(s) { return encodeURIComponent(s); }
   function api(method, url, body, signal) {
+    if (SHARE && method !== "GET") { var se = new Error("공유 링크에서는 저장할 수 없습니다. 멤버로 초대받아 로그인하면 편집할 수 있습니다."); se.code = "share"; return Promise.reject(se); }
     return fetch(url, { method: method, credentials: "same-origin", signal: signal, headers: { "content-type": "application/json", "x-planning": "1" }, body: method === "GET" ? undefined : JSON.stringify(body === undefined ? {} : body) })
       .then(function (res) {
         checkVersion(res.headers.get("x-app-version"));
@@ -3949,10 +3952,10 @@
     if (!SRV || location.pathname.indexOf("/invite/") === 0) return;
     var r = state.route, want = "/";
     if ((r.view === "project" || r.view === "task") && P()) {
-      var code = P().model.project.code;
-      if (r.view === "task") want = "/p/" + enc(code) + "/task/" + enc(r.taskId) + "/" + (r.tab || "flow");
+      var code = P().model.project.code, head = SHARE ? "/s/" + enc(SHARE) : "/p/" + enc(code);
+      if (r.view === "task") want = head + "/task/" + enc(r.taskId) + "/" + (r.tab || "flow");
       else {
-        want = "/p/" + enc(code) + "/" + (r.page || "dash");
+        want = head + "/" + (r.page || "dash");
         if ((r.page === "design" || r.page === "proto" || r.page === "sb" || r.page === "qa") && state.dsSys[code]) want += "?sys=" + enc(state.dsSys[code]);
       }
     } else if (r.view === "account") want = "/account";
@@ -3961,7 +3964,7 @@
   }
   /** 주소 → 화면 (새로고침·링크로 들어올 때) */
   function routeFromUrl() {
-    var m = location.pathname.match(/^\/p\/([^/]+)(?:\/(.*))?$/);
+    var m = location.pathname.match(/^\/[ps]\/([^/]+)(?:\/(.*))?$/);
     if (!m) return null;
     var rest = (m[2] || "").split("/").filter(Boolean).map(decodeURIComponent), code = decodeURIComponent(m[1]);
     var sys = new URLSearchParams(location.search).get("sys");
@@ -4284,6 +4287,15 @@
         }
       });
     },
+    "share-make": function () {
+      var code = P().model.project.code, had = memCache && memCache.share && memCache.share.link;
+      var run = function () { return api("POST", "/api/projects/" + enc(code) + "/share").then(function () { toast(had ? "새 공유 링크를 만들었습니다. 예전 링크는 끊겼습니다" : "공유 링크를 만들었습니다"); renderMembersAsync(); }, function (e) { toast(e.message, "err"); }); };
+      if (had) confirmAct("공유 링크 새로 만들기", "예전 링크로는 더 볼 수 없게 됩니다. 새 링크를 만들까요?", "새로 만들기", run); else run();
+    },
+    "share-revoke": function () {
+      confirmAct("공유 끊기", "이 링크로는 더 볼 수 없게 됩니다. 끊을까요?", "끊기", function () { return api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/share").then(function () { toast("공유를 끊었습니다"); renderMembersAsync(); }); });
+    },
+    "share-open": function () { if (memCache && memCache.share && memCache.share.link) window.open(memCache.share.link, "_blank", "noopener"); },
     "inv-cancel": function (id) { api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/invites/" + enc(id)).then(renderMembersAsync, function (e) { toast(e.message, "err"); }); },
     "mem-rm": function (uid) {
       confirmAct("멤버 내보내기", "이 멤버를 프로젝트에서 내보낼까요?", "내보내기", function () { return api("DELETE", "/api/projects/" + enc(P().model.project.code) + "/members/" + enc(uid)).then(renderMembersAsync); });
@@ -4306,10 +4318,14 @@
   function renderMembers() {
     var p = P(), code = p.model.project.code;
     if (!memCache || memCache.code !== code) {
-      api("GET", "/api/projects/" + enc(code) + "/members").then(function (r) { memCache = Object.assign({ code: code }, r); render(); }, function (e) { toast(e.message, "err"); });
+      var shareQ = isOwner() ? api("GET", "/api/projects/" + enc(code) + "/share").catch(function () { return { link: null }; }) : Promise.resolve(null);
+      Promise.all([api("GET", "/api/projects/" + enc(code) + "/members"), shareQ]).then(function (rs) { memCache = Object.assign({ code: code, share: rs[1] }, rs[0]); render(); }, function (e) { toast(e.message, "err"); });
       return '<div class="box empty">멤버를 불러오는 중…</div>';
     }
     var own = isOwner();
+    var share = own ? '<section class="section"><h2>읽기 전용 공유 링크</h2><div class="box pad">' + (memCache.share && memCache.share.link ?
+      '<p class="hint" style="margin-top:0">이 링크를 아는 사람은 로그인 없이 모든 산출물을 보기만 할 수 있습니다(편집·댓글·AI 불가). 만든 날 ' + esc(fmtDate(memCache.share.createdAt)) + '</p>' + copyBox(memCache.share.link) + '<div class="row-actions" style="margin-top:8px">' + actBtn("share-open", "새 창으로 열기") + actBtn("share-make", "링크 새로 만들기 (예전 링크 끊김)") + actBtn("share-revoke", "공유 끊기", null, "btn-sm danger") + "</div>" :
+      '<p class="hint" style="margin-top:0">발주처·외부 검토자에게 로그인 없이 보여 줄 때 씁니다. 링크를 아는 사람은 누구나 볼 수 있으니 필요할 때만 만들고, 끝나면 끊으세요.</p>' + actBtn("share-make", "공유 링크 만들기", null, "btn-primary")) + "</div></section>" : "";
     var rows = memCache.members.map(function (m) {
       var me = ME && m.userId === ME.id;
       var roleCell = own && !me ? '<select data-memrole="' + esc(m.userId) + '" aria-label="' + esc(m.name) + ' 권한">' + ["OWNER", "EDITOR", "VIEWER"].map(function (r) { return '<option value="' + r + '"' + (r === m.role ? " selected" : "") + ">" + ROLE_LABEL[r] + "</option>"; }).join("") + "</select>" : '<span class="pill ' + (m.role === "OWNER" ? "REVIEWED" : m.role === "EDITOR" ? "DESIGNED" : "NOT_STARTED") + '">' + ROLE_LABEL[m.role] + "</span>";
@@ -4320,7 +4336,7 @@
     }).join("") + "</tbody></table></div>" : '<div class="box empty">대기 중인 초대가 없습니다.</div>') + "</section>" : "";
     var danger = own ? '<section class="section"><h2>프로젝트 관리</h2><div class="box pad row-actions">' + actBtn("proj-rename", "이름 바꾸기") + actBtn("proj-delete", "프로젝트 삭제", null, "btn-sm danger") + "</div></section>" : "";
     return '<section class="section"><div class="toolbar"><p class="hint" style="margin:0">운영자는 멤버를 초대하고 권한을 바꾸며 프로젝트 AI 설정을 관리합니다. 작업자는 편집과 AI 생성을, 열람자는 보기와 디자인 댓글을 할 수 있습니다.</p>' + (own ? actBtn("mem-invite", "+ 공동 작업자 초대", null, "btn-primary") : "") + "</div>" +
-      '<div class="box twrap"><table><thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>참여</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" + inv + danger;
+      '<div class="box twrap"><table><thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>참여</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" + inv + share + danger;
   }
   // ── AI 연결 (여러 개 저장 · 모델 목록 불러오기 · 빠른 전환) ──
   var AI_PRESETS = {
@@ -4809,8 +4825,30 @@
       });
     });
   }
+  /** 공유 링크: 로그인 없이 프로젝트 하나를 읽기 전용으로 연다 */
+  function bootShare(token) {
+    SHARE = token;
+    document.body.classList.add("share");
+    return api("GET", "/api/share/" + enc(token)).then(function (r) {
+      var i = setProject(r.project);
+      Object.keys((r.kv && r.kv.gens) || {}).forEach(function (k) { overlays[k] = r.kv.gens[k]; });
+      Object.keys((r.kv && r.kv.reviews) || {}).forEach(function (k) { reviews[k] = r.kv.reviews[k]; });
+      rebuild();
+      var at = routeFromUrl() || {};
+      if (at.sys) state.dsSys[r.project.model.project.code] = at.sys;
+      if (at.view === "task" && findTrace(DATA.projects[i], at.taskId)) return go({ view: "task", p: i, taskId: at.taskId, tab: at.tab });
+      go({ view: "project", p: i, page: at.page || "dash" });
+    }, function (e) {
+      document.getElementById("side").innerHTML = '<div class="brand"><b>Planning Studio</b><span>서비스 기획 산출물 관리</span></div>';
+      document.getElementById("main").innerHTML = '<div class="box empty"><b>' + esc(e.message) + '</b><p class="hint">운영자가 링크를 끊었거나 프로젝트가 삭제됐을 수 있습니다. <a href="/">로그인해서 열기 →</a></p></div>';
+    });
+  }
   function bootServer() {
     document.getElementById("main").innerHTML = '<div class="box empty">불러오는 중…</div>';
+    var sm = location.pathname.match(/^\/s\/([^/]+)/);
+    if (sm) {
+      return api("GET", "/api/config").then(function (c) { CFG = c; return api("GET", "/api/me").then(function (r) { ME = r.user; }, function () {}); }, function () {}).then(function () { return bootShare(decodeURIComponent(sm[1])); });
+    }
     var m = location.pathname.match(/^\/invite\/([^/]+)/);
     var pre = m ? api("GET", "/api/invite-links/" + enc(m[1])).then(function (r) { authState.invite = r; authState.token = m[1]; authState.mode = r.hasAccount ? "login" : "signup"; }, function (e) { authState.err = e.message; history.replaceState(null, "", "/"); }) : Promise.resolve();
     AI.sample = {

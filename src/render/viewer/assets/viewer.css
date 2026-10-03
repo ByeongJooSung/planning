@@ -1353,3 +1353,7 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .covt .tag { font-size: 10.5px; }
 .covno { width: 20px; height: 20px; border-radius: 50%; border: 0; background: #d92d20; color: #fff; font: 700 11px/20px var(--font); padding: 0; margin-right: 2px; cursor: pointer; }
 .fx-only { margin: 0 0 8px; font-size: 12.5px; flex-wrap: wrap; }
+
+/* 읽기 전용 공유 보기 */
+.share-badge { margin: 4px 8px 6px; padding: 5px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700; letter-spacing: .02em; display: inline-block; }
+.side-foot a { color: var(--accent); font-weight: 600; text-decoration: none; }

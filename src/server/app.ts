@@ -293,6 +293,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     if (c.body?.confirm !== p.code) throw new HttpError(400, "확인용으로 프로젝트 코드를 정확히 입력하세요");
     await repo.lock(p.code!, () => repo.remove(p.code!));
     await acc.dropProject(p.code!);
+    await dropShare(p.code!);
     await kv.del(`${KV_PREFIX.gens}:${p.code}`, `${KV_PREFIX.reviews}:${p.code}`, `ailog:${p.code}`);
     return { ok: true };
   });
@@ -394,6 +395,39 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
     }
   }
   const clip = (t: string) => (t.length <= 6000 ? t : `${t.slice(0, 4000)}\n\n… (${t.length - 6000}자 생략) …\n\n${t.slice(-2000)}`);
+
+  // 읽기 전용 공유 링크 (운영자) — 로그인 없이 보기만. 프로젝트당 하나, 다시 만들면 예전 링크는 끊긴다
+  const shareOf = async (code: string) => {
+    const raw = await kv.get(`share:${code}`);
+    return raw ? (JSON.parse(raw) as { token: string; createdAt: string; by: string }) : null;
+  };
+  async function dropShare(code: string) {
+    const cur = await shareOf(code);
+    if (cur) await kv.del(`share:${code}`, `sharetok:${cur.token}`);
+  }
+  const shareView = (c: Ctx, s: { token: string; createdAt: string; by: string } | null) => (s ? { link: `${origin(c)}/s/${s.token}`, createdAt: s.createdAt } : { link: null });
+  on("GET", "/api/projects/:code/share", async (c, p) => (await need(c, p.code!, "OWNER"), shareView(c, await shareOf(p.code!))));
+  on("POST", "/api/projects/:code/share", async (c, p) => {
+    await need(c, p.code!, "OWNER");
+    await dropShare(p.code!);
+    const s = { token: newToken(), createdAt: (opts.now?.() ?? new Date()).toISOString(), by: c.user!.id };
+    await kv.set(`share:${p.code}`, JSON.stringify(s));
+    await kv.set(`sharetok:${s.token}`, p.code!);
+    return shareView(c, s);
+  });
+  on("DELETE", "/api/projects/:code/share", async (c, p) => (await need(c, p.code!, "OWNER"), await dropShare(p.code!), { ok: true }));
+  on(
+    "GET",
+    "/api/share/:token",
+    async (_c, p) => {
+      const code = p.token && p.token.length >= 20 ? await kv.get(`sharetok:${p.token}`) : null;
+      if (!code || !(await repo.exists(code))) throw new HttpError(404, "공유 링크가 없거나 끊겼습니다");
+      const v = await projectView(code, "", true);
+      const parse = (h: Record<string, string>) => Object.fromEntries(Object.entries(h).map(([k, x]) => [k, JSON.parse(x)]));
+      return { project: { ...v, role: "VIEWER", ai: null, shared: true }, kv: { gens: parse(await kv.hgetall(`${KV_PREFIX.gens}:${code}`)), reviews: parse(await kv.hgetall(`${KV_PREFIX.reviews}:${code}`)) } };
+    },
+    false,
+  );
 
   // 멤버·초대 (운영자)
   on("GET", "/api/projects/:code/members", async (c, p) => {
@@ -553,7 +587,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
         if (url.pathname === "/favicon.ico") return sendBuf(res, icons.get("favicon-32.png")!, "image/png");
         const icon = url.pathname.startsWith("/icons/") ? icons.get(url.pathname.slice(7)) : undefined;
         if (icon) return sendBuf(res, icon, url.pathname.endsWith(".svg") ? "image/svg+xml" : "image/png");
-        if (url.pathname === "/" || url.pathname === "/account" || url.pathname === "/admin" || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/p/")) return send(res, 200, shell, "text/html; charset=utf-8");
+        if (url.pathname === "/" || url.pathname === "/account" || url.pathname === "/admin" || url.pathname.startsWith("/invite/") || url.pathname.startsWith("/p/") || url.pathname.startsWith("/s/")) return send(res, 200, shell, "text/html; charset=utf-8");
         throw new HttpError(404, "없는 페이지입니다");
       }
       if (opts.init) ready ??= opts.init().catch((e) => {
