@@ -72,8 +72,55 @@
     var h = (menu ? G.menuH : G.scrH) + (lines.length - 1) * 17;
     return { w: Math.ceil(w / 2) * 2, h: h, lines: lines };
   }
-  function layout() {
-    var sys = S.o.system, L = { nodes: {}, edges: [], W: 0, H: 0 };
+  function layout() { return S.dir === "v" ? layoutV() : layoutH(); }
+  /** 세로(사이트맵) 배치: 1단계 메뉴를 가로로 나란히, 그 아래로 하위 항목을 들여쓰기한 목록으로 — 화면이 많아도 폭을 다 쓴다 */
+  function layoutV() {
+    var sys = S.o.system, L = { nodes: {}, edges: [], W: 0, H: 0, dir: "v" };
+    var rootN = { id: ROOT, name: sys.name + " (" + sys.code + ")", kind: "ROOT" }, rs = size(rootN);
+    var IND = 22, GAP = 10, COLGAP = 28, BUS = 34;
+    var top = { id: ROOT, n: rootN, d: 0, w: rs.w, h: rs.h, lines: rs.lines, kids: [], hidden: 0 };
+    var cols = kids(ROOT).map(function (m) {
+      var items = [];
+      (function walk(n, d) {
+        var sz = size(n), ch = S.collapsed[n.id] ? [] : kids(n.id);
+        var it = { id: n.id, n: n, d: d, w: sz.w, h: sz.h, lines: sz.lines, kids: [], hidden: S.collapsed[n.id] ? subtree(n.id).length - 1 : 0, ind: (d - 1) * IND };
+        items.push(it);
+        it.kids = ch.map(function (c) { return walk(c, d + 1); });
+        return it;
+      })(m, 1);
+      var w = items.reduce(function (a, it) { return Math.max(a, it.ind + it.w + (it.hidden ? 40 : 0)); }, 0);
+      return { items: items, w: w };
+    });
+    var x = G.pad, y0 = G.pad + rs.h + BUS;
+    cols.forEach(function (c) {
+      var y = y0;
+      c.items.forEach(function (it) {
+        it.x = x + it.ind; it.y = y; it.cx = it.x + it.w / 2; it.cy = it.y + it.h / 2;
+        L.nodes[it.id] = it;
+        y += it.h + GAP;
+      });
+      c.items.forEach(function (it) {
+        it.kids.forEach(function (k) {
+          // 부모 왼쪽 아래에서 내려와 자식 왼쪽으로 (매달린 목록)
+          var px = it.x + 10, pts = [[px, it.y + it.h], [px, k.cy], [k.x, k.cy]];
+          L.edges.push({ from: it, to: k, pts: pts });
+        });
+      });
+      c.x = x; c.h = y - y0;
+      x += c.w + COLGAP;
+      L.H = Math.max(L.H, y + G.pad);
+    });
+    L.W = Math.max(x - COLGAP + G.pad, 480);
+    top.x = Math.max(G.pad, (L.W - top.w) / 2); top.y = G.pad; top.cx = top.x + top.w / 2; top.cy = top.y + top.h / 2;
+    top.kids = cols.map(function (c) { return c.items[0]; });
+    L.nodes[ROOT] = top;
+    var busY = top.y + top.h + BUS / 2;
+    top.kids.forEach(function (k) { L.edges.push({ from: top, to: k, pts: [[top.cx, top.y + top.h], [top.cx, busY], [k.cx, busY], [k.cx, k.y]] }); });
+    if (!cols.length) L.H = y0 + G.pad;
+    return L;
+  }
+  function layoutH() {
+    var sys = S.o.system, L = { nodes: {}, edges: [], W: 0, H: 0, dir: "h" };
     var rootN = { id: ROOT, name: sys.name + " (" + sys.code + ")", kind: "ROOT" };
     var depthW = [], items = [];
     function walk(n, d) {
@@ -117,8 +164,8 @@
     var font = "font-family='" + FL.FONT + "'", mono = "font-family='" + FL.MONO + "'";
     var s = "";
     L.edges.forEach(function (e) {
-      var a = e.from, b = e.to, x1 = a.x + a.w + (a.id === ROOT ? 0 : 0), mx = a.x + a.w + G.colGap / 2, x2 = b.x;
-      var pts = [[x1, a.cy], [mx, a.cy], [mx, b.cy], [x2, b.cy]];
+      var a = e.from, b = e.to, x1 = a.x + a.w, mx = a.x + a.w + G.colGap / 2, x2 = b.x;
+      var pts = e.pts || [[x1, a.cy], [mx, a.cy], [mx, b.cy], [x2, b.cy]];
       s += '<path d="' + FL.roundPath(pts, 8) + '" fill="none" stroke="' + line + '" stroke-width="1.4"/>';
     });
     Object.keys(L.nodes).forEach(function (id) {
@@ -196,7 +243,9 @@
   function open(o) {
     if (S) close(true);
     var nodes = sanitize(o.nodes);
-    S = { o: o, nodes: nodes, saved: JSON.stringify(nodes), undo: [], redo: [], sel: null, z: 1, tab: "props", L: null, drag: null, drop: null, collapsed: {}, aiBusy: false, aiCtl: null, aiDraft: "", taskQ: "" };
+    var dir = "h";
+    try { dir = localStorage.getItem("ia-dir:" + o.system.code) || (nodes.length > 30 ? "v" : "h"); } catch (e) { dir = nodes.length > 30 ? "v" : "h"; }
+    S = { o: o, nodes: nodes, saved: JSON.stringify(nodes), undo: [], redo: [], sel: null, z: 1, tab: "props", L: null, drag: null, drop: null, collapsed: {}, aiBusy: false, aiCtl: null, aiDraft: "", taskQ: "", dir: dir };
     var el = document.createElement("div");
     el.className = "fe ie";
     el.setAttribute("role", "dialog");
@@ -268,6 +317,7 @@
       (ed ? '<button class="fe-b" data-ie-act="undo" title="되돌리기 (Ctrl+Z)">↶</button><button class="fe-b" data-ie-act="redo" title="다시 (Ctrl+Shift+Z)">↷</button><span class="fe-sep"></span>' : "") +
       '<button class="fe-b" data-ie-act="zout" title="축소">−</button><button class="fe-b fe-zv" data-ie-act="z100" title="100%로">100%</button><button class="fe-b" data-ie-act="zin" title="확대">+</button><button class="fe-b" data-ie-act="fit" title="화면에 맞춤">맞춤</button>' +
       '<button class="fe-b" data-ie-act="expand" title="접은 가지 모두 펼치기">모두 펼치기</button>' +
+      '<span class="fe-seg" role="group" aria-label="배치 방향"><button class="fe-b" data-ie-act="dir-v" title="메뉴를 가로로 나란히, 하위 화면은 아래로 (사이트맵)">세로 배치</button><button class="fe-b" data-ie-act="dir-h" title="왼쪽에서 오른쪽으로 펼치는 트리">가로 배치</button></span>' +
       '<span class="fe-sep"></span>' + (ed && o.save ? '<button class="fe-b fe-primary" data-ie-act="save" title="저장 (Ctrl+S)">저장</button>' : "") +
       '<button class="fe-b fe-close" data-ie-act="close" aria-label="닫기">닫기 ✕</button></header>' +
       '<div class="fe-body' + (ed ? "" : " no-tools") + '">' + (ed ? '<aside class="fe-tools" aria-label="도구">' + tools + "</aside>" : "<div></div>") +
@@ -282,6 +332,7 @@
     var st = S.el.querySelector("#fe-state");
     if (st) { st.textContent = S.o.editable ? (dirty() ? "● 저장 안 됨" : "저장됨") : ""; st.className = "fe-state" + (dirty() ? " on" : ""); }
     S.el.querySelectorAll("[data-ie-tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-ie-tab") === S.tab)); });
+    S.el.querySelectorAll('[data-ie-act^="dir-"]').forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-ie-act") === "dir-" + S.dir)); });
     var u = S.el.querySelector('[data-ie-act="undo"]'), r = S.el.querySelector('[data-ie-act="redo"]');
     if (u) u.disabled = !S.undo.length;
     if (r) r.disabled = !S.redo.length;
@@ -303,8 +354,11 @@
   function fit() {
     if (!S || !S.L) return;
     var v = S.view, w = v.clientWidth - 32, h = v.clientHeight - 32;
-    S.z = Math.max(0.2, Math.min(1.2, w / S.L.W, h / (S.L.H + 26)));
+    // 폭에 맞추고 세로는 스크롤 — 긴 트리를 높이에 맞추면 글자를 읽을 수 없게 작아진다
+    var byW = w / S.L.W, byH = h / (S.L.H + 26);
+    S.z = Math.max(0.2, Math.min(1.2, S.dir === "v" || byH < 0.45 ? byW : Math.min(byW, byH)));
     renderCanvas();
+    v.scrollTop = 0;
   }
   function zoomTo(z, cx, cy) {
     var v = S.view, old = S.z;
@@ -577,6 +631,7 @@
       case "zout": return zoomTo(S.z / 1.2);
       case "z100": return zoomTo(1);
       case "fit": return fit();
+      case "dir-v": case "dir-h": S.dir = act === "dir-v" ? "v" : "h"; try { localStorage.setItem("ia-dir:" + S.o.system.code, S.dir); } catch (e) { /* 무시 */ } render(); return fit();
       case "expand": S.collapsed = {}; render(); return fit();
       case "add-menu": return add("MENU");
       case "add-page": return add("PAGE");

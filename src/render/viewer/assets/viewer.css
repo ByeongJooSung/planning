@@ -1313,3 +1313,18 @@ table.desc.dpanel .row-tools { margin-top: 6px; }
 .todo.done { border-left-color: var(--st-done); }
 .todo .tstep { font-weight: 700; min-width: 140px; }
 .todo .tdetail { flex: 1; min-width: 200px; color: var(--ink-2); font-size: 13px; }
+.fe-seg { display: inline-flex; }
+.fe-seg .fe-b { border-radius: 0; margin-left: -1px; }
+.fe-seg .fe-b:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.fe-seg .fe-b:last-child { border-radius: 0 7px 7px 0; }
+.fe-seg .fe-b[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ie .fe-view { display: grid; justify-content: safe center; align-content: start; }
+/* 좁은 화면: 캔버스 편집기(정보구조도·플로우·프레임)의 오른쪽 패널을 아래로 내리고 캔버스가 폭을 다 쓰게 — 뒤에 오는 .ie/.fx 규칙보다 우선 */
+@media (max-width: 900px) {
+  .ie .fe-body, .fe-body.no-tools, .ie .fe-body.no-tools { grid-template-columns: 58px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 40vh; }
+  .ie .fe-body.no-tools, .fe-body.no-tools { grid-template-columns: 0 minmax(0, 1fr); }
+  .fx .fx-body { grid-template-columns: 58px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 40vh; }
+  .fx .fx-layers { display: none; }
+  .fx .fe-side { grid-column: 1 / -1; }
+}
+.ie .fe-canvas { width: max-content; }
