@@ -3,8 +3,9 @@
 요구사항에서 출발해 서비스 기획 산출물(기획안 → 정보구조도 → 다이어그램 → 스토리보드 → 프로토타입)을 프로젝트 단위로 만들고 관리하는 도구입니다.
 
 ## 문서
-- [PRD (제품 요구사항 정의서)](docs/PRD.md)
-- [작업 계획서](docs/WORK_PLAN.md)
+- [PRD v1.0 초안 (제품 요구사항 정의서)](docs/PRD.md) — 4단계 워크플로(RFP 분석 → 태스크 정의 → 디자인 시스템 → 기획 산출물), 앞 단계 생략, 프로젝트 유형 프로파일, 조직 공통 자산, 릴리스 계획
+- [PRD v0.7 (이전 판)](docs/PRD-v0.7.md) — 현행 도구의 상세 기능 명세. v1.0과 ADR·작업 계획서가 참조
+- [작업 계획서](docs/WORK_PLAN.md) — PRD v0.7 기준
 - [ADR-001 P0 기반 구조 결정](docs/decisions/ADR-001-p0-foundation.md)
 - [ADR-002 참조자료·Task 자동 생성·디자인 시스템·뷰어](docs/decisions/ADR-002-knowledge-design-viewer.md)
 - [ADR-003 웹 서비스 — 계정·프로젝트 멤버·AI 호출 설정](docs/decisions/ADR-003-web-service.md)
