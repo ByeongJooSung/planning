@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { profileOf } from "../src/design/concepts.js";
-import { addDesignComponent, proposeDesign, selectDesign } from "../src/design/ops.js";
+import { addDesignComponent, composeDesign, proposeDesign, selectDesign } from "../src/design/ops.js";
 import { Project } from "../src/model/schema.js";
 import { validateModel } from "../src/model/validate.js";
 import { SYSTEM_PRESETS } from "../src/project/presets.js";
@@ -20,15 +20,16 @@ const screen = (component: string) => ({
 });
 
 describe("디자인 시스템", () => {
-  it("시스템 성격에 맞춰 서로 다른 컨셉 3종을 제안한다", () => {
+  it("시스템 성격에 맞춘 추천 조합(프레임 × 톤)을 A부터 제안한다", () => {
     const m = model();
     expect(m.systems.map(profileOf)).toEqual(["portal", "service", "admin", "portal"]);
     const pub = proposeDesign(m, "PUB");
     const adm = proposeDesign(m, "ADM");
-    expect(pub.proposals.map((c) => c.id)).toEqual(["A", "B", "C"]);
+    expect(pub.proposals.map((c) => c.id)).toEqual(["A", "B", "C", "D", "E", "F"]);
     expect(pub.proposals[0]!.layout.nav).toBe("top-mega");
-    expect(adm.proposals[0]!.layout.nav).toBe("side");
-    expect(new Set(adm.proposals.map((c) => c.tokens.color.primary)).size).toBe(3);
+    expect(adm.proposals[0]!.layout.nav).toBe("side-header");
+    expect(adm.proposals.every((c) => c.frameId && c.toneId)).toBe(true);
+    expect(new Set(adm.proposals.map((c) => c.toneId)).size).toBeGreaterThanOrEqual(5);
     expect(() => proposeDesign(m, "EXT")).toThrow("화면이 없는");
   });
 
@@ -38,11 +39,29 @@ describe("디자인 시스템", () => {
     const d = selectDesign(m, "ADM", "b", { now: new Date(now) });
     expect(d.status).toBe("SELECTED");
     expect(d.selectedId).toBe("B");
-    expect(d.layout!.nav).toBe("top");
+    expect(d.layout!.nav).toBe("side");
+    expect(d.layout!.stat).toBe("gradient");
     for (const id of ["gnb", "search-panel", "data-table", "pagination", "confirm-dialog", "alert-dialog", "toast", "modal", "login-form"])
       expect(d.components.some((c) => c.id === id)).toBe(true);
     expect(d.icons).toContain("search");
     expect(() => proposeDesign(m, "ADM")).toThrow("이미");
+  });
+
+  it("프레임 × 톤 × 세부 스타일로 만들고, 다시 고르면 개정이 오른다", () => {
+    const m = model();
+    const d = composeDesign(m, "ADM", "F04", "T01", { tableHead: "dark", density: "compact" }, { now: new Date(now) });
+    expect(d.selectedId).toBe("F04-T01");
+    expect(d.layout).toMatchObject({ frame: "F04", nav: "header-side", tableHead: "dark", density: "compact" });
+    expect(d.tokens!.color.primary).toBe("#0056D0");
+    expect(d.proposals.some((c) => c.id === "F04-T01")).toBe(true);
+    const r1 = d.revision;
+    composeDesign(m, "ADM", "F04", "T01", { tableHead: "tint" }, { now: new Date(now) });
+    expect(d.revision).toBe(r1 + 1);
+    expect(d.layout!.tableHead).toBe("tint");
+    composeDesign(m, "ADM", "F07", "T02", {}, { now: new Date(now) });
+    expect(d.selectedId).toBe("F07-T02");
+    expect(d.history.at(-1)!.note).toContain("F04-T01 → F07-T02");
+    expect(() => composeDesign(m, "ADM", "F77", "T02")).toThrow("프레임");
   });
 
   it("와이어프레임은 컨셉 선택 후에만, 디자인 시스템에 있는 컴포넌트로만 그린다", () => {

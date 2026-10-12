@@ -28,7 +28,7 @@ describe("AI 요청 프롬프트", () => {
     const p = pub["sb:CVL_INF_REG_010"]!;
     expect(p.figma).toContain("1920×1080");
     expect(p.figma).toContain("줄바꿈");
-    expect(p.figma).toContain("주 색 #1E6B52");
+    expect(p.figma).toContain("주 색 #0056D0");
     expect(p.figma).toContain("2. 제목 — 컴포넌트 `text-input`");
     expect(p.figma).toContain("오류 문구(미입력): “제목을 입력해 주세요.”");
     expect(p.figma).toContain("https://claude.ai/artifact/abc#PUBINFO");

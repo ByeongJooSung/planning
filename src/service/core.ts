@@ -20,7 +20,8 @@ import { hasArtifact, SETTABLE, WORK_LABEL, workBoard, workOf, type WorkBoard } 
 const WORK_KIND: Record<string, string> = { ia: "정보구조도", sb: "화면설계서", flow: "프로세스 플로우", ds: "디자인 시스템" };
 import { applyGenerated, GEN_KINDS, type GenKind } from "../ai/apply.js";
 import { buildPrompts, type PromptSet } from "../ai/prompts.js";
-import { syncBaseComponents, addDesignComponent, ensureDesign, mixDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign, STAGE_LABEL, updateStage, type DesignStage } from "../design/ops.js";
+import type { StyleChoice } from "../design/library.js";
+import { syncBaseComponents, addDesignComponent, composeDesign, ensureDesign, mixDesign, proposeDesign, removeFrameComponent, saveFrameComponent, selectDesign, STAGE_LABEL, updateStage, type DesignStage } from "../design/ops.js";
 import { toChunks } from "../knowledge/chunk.js";
 import type { Segment } from "../knowledge/extract-text.js";
 import type { Chunk } from "../knowledge/search.js";
@@ -146,6 +147,7 @@ export type Command =
   | { op: "link.rm"; url: string }
   | { op: "design.propose"; systemCode: string }
   | { op: "design.select"; systemCode: string; conceptId: string }
+  | { op: "design.compose"; systemCode: string; frameId: string; toneId: string; style?: Record<string, unknown> }
   | { op: "design.component"; systemCode: string; input: unknown }
   /** 디자인 미세조정 되돌리기 — 적용 전 디자인 시스템으로 바꾼다 */
   | { op: "design.revert"; systemCode: string; design: unknown }
@@ -531,6 +533,11 @@ export function execute(state: ProjectState, cmd: Command, now = new Date()): Ex
     case "design.select": {
       const d = selectDesign(m, cmd.systemCode, cmd.conceptId, c);
       message = `${cmd.systemCode} 디자인 시스템을 만들었습니다 (컨셉 ${d.selectedId} · 컴포넌트 ${d.components.length}개)`;
+      break;
+    }
+    case "design.compose": {
+      const d = composeDesign(m, cmd.systemCode, cmd.frameId, cmd.toneId, (cmd.style ?? {}) as StyleChoice, c);
+      message = `${cmd.systemCode} 디자인 시스템을 ${d.selectedId} 조합으로 만들었습니다 (컴포넌트 ${d.components.length}개)`;
       break;
     }
     case "design.component": {

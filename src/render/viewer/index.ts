@@ -13,6 +13,7 @@ import { SPEC_SLOT, specItems, type SpecItem } from "../../ai/spec.js";
 import { DESC_SLOT } from "../../ai/generate.js";
 import { WORK_LABEL, workBoard, type WorkBoard } from "../../trace/work.js";
 import { ADDED_COMPONENT_VARS, COMPONENT_STYLE_VARS, DESIGN_SCOPES } from "../../design/catalog.js";
+import { FONTS as FONTS_LIB, FRAMES, LAYOUT_LABELS, RECOMMENDED, STYLE_OPTIONS, TONES } from "../../design/library.js";
 import { buildPrompts, VIEWPORT, type PromptSet } from "../../ai/prompts.js";
 import { loadChunks } from "../../knowledge/store.js";
 import type { Chunk } from "../../knowledge/search.js";
@@ -67,7 +68,7 @@ const FONTS =
 
 const CSS_FILES = ["viewer.css", "wire.css"];
 /** 순서 중요: viewer.js가 앞의 전역(KB, Flow, Wire)을 쓴다 */
-const JS_FILES = ["search.js", "flowlayout.js", "flow.js", "flowexport.js", "sbexport.js", "flowedit.js", "iaedit.js", "frames.js", "wire.js", "dsedit.js", "viewer.js"];
+const JS_FILES = ["search.js", "flowlayout.js", "flow.js", "flowexport.js", "sbexport.js", "flowedit.js", "iaedit.js", "frames.js", "designlib.js", "wire.js", "dsedit.js", "viewer.js"];
 
 /**
  * @param standalone true면 <!doctype html> 문서 전체, false면 본문 조각(<title>부터).
@@ -94,7 +95,10 @@ export async function renderViewer(data: ViewerData, opts: { standalone?: boolea
     specSlot: SPEC_SLOT,
     descSlot: DESC_SLOT,
     workLabel: WORK_LABEL,
-    design: { scopes: DESIGN_SCOPES, styleVars: COMPONENT_STYLE_VARS, addedVars: ADDED_COMPONENT_VARS, slots: DS_SLOTS },
+    design: {
+      scopes: DESIGN_SCOPES, styleVars: COMPONENT_STYLE_VARS, addedVars: ADDED_COMPONENT_VARS, slots: DS_SLOTS,
+      lib: { frames: FRAMES, tones: TONES, fonts: FONTS_LIB, styleOptions: STYLE_OPTIONS, layoutLabels: LAYOUT_LABELS, recommended: RECOMMENDED },
+    },
     ...data,
   }).replace(/</g, "\\u003c");
   const title = opts.title ?? (data.projects.length === 1 ? `${data.projects[0]!.model.project.name}` : "Planning Studio 뷰어");

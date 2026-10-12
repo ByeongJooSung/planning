@@ -26,7 +26,10 @@ export const BASE_COMPONENTS: Base[] = [
   { id: "file-list", name: "첨부파일 목록", category: "data", description: "파일명·용량·내려받기", variants: [] },
   { id: "stat-cards", name: "요약 수치 카드", category: "data", description: "대시보드 건수 요약", variants: [] },
   { id: "chart", name: "차트(그래프)", category: "data", description: "통계·추이를 그래프로. 막대·선·영역·원형·도넛. 라벨과 수치 계열을 props로", variants: ["bar", "line", "area", "pie", "donut"] },
-  { id: "notice-list", name: "게시물 요약 목록", category: "content", description: "공지·새소식 최근 N건", variants: [] },
+  { id: "notice-list", name: "게시물 요약 목록", category: "content", description: "공지·새소식 최근 N건. 공지사항·자료실·게시판 탭", variants: [] },
+  { id: "notice-banner", name: "업무 알림 줄", category: "content", description: "대시보드 위 한 줄 알림 (새로 지정된 업무 · 처리 중 건수 강조)", variants: [] },
+  { id: "calendar", name: "달력", category: "data", description: "월 달력과 일정 있는 날 표시", variants: [] },
+  { id: "chip-links", name: "자주 찾는 메뉴", category: "navigation", description: "자주 쓰는 메뉴 경로를 칩으로 모아 바로 가기", variants: [] },
   { id: "empty-state", name: "빈 화면 안내", category: "feedback", description: "데이터가 없을 때 안내 문구", variants: [] },
   // 콘텐츠
   { id: "hero-banner", name: "메인 비주얼", category: "content", description: "메인 상단 대표 문구·검색", variants: [] },

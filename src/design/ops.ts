@@ -7,6 +7,7 @@
 import { DesignComponent, FNode, StageBrief, type FNodeT, type Model, type SystemDesign } from "../model/schema.js";
 import { BASE_COMPONENTS, BASE_ICONS } from "./catalog.js";
 import { proposeConcepts } from "./concepts.js";
+import { cleanStyle, compose, type StyleChoice } from "./library.js";
 
 type Ctx = { now?: Date };
 
@@ -67,6 +68,28 @@ export function selectDesign(m: Model, systemCode: string, conceptId: string, c:
   d.components = [...BASE_COMPONENTS.map((b) => ({ ...structuredClone(b), origin: "BASE" as const })), ...added];
   d.icons = [...BASE_ICONS];
   return d;
+}
+
+/**
+ * 프레임 × 톤앤매너 × 세부 스타일로 디자인 시스템 만들기 (또는 바꾸기).
+ * 만든 조합은 제안 목록에 남겨 나중에 다시 고를 수 있다.
+ */
+export function composeDesign(m: Model, systemCode: string, frameId: string, toneId: string, style: StyleChoice = {}, c: Ctx = {}): SystemDesign {
+  const d = getSystemDesign(m, systemCode) ?? proposeDesign(m, systemCode);
+  style = cleanStyle(style);
+  const concept = compose(frameId, toneId, style);
+  d.proposals = d.proposals.filter((x) => x.id !== concept.id).concat(concept);
+  // 같은 조합으로 세부 스타일만 바꾼 경우에도 디자인을 다시 만든다
+  if (d.status === "SELECTED" && d.selectedId === concept.id) {
+    const now = (c.now ?? new Date()).toISOString();
+    d.revision += 1;
+    d.history.push({ rev: d.revision, at: now, note: `세부 스타일 변경 ${concept.id}`, changes: Object.entries(style).map(([k, v]) => `${k}=${v}`) });
+    d.tokens = structuredClone(concept.tokens);
+    d.layout = structuredClone(concept.layout);
+    d.componentStyles = {};
+    return d;
+  }
+  return selectDesign(m, systemCode, concept.id, c);
 }
 
 export function addDesignComponent(m: Model, systemCode: string, input: unknown, c: Ctx = {}): DesignComponent {

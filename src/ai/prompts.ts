@@ -8,6 +8,7 @@
  * 참조자료 검색 결과(근거 문단)를 함께 담는다.
  */
 import { search, type Chunk } from "../knowledge/search.js";
+import { LAYOUT_LABELS } from "../design/library.js";
 import type { DesignComponent, Model, StoryboardScreen, SystemDesign } from "../model/schema.js";
 import { buildRtm, STATUS_LABEL, type Rtm } from "../trace/rtm.js";
 import { ensureDesign } from "../design/ops.js";
@@ -34,16 +35,7 @@ export interface PromptOptions {
 /** 설계 기준 뷰포트 */
 export const VIEWPORT = { width: 1920, height: 1080 };
 
-const LAYOUT: Record<string, [string, Record<string, string>]> = {
-  nav: ["GNB 위치", { top: "상단", "top-mega": "상단 메가메뉴", side: "좌측 사이드" }],
-  logo: ["로고 위치", { left: "왼쪽", center: "가운데" }],
-  search: ["검색 영역", { header: "헤더 안", hero: "첫 화면 큰 검색창", panel: "목록 위 조건 패널" }],
-  list: ["목록 형태", { table: "표(그리드)", card: "카드" }],
-  pagination: ["페이지네이션", { numbered: "번호", "numbered-size": "번호 + 목록 개수 선택", more: "더보기" }],
-  button: ["버튼 모서리", { square: "각진", rounded: "둥근", pill: "알약형" }],
-  density: ["밀도", { comfortable: "여유", compact: "촘촘" }],
-  footer: ["푸터", { full: "기관 정보 전체", simple: "간단", none: "없음" }],
-};
+const LAYOUT = LAYOUT_LABELS;
 export const KIND: Record<string, string> = { MENU: "메뉴", PAGE: "페이지", POPUP: "팝업", LAYER: "레이어", TAB: "탭", EXTERNAL: "외부" };
 export const CHANGE: Record<string, string> = { NEW: "신규", CHANGED: "변경", DELETED: "삭제", KEPT: "유지" };
 const TIMING: Record<string, string> = { ON_INPUT: "입력 중", ON_BLUR: "입력칸을 벗어날 때", ON_SUBMIT: "제출 시" };
@@ -158,7 +150,7 @@ export function tokensBlock(d: SystemDesign | undefined, code: string): string {
     `- 글꼴: ${t.font.family.split(",")[0]!.replace(/"/g, "")} · 크기(px) 메인 비주얼 ${s.display} / 화면 제목 ${s.h1} / 구역 제목 ${s.h2} / 소제목 ${s.h3} / 본문 ${s.body} / 보조 ${s.small} / 캡션 ${s.caption} · 굵게 ${t.font.weightBold}`,
     `- 모서리 ${t.radius.sm}/${t.radius.md}/${t.radius.lg}px · 입력·버튼 높이 ${t.control.height}px · 목록 행 높이 ${t.control.rowHeight}px · 기본 간격 ${t.spacing}px · 그림자 ${t.shadow}`,
     `- 그리드: ${t.grid.columns}단, 콘텐츠 최대 폭 ${t.grid.maxWidth}px, 단 간격 ${t.grid.gutter}px`,
-    `- 레이아웃 규칙: ${Object.entries(LAYOUT).map(([k, [label, v]]) => `${label} ${v[(d.layout as Record<string, string>)[k]!]}`).join(", ")}`,
+    `- 레이아웃 규칙: ${Object.entries(LAYOUT).filter(([k]) => (d.layout as Record<string, string | undefined>)[k] != null).map(([k, [label, v]]) => `${label} ${v[(d.layout as Record<string, string>)[k]!] ?? (d.layout as Record<string, string>)[k]}`).join(", ")}`,
     ...briefLines(d),
   ].join("\n");
 }
