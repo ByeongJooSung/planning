@@ -304,7 +304,9 @@ export const TOKEN_SCHEMA = [
   'tokens.font: family("\\"Noto Sans KR\\", \\"Malgun Gothic\\", sans-serif" 형식), scale{display,h1,h2,h3,body,small,caption} — px 숫자, weightBold — 600 또는 700',
   "tokens.radius{sm,md,lg} · tokens.control{height,rowHeight} · tokens.spacing · tokens.grid{columns(정수),maxWidth,gutter} — px 숫자",
   'tokens.shadow: "none" | "soft" | "strong"',
-  "layout.nav: top | top-mega | side · layout.logo: left | center · layout.search: header | hero | panel · layout.list: table | card",
+  "layout.nav: top | top-mega | side | side-header | header-side | rail · layout.logo: left | center · layout.search: header | hero | panel · layout.list: table | card",
+  "layout.tableHead: dark | tint | line · layout.stat: gradient | topline | plain | icon · layout.tabs: line | fill | box · layout.searchStyle: table | card | inline · layout.navMark: fill | bar",
+  "tokens.color(선택): navActive·onNavActive(메뉴 선택 항목), header·onHeader(상단 바), tableHead·onTableHead(표 머리) · tokens.series: 통계 카드·차트 계열 색 배열 [\"#RRGGBB\", …]",
   "layout.pagination: numbered | numbered-size | more · layout.button: square | rounded | pill · layout.density: comfortable | compact · layout.footer: full | simple | none",
 ].join("\n");
 
@@ -374,7 +376,7 @@ function dsGen(c: Ctx, code: string): GenPrompt {
       [
         "- 색은 #RRGGBB. 글자와 배경의 명도 대비 4.5:1 이상(웹 접근성)",
         '- 글꼴(font.family)은 "Noto Sans KR", "Gothic A1", "IBM Plex Sans KR" 중 하나 + 대체 글꼴: 예 "\\"Noto Sans KR\\", \\"Malgun Gothic\\", sans-serif"',
-        "- layout 값: nav top|top-mega|side · logo left|center · search header|hero|panel · list table|card · pagination numbered|numbered-size|more · button square|rounded|pill · density comfortable|compact · footer full|simple|none",
+        "- layout 값: nav top|top-mega|side|side-header|header-side|rail · logo left|center · search header|hero|panel · list table|card · pagination numbered|numbered-size|more · button square|rounded|pill · density comfortable|compact · footer full|simple|none",
         "- componentStyles 값: 색은 #RRGGBB, 크기는 \"12px\" 처럼 px, 굵기는 \"600\" 처럼 숫자. 위 목록에 있는 변수만 쓴다",
         "- 새 컴포넌트는 components.add로만 추가(id는 영문 소문자·하이픈). 기존 컴포넌트 ID는 바꾸지 않는다(화면설계서가 ID로 참조)",
         "- 댓글이 있으면 각 댓글이 가리키는 컴포넌트·위치를 근거로 고치고, summary에 댓글 번호별로 무엇을 바꿨는지 쓴다",

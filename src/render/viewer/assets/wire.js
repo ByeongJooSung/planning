@@ -27,13 +27,34 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
     trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
-    filter: '<path d="M4 5h16l-6 8v6l-4-2v-4z"/>'
+    filter: '<path d="M4 5h16l-6 8v6l-4-2v-4z"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+    folder: '<path d="M3 6h6l2 2h10v11H3z"/>',
+    clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12h6M9 16h4"/>',
+    shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+    megaphone: '<path d="M3 10v4h4l7 5V5L7 10z"/><path d="M17 9a4 4 0 0 1 0 6"/>',
+    panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+    excel: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8l6 8M15 8l-6 8"/>',
+    inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/>'
   };
   var ICON_LABEL = {
     search: "검색", menu: "메뉴", user: "사용자", bell: "알림", home: "홈", download: "내려받기", upload: "올리기",
     calendar: "달력", "chevron-left": "이전", "chevron-right": "다음", close: "닫기", check: "확인", alert: "경고",
-    info: "안내", file: "파일", logout: "로그아웃", plus: "추가", edit: "수정", trash: "삭제", filter: "필터"
+    info: "안내", file: "파일", logout: "로그아웃", plus: "추가", edit: "수정", trash: "삭제", filter: "필터",
+    chart: "통계", settings: "설정", folder: "폴더", clipboard: "문서", shield: "보안", layers: "분류", clock: "시간", refresh: "새로고침",
+    megaphone: "알림 문구", panel: "메뉴 접기", excel: "엑셀", inbox: "접수함"
   };
+  /** 메뉴 이름으로 어울리는 아이콘 고르기 */
+  var MENU_ICONS = [[/대시|홈|메인/, "home"], [/접수|신청|신고/, "inbox"], [/심사|검토|승인/, "check"], [/등록|작성/, "edit"], [/통계|현황|분석/, "chart"], [/관리|운영|설정/, "settings"],
+    [/게시|공지|알림/, "megaphone"], [/자료|문서|증명/, "file"], [/정보|조회/, "search"], [/보안|보호|권한/, "shield"], [/회원|사용자|나의|마이/, "user"], [/분류|물질|목록/, "layers"]];
+  function menuIcon(name, i) {
+    for (var k = 0; k < MENU_ICONS.length; k++) if (MENU_ICONS[k][0].test(name)) return MENU_ICONS[k][1];
+    return ["folder", "clipboard", "layers", "file", "settings"][i % 5];
+  }
   function icon(name, size) {
     var s = size || 16;
     return '<svg class="wf-ic" data-ic="' + esc(ICON_PATHS[name] ? name : "info") + '" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON_PATHS[name] || ICON_PATHS.info) + "</svg>";
@@ -41,8 +62,8 @@
 
   var SAMPLE = {
     portal: { menus: ["정보공개", "민원안내", "알림마당", "기관소개"], title: "정보공개 목록" },
-    service: { menus: ["민원신청", "나의 민원", "정보공개", "고객센터"], title: "나의 신청 현황" },
-    admin: { menus: ["대시보드", "정보공개 심사", "민원 관리", "통계", "시스템 관리"], title: "심사 목록" }
+    service: { menus: ["등록 신청", "신고", "변경 등록", "자료 제출", "보완 요청", "진행 현황", "증명서 발급", "나의 정보"], title: "나의 신청 현황" },
+    admin: { menus: ["접수", "심사", "등록 관리", "민원 관리", "통계", "운영 관리", "자료 관리", "게시판"], title: "심사 목록" }
   };
 
   function vars(ds) {
@@ -58,8 +79,22 @@
       "--w-h3": f.scale.h3 + "px", "--w-body": f.scale.body + "px", "--w-small": f.scale.small + "px", "--w-caption": f.scale.caption + "px",
       "--w-bold": f.weightBold, "--w-r-sm": t.radius.sm + "px", "--w-r-md": t.radius.md + "px", "--w-r-lg": t.radius.lg + "px",
       "--w-btn-r": btnR, "--w-h": t.control.height + "px", "--w-row": t.control.rowHeight + "px", "--w-sp": t.spacing + "px",
-      "--w-pad": (compact ? t.spacing * 2 : t.spacing * 3) + "px", "--w-max": t.grid.maxWidth + "px", "--w-shadow": shadow
+      "--w-pad": (compact ? t.spacing * 2 : t.spacing * 3) + "px", "--w-max": t.grid.maxWidth + "px", "--w-shadow": shadow,
+      "--w-nav-active": c.navActive || c.primary, "--w-on-nav-active": c.onNavActive || c.onPrimary,
+      "--w-header": c.header || c.surface, "--w-on-header": c.onHeader || c.text
     };
+    // 상단 메뉴형 헤더 색: 흰 바탕(기본) 또는 톤의 메뉴 색
+    var navFill = L.headerFill === "nav" || (!L.headerFill && !L.frame);
+    v["--w-gnb-bg"] = navFill ? c.nav : (c.header || c.surface);
+    v["--w-gnb-fg"] = navFill ? c.onNav : (c.onHeader || c.text);
+    // 표 머리: 진한 면 / 옅은 면 / 선만
+    var th = L.tableHead || "line";
+    if (th === "dark") { v["--w-th-bg"] = c.tableHead || c.nav; v["--w-th-color"] = c.onTableHead || "#FFFFFF"; v["--w-th-line"] = "transparent"; }
+    else if (th === "tint") { v["--w-th-bg"] = c.tableHead || c.surfaceAlt; v["--w-th-color"] = c.onTableHead || c.text; v["--w-th-line"] = c.border; }
+    // 통계 카드·차트 계열 색
+    var ser = t.series && t.series.length ? t.series : [c.primary, c.accent, c.info, c.success, c.warning];
+    ser.forEach(function (col, i) { v["--w-s" + (i + 1)] = col; });
+    v["--w-chart-1"] = ser[0]; v["--w-chart-2"] = ser[1] || c.accent; v["--w-chart-3"] = ser[2] || c.info;
     // 컴포넌트 스타일 변수(디자인 시스템 componentStyles)는 토큰 뒤에 붙여 덮어쓴다
     var cs = ds.componentStyles || {};
     Object.keys(cs).forEach(function (cid) { Object.keys(cs[cid] || {}).forEach(function (k) { if (/^--w-[a-z0-9-]+$/.test(k)) v[k] = cs[cid][k]; }); });
@@ -86,31 +121,60 @@
   C["search-bar"] = function (ds, p) {
     return '<div class="wf-search' + (p.variant === "hero" ? " hero" : "") + '"><span class="wf-input">' + icon("search") + "<em>" + esc(p.placeholder || "검색어를 입력하세요") + "</em></span>" + btn("검색", "primary") + "</div>";
   };
+  /** 아이콘이 붙은 버튼 (라벨 뒤에 아이콘) */
+  function btnI(label, variant, ic, attrs) {
+    return '<button type="button" class="wf-btn ' + (variant || "secondary") + '"' + (attrs || "") + "><span>" + esc(label) + "</span>" + icon(ic, 15) + "</button>";
+  }
+  function ctlOf(f) {
+    return f.type === "select" ? '<span class="wf-input sel"><em>' + esc((f.options || ["전체"])[0]) + "</em>" + icon("chevron-right", 12).replace('class="wf-ic"', 'class="wf-ic dn"') + "</span>" :
+      f.type === "date-range" ? '<span class="wf-input sel sm"><em>' + esc(f.basis || "작성일자") + "</em>" + icon("chevron-right", 12).replace('class="wf-ic"', 'class="wf-ic dn"') + '</span><span class="wf-input"><em>YYYY-MM-DD</em>' + icon("calendar", 14) + '</span><span class="wf-tilde">-</span><span class="wf-input"><em>YYYY-MM-DD</em>' + icon("calendar", 14) + "</span>" :
+        '<span class="wf-input"><em>' + esc(f.placeholder || (f.label ? f.label + " 입력" : "")) + "</em></span>";
+  }
   C["search-panel"] = function (ds, p) {
-    var fields = (p.fields || []).map(function (f) {
-      var ctl = f.type === "select" ? '<span class="wf-input sel"><em>' + esc((f.options || ["전체"])[0]) + "</em>▾</span>" :
-        f.type === "date-range" ? '<span class="wf-input"><em>2025-09-25</em>' + icon("calendar", 14) + '</span><span class="wf-tilde">~</span><span class="wf-input"><em>2026-09-25</em>' + icon("calendar", 14) + "</span>" :
-          '<span class="wf-input"><em>' + esc(f.placeholder || "") + "</em></span>";
-      return '<label class="wf-sf' + (f.type === "date-range" ? " wide" : "") + '"><span>' + esc(f.label) + '</span><div class="wf-row">' + ctl + "</div></label>";
+    var st = ds.layout.searchStyle || "card", fields = p.fields || [];
+    if (st === "table") {
+      var rows = [];
+      for (var i = 0; i < fields.length; i += 2) rows.push(fields.slice(i, i + 2));
+      return '<div class="wf-stable"><div class="wf-strows">' + rows.map(function (r) {
+        return '<div class="wf-str">' + r.map(function (f) { return '<div class="wf-stl">' + esc(f.label) + '</div><div class="wf-stc"><div class="wf-row">' + ctlOf(f) + "</div></div>"; }).join("") +
+          (r.length === 1 ? '<div class="wf-stl e"></div><div class="wf-stc"></div>' : "") + "</div>";
+      }).join("") + '</div><div class="wf-sbtns center">' + btnI("초기화", "secondary wide", "refresh") + btn("검색", "primary wide") + "</div></div>";
+    }
+    if (st === "inline") {
+      return '<div class="wf-sinline">' + fields.map(function (f) { return '<label class="wf-sil"><span>' + esc(f.label) + '</span><div class="wf-row">' + ctlOf(f) + "</div></label>"; }).join("") + btn("초기화", "secondary") + btn("검색", "primary") + "</div>";
+    }
+    var cards = fields.map(function (f) {
+      return '<label class="wf-sf' + (f.type === "date-range" ? " wide" : "") + '"><span>' + esc(f.label) + '</span><div class="wf-row">' + ctlOf(f) + "</div></label>";
     }).join("");
-    return '<div class="wf-spanel"><div class="wf-sgrid">' + fields + '</div><div class="wf-sbtns">' + btn("초기화", "secondary") + btn("조회", "primary") + "</div></div>";
+    return '<div class="wf-spanel"><div class="wf-sgrid">' + cards + '</div><div class="wf-sbtns">' + btn("초기화", "secondary") + btn("조회", "primary") + "</div></div>";
   };
+  /** 대시보드 위젯 머리: 제목 (건수) · 오른쪽 보조 */
+  function widgetHead(title, count, right) {
+    return '<div class="wf-whead"><b>' + esc(title) + (count != null ? " <em>(" + esc(count) + ")</em>" : "") + "</b>" + (right || "") + "</div>";
+  }
   C["data-table"] = function (ds, p, ctx, link) {
-    var cols = p.columns || [], rows = p.rows || [], bc = p.badgeColumn;
-    var head = '<div class="wf-thead"><span>총 <b>' + esc(p.total != null ? p.total : rows.length) + "</b>건</span>" +
-      (ds.layout.pagination === "numbered-size" ? '<span class="wf-input sel sm"><em>30개씩</em>▾</span>' : "") + "</div>";
+    var cols = p.columns || [], rows = p.rows || [], bc = p.badgeColumn, total = p.total != null ? p.total : rows.length;
+    var biz = ds.layout.searchStyle === "table";
+    var tools = '<span class="wf-ttools">' + (ds.layout.pagination === "numbered-size" || biz ? '<span class="wf-input sel sm"><em>20개씩 보기</em>' + icon("chevron-right", 12).replace('class="wf-ic"', 'class="wf-ic dn"') + "</span>" : "") +
+      (biz ? '<span class="wf-input sel sm"><em>최신순</em>' + icon("chevron-right", 12).replace('class="wf-ic"', 'class="wf-ic dn"') + "</span>" + btnI("엑셀 다운로드", "secondary sm", "excel") : "") +
+      (p.action ? btn(p.action, "primary sm") : "") + "</span>";
+    var head = p.title ? widgetHead(p.title, total, p.period ? '<span class="wf-meta">' + esc(p.period) + "</span>" : p.more ? '<span class="wf-more-l">더보기 +</span>' : "") :
+      '<div class="wf-thead"><span class="wf-total">총 <b>' + esc(total) + "</b>건</span>" + tools + "</div>";
     // 항목마다 표/카드를 고를 수 있다 (props.view: "table" | "card"). 없으면 디자인 시스템 목록 형태
     var view = p.view === "table" || p.view === "list" ? "table" : p.view === "card" ? "card" : ds.layout.list;
+    var body;
     if (view === "card") {
-      return head + '<div class="wf-cards">' + rows.map(function (r) {
+      body = '<div class="wf-cards">' + rows.map(function (r) {
         return '<div class="wf-card"' + linkAttr(ctx, link) + ">" + (bc != null ? badge(r[bc]) : "") + "<b>" + esc(r[1] != null ? r[1] : r[0]) + '</b><span class="wf-meta">' +
           r.filter(function (_, i) { return i !== 1 && i !== bc; }).map(esc).join(" · ") + "</span></div>";
       }).join("") + "</div>";
+    } else {
+      body = '<table class="wf-table"><thead><tr>' + cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+        rows.map(function (r) {
+          return "<tr" + linkAttr(ctx, link) + ">" + r.map(function (v, i) { return "<td>" + (i === bc ? badge(v) : (i === (p.linkColumn != null ? p.linkColumn : 1)) && link ? "<u>" + esc(v) + "</u>" : esc(v)) + "</td>"; }).join("") + "</tr>";
+        }).join("") + "</tbody></table>";
     }
-    return head + '<table class="wf-table"><thead><tr>' + cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead><tbody>" +
-      rows.map(function (r) {
-        return "<tr" + linkAttr(ctx, link) + ">" + r.map(function (v, i) { return "<td>" + (i === bc ? badge(v) : i === 1 && link ? "<u>" + esc(v) + "</u>" : esc(v)) + "</td>"; }).join("") + "</tr>";
-      }).join("") + "</tbody></table>";
+    return p.title ? '<div class="wf-widget">' + head + body + "</div>" : head + body;
   };
   C["card-list"] = function (ds, p, ctx, link) {
     return '<div class="wf-cards">' + (p.items || []).map(function (it) {
@@ -132,7 +196,20 @@
     return '<ul class="wf-files">' + (p.files || ["첨부파일.pdf (1.2MB)"]).map(function (f) { return "<li>" + icon("file") + "<span>" + esc(f) + "</span>" + icon("download") + "</li>"; }).join("") + "</ul>";
   };
   C["stat-cards"] = function (ds, p) {
-    return '<div class="wf-stats">' + (p.items || []).map(function (s) { return '<div class="wf-stat"><span>' + esc(s[0]) + "</span><b>" + esc(s[1]) + "</b></div>"; }).join("") + "</div>";
+    var st = ds.layout.stat || "plain", items = p.items || [];
+    var nSer = ds.tokens && ds.tokens.series && ds.tokens.series.length ? ds.tokens.series.length : 5;
+    var cols = p.columns || Math.min(items.length || 4, items.length > 6 ? 5 : items.length > 4 ? 3 : 4);
+    var ics = ["file", "clipboard", "edit", "inbox", "layers", "shield", "check", "folder", "chart", "user"];
+    var cards = items.map(function (s0, i) {
+      var sc = "--sc:var(--w-s" + (i % nSer + 1) + ")", unit = s0[2] != null ? s0[2] : p.unit || "";
+      var val = "<b>" + esc(s0[1]) + (unit ? "<small>" + esc(unit) + "</small>" : "") + "</b>";
+      if (st === "gradient") return '<div class="wf-stat g" style="' + sc + '"><div class="wf-sth"><span>' + esc(s0[0]) + "</span>" + icon(ics[i % ics.length], 20) + "</div>" + val + "</div>";
+      if (st === "topline") return '<div class="wf-stat tl" style="' + sc + '"><span>' + esc(s0[0]) + "</span>" + val + "</div>";
+      if (st === "icon") return '<div class="wf-stat ic" style="' + sc + '"><i>' + icon(ics[i % ics.length], 20) + "</i><div><span>" + esc(s0[0]) + "</span>" + val + "</div></div>";
+      return '<div class="wf-stat"><span>' + esc(s0[0]) + "</span>" + val + "</div>";
+    }).join("");
+    var grid = '<div class="wf-stats st-' + st + '" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + cards + "</div>";
+    return p.title ? '<div class="wf-widget">' + widgetHead(p.title, p.count) + grid + "</div>" : grid;
   };
   /** 차트(그래프) 와이어프레임: 막대·선·영역·원형·도넛. props: {type,title,labels,series:[{name,values}],unit} 또는 items:[[라벨,값…]] */
   C.chart = function (ds, p) {
@@ -186,8 +263,31 @@
       '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + esc(p.title || "차트") + '">' + svg + "</svg></div>";
   };
   C["notice-list"] = function (ds, p) {
-    return '<div class="wf-notice"><div class="wf-nh"><b>' + esc(p.title || "공지사항") + '</b><span>더보기 +</span></div><ul>' +
-      (p.items || []).map(function (it) { return "<li><span>" + esc(it[0]) + "</span><em>" + esc(it[1] || "") + "</em></li>"; }).join("") + "</ul></div>";
+    var tabs = p.tabs && p.tabs.length ? '<span class="wf-ntabs">' + p.tabs.map(function (t, i) { return '<span class="' + (i === 0 ? "on" : "") + '">' + esc(t) + "</span>"; }).join("") + "</span>" : "<b>" + esc(p.title || "공지사항") + "</b>";
+    return '<div class="wf-notice"><div class="wf-nh">' + tabs + '<span>더보기 +</span></div><ul>' +
+      (p.items || []).map(function (it) { return "<li><span>" + (it[2] ? '<i class="wf-ntag">[' + esc(it[2]) + "]</i> " : "") + esc(it[0]) + "</span><em>" + esc(it[1] || "") + "</em></li>"; }).join("") + "</ul></div>";
+  };
+  /** 업무 알림 한 줄: parts [[글, 강조(primary|danger|"")], …] 또는 text */
+  C["notice-banner"] = function (ds, p) {
+    var parts = p.parts || [[p.text || "새로 지정된 업무가 있습니다.", ""]];
+    return '<div class="wf-nbanner">' + icon("megaphone", 20) + "<span>" + parts.map(function (x) { return x[1] ? '<b class="t-' + esc(x[1]) + '">' + esc(x[0]) + "</b>" : esc(x[0]); }).join("") + "</span></div>";
+  };
+  /** 달력: 일정이 있는 날에 점 표시 */
+  C.calendar = function (ds, p) {
+    var days = ["일", "월", "화", "수", "목", "금", "토"], marks = p.marks || [2, 3, 5, 6, 9, 12, 13, 16, 19, 20, 23, 24, 26, 27, 29], today = p.today || 13, first = p.first != null ? p.first : 0, last = p.days || 30;
+    var cells = "";
+    for (var i = 0; i < 35; i++) {
+      var d = i - first + 1, out = d < 1 || d > last, dd = out ? (d < 1 ? 31 + d - 5 : d - last) : d;
+      cells += '<span class="' + (out ? "out" : "") + (i % 7 === 0 ? " sun" : i % 7 === 6 ? " sat" : "") + (!out && d === today ? " today" : "") + '"><em>' + dd + "</em>" + (!out && marks.indexOf(d) >= 0 ? "<i></i>" : "") + "</span>";
+    }
+    return '<div class="wf-cal"><div class="wf-calh"><span class="wf-caly">' + esc(p.year || "2026년") + ' ▾</span><b>' + esc(p.month || "11월") + ' ▾</b>' + icon("settings", 16) + '</div><div class="wf-calg">' +
+      days.map(function (x, i) { return '<span class="wd' + (i === 0 ? " sun" : i === 6 ? " sat" : "") + '">' + x + "</span>"; }).join("") + cells + "</div></div>";
+  };
+  /** 자주 찾는 메뉴: 테두리 칩 묶음 */
+  C["chip-links"] = function (ds, p) {
+    return '<div class="wf-widget">' + widgetHead(p.title || "자주 찾는 메뉴", null, icon("settings", 16)) + '<div class="wf-chips">' + (p.items || ["신청 › 신고", "처리 현황", "자료 제출 › 보완", "증명서 발급"]).map(function (x) {
+      return '<span class="wf-chip">' + esc(x).replace(/ › /g, ' <i>›</i> ') + "</span>";
+    }).join("") + "</div></div>";
   };
   C["empty-state"] = function (ds, p) { return '<div class="wf-empty">' + icon("info", 22) + "<span>" + esc(p.message || "조회된 내용이 없습니다.") + "</span></div>"; };
   C["hero-banner"] = function (ds, p) {
@@ -198,11 +298,13 @@
     var icons = ["file", "edit", "search", "bell", "user", "download"];
     return '<div class="wf-quick">' + (p.items || []).map(function (it, i) { return '<div class="wf-ql">' + icon(icons[i % icons.length], 22) + "<span>" + esc(it) + "</span></div>"; }).join("") + "</div>";
   };
-  C["login-form"] = function (ds, p) {
-    return '<div class="wf-login"><b class="wf-lt">' + esc(p.title || "로그인") + "</b>" +
-      field("아이디", "아이디를 입력하세요") + field("비밀번호", "비밀번호를 입력하세요") +
-      btn("로그인", "primary block") + btn("간편인증 로그인", "secondary block") +
-      '<div class="wf-links"><span>아이디 찾기</span><span>비밀번호 찾기</span><span>회원가입</span></div></div>';
+  C["login-form"] = function (ds, p, ctx) {
+    var form = '<b class="wf-lt">' + esc(p.title || "로그인") + "</b>" +
+      field("아이디", "아이디를 입력해 주세요.") + field("비밀번호", "비밀번호를 입력해 주세요.") +
+      btn("로그인", "primary block lg") + (p.split ? btn("회원가입", "secondary block lg") + '<div class="wf-links"><u>회원정보 찾기</u></div>' : btn("간편인증 로그인", "secondary block") + '<div class="wf-links"><span>아이디 찾기</span><span>비밀번호 찾기</span><span>회원가입</span></div>');
+    if (!p.split) return '<div class="wf-login">' + form + "</div>";
+    var c = ctx || {};
+    return '<div class="wf-lsplit"><div class="wf-lbrand">' + logo(c, true) + '<div class="wf-lart">' + icon("shield", 72) + icon("layers", 44) + "</div><p>" + esc(p.slogan || "안전하고 신뢰받는 공공 서비스의 시작") + "<br>" + esc((c.projectName || c.systemName || "") + "에 오신 것을 환영합니다.") + '</p></div><div class="wf-login in">' + form + "</div></div>";
   };
   function field(label, ph, req, inner) {
     return '<label class="wf-field"><span class="wf-lbl">' + esc(label) + (req ? ' <i class="wf-req">*</i>' : "") + "</span>" + (inner || '<span class="wf-input"><em>' + esc(ph || "") + "</em></span>") + "</label>";
@@ -249,7 +351,7 @@
     }).join("") + "</ol>";
   };
   C.tabs = function (ds, p) {
-    return '<div class="wf-tabs">' + (p.items || []).map(function (t, i) { return '<span class="' + (i === (p.active || 0) ? "on" : "") + '">' + esc(t) + "</span>"; }).join("") + "</div>";
+    return '<div class="wf-tabs ' + (p.style || ds.layout.tabs || "line") + '">' + (p.items || []).map(function (t, i) { return '<span class="' + (i === (p.active || 0) ? "on" : "") + '">' + esc(t) + "</span>"; }).join("") + "</div>";
   };
   C.breadcrumb = function (ds, p) { return '<div class="wf-bc" data-cmp="breadcrumb">' + icon("home", 13) + (p.items || []).map(function (x) { return "<span>›</span><span>" + esc(x) + "</span>"; }).join("") + "</div>"; };
   C["confirm-dialog"] = function (ds, p) {
@@ -303,7 +405,26 @@
   }
 
   // ── 프레임 ───────────────────────────────────
-  function logo(ctx) { return '<span class="wf-logo"><i></i><b>' + esc(ctx.systemName || "서비스명") + "</b></span>"; }
+  /** 정부 상징형 원 (공공 프로젝트) */
+  var EMBLEM = '<svg class="wf-emb" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#fff"/><path d="M1 16a15 15 0 0 1 30 0z" fill="#CD2E3A"/><path d="M1 16a15 15 0 0 0 30 0z" fill="#0047A0"/><circle cx="8.5" cy="16" r="7.5" fill="#CD2E3A"/><circle cx="23.5" cy="16" r="7.5" fill="#0047A0"/></svg>';
+  /** 로고: 공공이면 상징 + 두 줄(사업명 · 시스템명), 아니면 색 상자 + 시스템명 */
+  function logo(ctx, inv) {
+    var two = ctx.projectName && ctx.projectName !== ctx.systemName;
+    var mark = ctx.gov ? EMBLEM : "<i></i>";
+    return '<span class="wf-logo' + (two ? " two" : "") + (inv ? " inv" : "") + '">' + mark + (two ? '<span><small>' + esc(ctx.projectName) + "</small><b>" + esc(ctx.systemName || "서비스명") + "</b></span>" : "<b>" + esc(ctx.systemName || "서비스명") + "</b>") + "</span>";
+  }
+  function isSideNav(nav) { return nav === "side" || nav === "side-header" || nav === "header-side" || nav === "rail"; }
+  function menuItems(ctx, opts) {
+    var menus = ctx.menus || [];
+    return menus.map(function (m, i) {
+      return '<span class="' + (i === (ctx.activeMenu || 0) ? "on" : "") + '" title="' + esc(m) + '">' + icon(menuIcon(m, i), opts.rail ? 20 : 17) + (opts.rail ? "" : "<em>" + esc(m) + "</em>" + (opts.chev ? icon("chevron-right", 14) : "")) + "</span>";
+    }).join("");
+  }
+  function userName(ctx) { return ctx.userName || "홍길동"; }
+  function orgName(ctx) { return ctx.orgName || (ctx.profile === "admin" ? "운영기관" : "(주)사업장명"); }
+  /** 남은 시간 + 로그인 연장 */
+  function session(cls) { return '<span class="wf-timer ' + (cls || "") + '"><b>60:00</b><u>로그인 연장</u></span>'; }
+  function avatar() { return '<i class="wf-avatar">' + icon("user", 18) + "</i>"; }
   /** 모바일 머리: 로고 + 검색·메뉴 아이콘 한 줄, 그 아래 현재 메뉴 가로 스크롤 탭 */
   function mobileHeader(ds, ctx) {
     var menus = ctx.menus || [];
@@ -328,29 +449,44 @@
   }
   function footer(ds, ctx) {
     if (ds.layout.footer === "none") return "";
+    if (ctx.inside) return '<footer class="wf-footer inside" data-cmp="footer"><span>Copyright © 2026 ' + esc(ctx.projectName || ctx.systemName || "") + '. All rights reserved.</span><span class="wf-flinks"><b>개인정보처리방침</b><span>이용약관</span><span class="wf-input sel sm"><em>관련기관 바로가기</em>' + icon("chevron-right", 12).replace('class="wf-ic"', 'class="wf-ic dn"') + '</span><i class="wf-go">GO</i></span></footer>';
     if (ds.layout.footer === "simple" || ctx.view === "mobile") return '<footer class="wf-footer simple" data-cmp="footer"><div class="wf-container"><span>' + esc(ctx.systemName || "") + "</span><span>개인정보처리방침 · 이용약관 · © 2026</span></div></footer>";
     return '<footer class="wf-footer" data-cmp="footer"><div class="wf-container">' + logo(ctx) + '<div><span>개인정보처리방침 · 저작권정책 · 웹 접근성 정책</span><span>(04500) 서울특별시 ○○구 ○○로 00 · 대표전화 000-0000</span><span>© 2026 ○○기관. All rights reserved.</span></div></div></footer>';
   }
+  /** 업무형 좌측 메뉴 셸 (side · side-header · rail) */
   function sideShell(ds, ctx, inner) {
-    var menus = ctx.menus || [];
-    return '<div class="wf-sshell"><aside class="wf-side" data-cmp="gnb">' + logo(ctx) + '<nav>' + menus.map(function (m, i) {
-      return '<span class="' + (i === (ctx.activeMenu || 0) ? "on" : "") + '">' + icon(["home", "file", "edit", "bell", "user"][i % 5], 15) + esc(m) + "</span>";
-    }).join("") + '</nav></aside><div class="wf-sbody"><div class="wf-topbar">' + C.breadcrumb(ds, { items: ctx.crumbs || [] }) +
-      '<span class="wf-utl">' + icon("bell") + icon("user") + "<em>" + esc(ctx.userName || "사용자") + "</em></span></div>" +
-      '<main class="wf-main">' + inner + "</main></div></div>";
+    var nav = ds.layout.nav, rail = nav === "rail";
+    var side = '<aside class="wf-side' + (rail ? " rail" : "") + '" data-cmp="gnb"><div class="wf-sidehead">' + (rail ? (ctx.gov ? EMBLEM : '<span class="wf-logo"><i></i></span>') : logo(ctx) + icon("panel", 18)) + "</div>" +
+      '<nav class="wf-snav">' + menuItems(ctx, { rail: rail, chev: true }) + "</nav>" +
+      (nav === "side" ? '<div class="wf-sideuser">' + avatar() + "<div><small>" + esc(orgName(ctx)) + "</small><b>" + esc(userName(ctx)) + ' 님</b></div><div class="wf-sess"><span>60:00</span><u>로그인 연장</u></div></div>' : "") + "</aside>";
+    var top = nav === "side" ? "" : '<div class="wf-topbar" data-cmp="gnb"><span class="wf-hello">[' + esc(orgName(ctx)) + '] <b>' + esc(userName(ctx)) + "</b>님 반갑습니다.</span>" +
+      '<span class="wf-utl">' + session("pill") + '<span class="wf-tuser"><span><small>' + esc(orgName(ctx)) + "</small><b>" + esc(userName(ctx)) + " 님</b></span>" + avatar() + "</span></span></div>";
+    return '<div class="wf-sshell ' + nav + '">' + side + '<div class="wf-sbody">' + top + '<main class="wf-main">' + inner + "</main>" + (ds.layout.footer === "none" ? "" : footer(ds, Object.assign({}, ctx, { inside: true }))) + "</div></div>";
+  }
+  /** 전체 폭 헤더 + 그 아래 좌측 메뉴 (민원 포털형) */
+  function headerSideShell(ds, ctx, inner) {
+    var head = '<header class="wf-gheader" data-cmp="gnb"><div class="wf-ghin">' + logo(ctx) + '<span class="wf-gutil"><em>이전접속 IP 000.000.000.00</em><em>이전접속시간 2026-02-03 13:00:00</em>' + session("box") +
+      '<span class="wf-gbtn">마이페이지 ' + icon("chevron-right", 12) + "</span>" + (ctx.profile === "admin" ? "" : '<span class="wf-gbtn">사업자 전환 ' + icon("refresh", 13) + "</span>") +
+      '<span class="wf-guser">' + icon("user", 16) + esc(userName(ctx) + (ctx.profile === "admin" ? " 님" : "님" + orgName(ctx))) + "</span></span></div></header>";
+    var side = '<aside class="wf-side hs" data-cmp="lnb"><span class="wf-fold">' + icon("panel", 15) + '</span><nav class="wf-snav">' + menuItems(ctx, {}) + "</nav></aside>";
+    return head + '<div class="wf-sshell header-side">' + side + '<div class="wf-sbody"><main class="wf-main">' + inner + "</main>" + (ds.layout.footer === "none" ? "" : footer(ds, Object.assign({}, ctx, { inside: true }))) + "</div></div>";
   }
 
   /** 화면 한 장: 틀(GNB/사이드) + 제목 + 블록들 */
   function page(ds, ctx, blocksHtml) {
+    var nav = ds.layout.nav, side = isSideNav(nav) && ctx.view !== "mobile";
     var acts = ctx.titleActions ? '<div class="wf-tacts">' + ctx.titleActions + "</div>" : "";
-    var title = ctx.title ? '<div class="wf-ptitle"><h1>' + esc(ctx.title) + "</h1>" + (ds.layout.nav === "side" ? "" : C.breadcrumb(ds, { items: ctx.crumbs || [] })) + acts + "</div>" : "";
+    var bc = C.breadcrumb(ds, { items: ctx.crumbs || [] });
+    var title = ctx.title ? '<div class="wf-ptitle' + (side ? " thin" : "") + '"><h1>' + (ctx.back ? icon("chevron-left", 18) : "") + esc(ctx.title) + "</h1>" + (acts && side ? acts + bc : bc + acts) + "</div>" : "";
     var body = title + '<div class="wf-blocks">' + blocksHtml + "</div>";
     var frame;
     if (ctx.bare) frame = '<div class="wf-bare">' + blocksHtml + "</div>";
-    else if (ds.layout.nav === "side" && ctx.view !== "mobile") frame = sideShell(ds, ctx, body);
+    else if (side && nav === "header-side") frame = headerSideShell(ds, ctx, body);
+    else if (side) frame = sideShell(ds, ctx, body);
     else frame = header(ds, ctx) + '<main class="wf-main"><div class="wf-container">' + body + "</div></main>" + footer(ds, ctx);
-    var viewCls = ctx.view === "mobile" ? " wf-m" : ctx.view === "tablet" ? " wf-t" : "";
-    return '<div class="wf wf-nav-' + ds.layout.nav + " wf-" + ds.layout.density + viewCls + (scopeCls(ds) ? " " + useCss(ds) : "") + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
+    var L = ds.layout, viewCls = ctx.view === "mobile" ? " wf-m" : ctx.view === "tablet" ? " wf-t" : "";
+    var mods = " wf-th-" + (L.tableHead || "line") + " wf-stat-" + (L.stat || "plain") + " wf-mark-" + (L.navMark || "fill") + " wf-srch-" + (L.searchStyle || "card");
+    return '<div class="wf wf-nav-' + nav + " wf-" + L.density + mods + viewCls + (scopeCls(ds) ? " " + useCss(ds) : "") + '" style="' + vars(ds) + '">' + frame + (ctx.overlay ? '<div class="wf-overlay">' + ctx.overlay + "</div>" : "") + "</div>";
   }
 
   /** 입력 항목: 이어서 나오면 실제 신청 화면처럼 왼쪽 항목명 · 오른쪽 입력칸 표(폼 테이블)로 묶는다 */
@@ -408,30 +544,54 @@
     var prof = ctx.profile || "portal";
     var s = SAMPLE[prof];
     var c = Object.assign({ menus: s.menus, crumbs: [s.menus[0]] }, ctx);
-    var listRows = prof === "admin" ?
-      [["2026-0934", "구청 청사 에너지 사용량", "김○○", "2026-09-24", "공개신청"], ["2026-0933", "마을버스 노선 조정안", "이○○", "2026-09-23", "반려"], ["2026-0930", "도서관 좌석 이용률", "박○○", "2026-09-21", "심사중"]] :
-      [["128", "2026년 하반기 도로 정비 계획", "도로과", "2026-09-24", "공개"], ["127", "공공 체육시설 이용 현황", "체육진흥과", "2026-09-22", "공개"], ["126", "민원 처리 결과 통계", "민원봉사과", "2026-09-19", "부분공개"]];
-    var cols = prof === "admin" ? ["신청번호", "제목", "신청인", "신청일", "상태"] : ["번호", "제목", "기관", "공개일", "구분"];
-    var list = component(ds, "search-panel", { fields: [{ label: "기간", type: "date-range" }, { label: "상태", type: "select", options: ["전체"] }, { label: "검색어", type: "text", placeholder: "제목" }] }) +
-      component(ds, "data-table", { total: 128, columns: cols, rows: listRows, badgeColumn: 4 }) + component(ds, "pagination", { total: 128 });
+    var side = isSideNav(ds.layout.nav) && ctx.view !== "mobile", biz = ds.layout.searchStyle === "table";
+    var cols, listRows;
+    if (prof === "admin") {
+      cols = ["구분", "접수일자", "접수번호", "신청인", "신청 건명", "담당자", "처리기한", "진행상태"];
+      listRows = [["신규", "2026-11-21", "R2611-00027", "(주)한빛산업", "공장 증설에 따른 변경 신청", "홍길동", "2026-11-28", "심사중"], ["변경", "2026-11-21", "R2611-00026", "(주)미래소재", "대표자 변경 신고", "김철수", "2026-11-27", "보완요청"], ["신규", "2026-11-20", "R2611-00025", "푸른환경(주)", "신규 등록 신청", "홍길동", "2026-11-27", "접수"], ["연장", "2026-11-20", "R2611-00024", "(주)대한케미칼", "자료 보호 기간 연장", "이영희", "2026-11-26", "승인"], ["변경", "2026-11-19", "R2611-00023", "(주)세진", "사업장 주소 변경", "김철수", "2026-11-26", "반려"]];
+    } else if (prof === "service") {
+      cols = ["제출구분", "등록구분", "접수번호", "접수일자", "신청 건명", "상태", "제출일자"];
+      listRows = [["신규", "일반등록", "B1806-002182", "2026-10-25", "신규 등록 신청서", "작성중", "2026-10-25"], ["기존", "-", "-", "2026-10-25", "변경 등록 신청서", "보완요청", "2026-10-25"], ["개별제출", "일반등록", "B1806-002180", "2026-10-24", "자료 제출 확인 신청", "심사중", "-"], ["후발", "일반등록", "-", "-", "후발 등록 신청서", "승인", "2026-10-22"], ["신규", "간이등록", "B1806-002176", "2026-10-21", "간이 등록 신청서", "접수", "2026-10-21"]];
+    } else {
+      cols = ["번호", "제목", "기관", "공개일", "구분"];
+      listRows = [["128", "2026년 하반기 도로 정비 계획", "도로과", "2026-09-24", "공개"], ["127", "공공 체육시설 이용 현황", "체육진흥과", "2026-09-22", "공개"], ["126", "민원 처리 결과 통계", "민원봉사과", "2026-09-19", "부분공개"], ["125", "어린이 보호구역 지정 현황", "교통행정과", "2026-09-17", "공개"], ["124", "공영주차장 요금 체계 안내", "주차관리과", "2026-09-15", "공개"]];
+    }
+    var bcol = cols.length - (prof === "service" ? 2 : 1);
+    var fields = biz ? [{ label: "날짜", type: "date-range", basis: prof === "admin" ? "접수일자" : "작성일자" }, { label: "신청 건명" }, { label: "접수번호" }, { label: "상태", type: "select" }, { label: prof === "admin" ? "담당자" : "구분", type: "select" }, { label: "신청인" }] :
+      [{ label: "기간", type: "date-range" }, { label: "상태", type: "select", options: ["전체"] }, { label: "검색어", type: "text", placeholder: "제목" }];
+    var tabs = side && prof !== "portal" ? component(ds, "tabs", { items: ["전체", "접수", "보완요청", "처리현황", "승인현황"], active: 0 }) : "";
+    var list = tabs + component(ds, "search-panel", { fields: fields }) +
+      component(ds, "data-table", { total: 124, columns: cols, rows: listRows, badgeColumn: bcol, action: prof === "service" ? "신규 작성" : prof === "admin" ? "일괄 배정" : null }) + component(ds, "pagination", { total: 124 });
     var wrap = function (h) { return '<div class="wf-blk">' + h + "</div>"; };
-    var listPage = function (extra) { return page(ds, Object.assign({}, c, { title: s.title }, extra || {}), wrap(list)); };
+    var listTitle = prof === "service" ? "등록 신청 및 진행현황" : s.title;
+    var listPage = function (extra) { return page(ds, Object.assign({}, c, { title: listTitle, crumbs: [(c.menus || [])[0] || "업무", listTitle] }, extra || {}), wrap(list)); };
+    var notices = [["시스템 정기 점검 안내 (11/28 22:00~24:00)", "2026-11-21", "공지"], ["신청서 작성 매뉴얼 개정 배포", "2026-11-20", "자료"], ["보완 요청 처리 절차 변경 안내", "2026-11-19", "공지"], ["연말 처리 기한 조정 안내", "2026-11-18", "공지"], ["자주 묻는 질문 업데이트", "2026-11-15", "자료"]];
     switch (type) {
       case "login":
-        return page(ds, Object.assign({}, c, { bare: prof === "admin", title: prof === "admin" ? "" : "로그인", crumbs: ["로그인"] }), wrap(component(ds, "login-form", { title: prof === "admin" ? (ctx.systemName || "관리자") + " 로그인" : "로그인" })));
+        if (ctx.view === "mobile") return page(ds, Object.assign({}, c, { title: "로그인", crumbs: ["로그인"] }), wrap(component(ds, "login-form", { title: "로그인" }, c)));
+        return page(ds, Object.assign({}, c, { bare: side || prof === "admin", title: side || prof === "admin" ? "" : "로그인", crumbs: ["로그인"] }), wrap(component(ds, "login-form", { title: "로그인", split: true }, c)));
       case "dashboard":
-        return page(ds, Object.assign({}, c, { title: prof === "admin" ? "대시보드" : "나의 민원", crumbs: ["대시보드"] }),
-          wrap(component(ds, "stat-cards", { items: [["신규 신청", "12"], ["심사중", "8"], ["반려", "3"], ["공개", "124"]] })) +
-          '<div class="wf-2col">' + wrap(component(ds, "data-table", { total: 12, columns: cols.slice(0, 3).concat(["상태"]), rows: listRows.map(function (r) { return [r[0], r[1], r[2], r[4]]; }), badgeColumn: 3 })) +
-          wrap(component(ds, "notice-list", { title: "공지사항", items: [["시스템 점검 안내(9/28)", "09-24"], ["심사 기준 개정 안내", "09-20"], ["상반기 처리 실적", "09-12"]] })) + "</div>");
+        if (prof === "admin") {
+          var banner = component(ds, "notice-banner", { parts: [["2026년 11월 20일 목요일, 담당자님에게 ", ""], ["새롭게 지정된 민원은 5건", "primary"], [" / ", ""], ["처리 중인 민원은 14건", "danger"], ["이 있습니다.", ""]] });
+          var welcome = ds.layout.nav === "side" || !side ? '<div class="wf-welcome"><span>[' + esc(orgName(c)) + "] <b>" + esc(userName(c)) + "</b>님 반갑습니다.</span>" + banner + "</div>" : banner;
+          var stats = component(ds, "stat-cards", { title: "신규 접수 현황", count: 5, unit: "건", columns: 5, items: [["신규 신청", "456"], ["변경 신청", "35"], ["보완 제출", "22"], ["이의 신청", "123"], ["재신청", "8"], ["변경 신고", "123"], ["변경 등록", "8"], ["승계", "35"], ["선임·해임", "456"], ["연장·해지", "22"]] });
+          return page(ds, Object.assign({}, c, { title: "", crumbs: ["대시보드"] }),
+            wrap(welcome) + '<div class="wf-dgrid">' + wrap(stats) + wrap('<div class="wf-widget cal">' + component(ds, "calendar", {}) + "</div>") + "</div>" +
+            '<div class="wf-dgrid b">' + wrap(component(ds, "data-table", { title: "처리 중인 민원 목록", total: 14, columns: cols, rows: listRows, badgeColumn: bcol, view: "table" })) + wrap(component(ds, "chip-links", { items: ["신청 및 등록 › 신고", "개별제출 확인", "신청 및 등록 › 변경신고", "민원관리 › 자료보호연장", "처리 현황", "통계 › 월별 처리"] })) + "</div>" +
+            '<div class="wf-dgrid b">' + wrap(component(ds, "data-table", { title: "최근 완료한 민원", total: 5, period: "조회기간 : 2026-11-15 ~ 2026-11-21", columns: ["구분", "접수번호", "신청인", "신청 건명", "완료일자"], rows: listRows.map(function (r) { return [r[0], r[2], r[3], r[4], "2026-11-21"]; }), view: "table" })) + wrap(component(ds, "notice-list", { tabs: ["공지사항", "자료실", "게시판"], items: notices })) + "</div>");
+        }
+        return page(ds, Object.assign({}, c, { title: "나의 민원", crumbs: ["나의 민원"] }),
+          wrap(component(ds, "stat-cards", { items: [["작성중", "2", "건"], ["심사중", "3", "건"], ["보완요청", "1", "건"], ["처리완료", "24", "건"]] })) +
+          '<div class="wf-2col">' + wrap(component(ds, "data-table", { title: "최근 신청 내역", total: 5, columns: cols.slice(2, 6), rows: listRows.map(function (r) { return r.slice(2, 6); }), badgeColumn: prof === "service" ? 3 : null, view: "table", more: true })) +
+          wrap(component(ds, "notice-list", { title: "공지사항", items: notices.slice(0, 4) })) + "</div>");
       case "main":
         if (prof === "admin") return template(ds, "dashboard", ctx);
         return page(ds, Object.assign({}, c, { title: "", showMega: ds.layout.nav === "top-mega" }),
           wrap(component(ds, "hero-banner", { title: prof === "service" ? "필요한 민원을 한 곳에서 신청하세요" : "누구나 쉽게 찾아보는 공공 정보", text: "정보공개 · 민원신청 · 처리 현황 조회" })) +
           (ds.layout.search === "hero" ? "" : wrap(component(ds, "search-bar", { placeholder: "찾고 싶은 정보를 검색하세요" }))) +
           wrap(component(ds, "quick-links", { items: ["정보공개 청구", "자료 등록", "처리 현황", "알림 신청", "자주 묻는 질문", "서식 내려받기"] })) +
-          '<div class="wf-2col">' + wrap(component(ds, "notice-list", { title: "공지사항", items: [["시스템 점검 안내(9/28)", "09-24"], ["정보공개 청구 절차 변경", "09-20"]] })) +
-          wrap(component(ds, "notice-list", { title: "최근 공개 자료", items: [["2026년 하반기 도로 정비 계획", "09-24"], ["공공 체육시설 이용 현황", "09-22"]] })) + "</div>");
+          '<div class="wf-2col">' + wrap(component(ds, "notice-list", { title: "공지사항", items: notices.slice(0, 3) })) +
+          wrap(component(ds, "notice-list", { title: "최근 공개 자료", items: [["2026년 하반기 도로 정비 계획", "09-24"], ["공공 체육시설 이용 현황", "09-22"], ["민원 처리 결과 통계", "09-19"]] })) + "</div>");
       case "list":
         return listPage();
       case "detail":
@@ -439,8 +599,8 @@
           wrap(component(ds, "detail-table", { rows: [["제목", "2026년 하반기 도로 정비 계획"], ["기관", "도로과"], ["공개 구분", "전체공개"], ["공개일", "2026-09-24"]] })) +
           wrap(component(ds, "file-list", { files: ["도로정비계획_2026하반기.pdf (2.1MB)"] })) + wrap(component(ds, "button-group", { buttons: [{ label: "목록", variant: "secondary" }] })));
       case "form":
-        return page(ds, Object.assign({}, c, { title: "자료 등록" }),
-          (prof === "service" ? wrap(component(ds, "step-indicator", { steps: ["자료 입력", "내용 확인", "신청 완료"], current: 0 })) : "") +
+        return page(ds, Object.assign({}, c, { title: side ? listTitle + " - 신규작성" : "자료 등록", back: side, crumbs: [(c.menus || [])[0] || "업무", listTitle, "신규작성"] }),
+          (prof !== "admin" ? wrap(component(ds, "step-indicator", { steps: side ? ["신규작성", "임시저장", "제출", "접수완료", "보완요청", "결과통지"] : ["자료 입력", "내용 확인", "신청 완료"], current: 0 })) : "") +
           wrap(component(ds, "text-input", { label: "제목", placeholder: "제목을 입력하세요", required: true })) +
           wrap(component(ds, "radio-group", { label: "공개 구분", options: ["전체공개", "부분공개"], value: "전체공개", required: true })) +
           wrap(component(ds, "select", { label: "분류", options: ["선택하세요"] })) +

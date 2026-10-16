@@ -29,16 +29,8 @@
   var TIMING = { ON_INPUT: "입력 중", ON_BLUR: "입력칸을 벗어날 때", ON_SUBMIT: "제출 시" };
   var TEMPLATES = [["login", "로그인"], ["dashboard", "대시보드"], ["main", "메인"], ["list", "목록"], ["detail", "상세"], ["form", "등록"], ["confirm", "확인 창"], ["alert", "알림 창"], ["toast", "토스트"], ["modal", "모달 팝업"]];
   var CATEGORY = { navigation: "내비게이션", layout: "레이아웃", search: "검색", data: "데이터", content: "콘텐츠", form: "입력", action: "버튼", feedback: "피드백" };
-  var LAYOUT_LABEL = {
-    nav: ["GNB 위치", { top: "상단", "top-mega": "상단 메가메뉴", side: "좌측 사이드" }],
-    logo: ["로고 위치", { left: "왼쪽", center: "가운데" }],
-    search: ["검색 영역", { header: "헤더 안", hero: "첫 화면 큰 검색창", panel: "목록 위 조건 패널" }],
-    list: ["목록 형태", { table: "표(그리드)", card: "카드" }],
-    pagination: ["페이지네이션", { numbered: "번호", "numbered-size": "번호 + 목록 개수 선택", more: "더보기" }],
-    button: ["버튼 모서리", { square: "각진", rounded: "둥근", pill: "알약형" }],
-    density: ["밀도", { comfortable: "여유", compact: "촘촘" }],
-    footer: ["푸터", { full: "기관 정보 전체", simple: "간단", none: "없음" }]
-  };
+  var LAYOUT_LABEL = DATA.design.lib.layoutLabels;
+
   var PAGES = {
     dash: ["대시보드", "단계 진행과 요구사항 충족 현황"],
     kb: ["참조자료", "올린 문서가 이 프로젝트의 지식이 됩니다. 요구사항 추출, Task 제안, 기획안 생성 때 근거로 검색됩니다."],
@@ -170,7 +162,8 @@
     var sample = { portal: ["알림마당", "기관소개"], service: ["고객센터"], admin: ["통계", "시스템 관리"] }[prof];
     return {
       systemName: s.name, profile: prof, menus: menus.concat(sample).slice(0, 6), activeMenu: Math.max(0, tops.indexOf(top)),
-      crumbs: crumbs, userName: prof === "admin" ? (s.users[0] || "담당자") + " 정○○" : "민원인"
+      crumbs: crumbs, userName: prof === "admin" ? (s.users[0] || "담당자") + " 정○○" : "민원인",
+      projectName: p.model.project.name, gov: p.model.project.submissionTemplate === "PUBLIC"
     };
   }
 
@@ -1862,10 +1855,13 @@
     "confirm-dialog": { title: "공개 신청", message: "입력한 내용으로 공개를 신청할까요?" },
     "alert-dialog": { title: "알림", message: "제목을 입력해 주세요.", tone: "danger" },
     toast: { message: "저장했습니다." },
-    modal: { title: "승인·반려 처리", body: "<p style=\"margin:0\">처리 결과를 선택하세요.</p>" }
+    modal: { title: "승인·반려 처리", body: "<p style=\"margin:0\">처리 결과를 선택하세요.</p>" },
+    "notice-banner": { parts: [["오늘 담당자님에게 ", ""], ["새로 지정된 업무 5건", "primary"], [" / ", ""], ["처리 중인 업무 14건", "danger"], ["이 있습니다.", ""]] },
+    calendar: {},
+    "chip-links": { items: ["신청 › 신고", "처리 현황", "자료 제출 › 보완", "증명서 발급"] }
   };
   var FULLW = { gnb: 1, footer: 1 };
-  var WIDE = /search-panel|data-table|card-list|hero-banner|quick-links|stat-cards|chart|step-indicator|tabs|detail-table|notice-list|breadcrumb|review/;
+  var WIDE = /search-panel|data-table|card-list|hero-banner|quick-links|stat-cards|chart|step-indicator|tabs|detail-table|notice-list|notice-banner|breadcrumb|review/;
   function sampleRaw(ds, c, ctx) {
     var props = SAMPLE_PROPS[c.id];
     if (!props) {
@@ -1907,7 +1903,7 @@
     }).join("") + "</div>";
   }
   function layoutChips(L) {
-    return '<div class="lchips">' + Object.keys(LAYOUT_LABEL).map(function (k) { return '<span class="tag">' + LAYOUT_LABEL[k][0] + " · " + LAYOUT_LABEL[k][1][L[k]] + "</span>"; }).join("") + "</div>";
+    return '<div class="lchips">' + Object.keys(LAYOUT_LABEL).filter(function (k) { return L[k] != null; }).map(function (k) { return '<span class="tag">' + LAYOUT_LABEL[k][0] + " · " + (LAYOUT_LABEL[k][1][L[k]] || L[k]) + "</span>"; }).join("") + "</div>";
   }
   function fontName(f) { return f.split(",")[0].replace(/"/g, ""); }
 
@@ -1923,21 +1919,130 @@
     }).join("") + "</div>";
     var s = sysOf(p, code), d = designOf(p, code), ctx = wireCtx(p, code, null);
     var body;
-    if (!d) body = '<div class="box empty">아직 컨셉을 제안받지 않았습니다. 와이어프레임을 그리기 전에 컨셉 3종을 제안받아 하나를 고릅니다.<br><span class="hint">AI 제안은 이 시스템의 사용자·채널·참조 URL·참조자료를 읽고 만들고, 기본 제안은 시스템 성격별로 정해 둔 규칙 기반 3종입니다.</span>' + (SRV ? '<div class="row-actions center">' + genBtn("dsc:" + code, "AI로 컨셉 3종 제안") + editBtn("ds-propose", "기본 컨셉 3종 (규칙 기반)", code) + "</div>" : copyBox("planning -p " + p.model.project.code + " design propose " + code)) + "</div>";
-    else if (d.status !== "SELECTED") body = renderProposals(p, d, ctx);
+    var wiz = state.dsw[dswKey(p, code)];
+    if (!d || d.status !== "SELECTED" || (wiz && wiz.open)) body = renderWizard(p, code, d, ctx);
     else body = renderSystemDesign(p, d, ctx);
-    return '<section class="section"><div class="toolbar">' + chips + (d && d.status === "SELECTED" && SRV && canEdit() ? actBtn("ds-edit", "✎ 직접 편집", code) : "") + (d && d.status === "SELECTED" ? genBtn("dsc:" + code, "AI 새 컨셉 후보 제안") : "") + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
+    return '<section class="section"><div class="toolbar">' + chips + (d && d.status === "SELECTED" ? '<button class="btn-sm" data-dsw="' + esc(code) + '|open|1">프레임 · 톤 다시 고르기</button>' : "") + (d && d.status === "SELECTED" && SRV && canEdit() ? actBtn("ds-edit", "✎ 직접 편집", code) : "") + (d && d.status === "SELECTED" ? genBtn("dsc:" + code, "AI 새 컨셉 후보 제안") : "") + aiBtn("ds:" + code, "AI 요청 · Figma / Claude") + "</div>" + (d && d.status === "SELECTED" ? workCtl(p, "ds:" + code, "디자인 시스템") : "") + "</section>" + body;
   }
 
-  function renderProposals(p, d, ctx) {
-    var cols = d.proposals.map(function (c) {
-      var ds = asDs(c);
-      return '<article class="box concept"><div class="concept-h"><span class="cid">' + esc(c.id) + '</span><div><b>' + esc(c.name) + "</b><p>" + esc(c.summary) + '</p></div></div><p class="fit"><b>어울리는 경우</b> ' + esc(c.fit) + "</p>" +
-        swatches(c.tokens) + '<p class="hint">글꼴 ' + esc(fontName(c.tokens.font.family)) + " · 본문 " + c.tokens.font.scale.body + "px · 버튼 높이 " + c.tokens.control.height + "px</p>" + layoutChips(c.layout) +
-        thumbs(ds, ctx, c.id + ". " + c.name) + (SRV ? (canEdit() ? '<div class="pick">' + actBtn("ds-select", "컨셉 " + esc(c.id) + " 으로 정하기", d.systemCode + "|" + c.id, "btn-primary") + "</div>" : "") : '<div class="pick"><span class="hint">이 컨셉으로 정하기</span>' + copyBox("planning -p " + p.model.project.code + " design select " + d.systemCode + " " + c.id) + "</div>") + "</article>";
-    }).join("");
-    return '<div class="note warn"><b>컨셉 선택 대기</b><p class="hint">' + esc(d.systemCode) + " 화면을 그리기 전에 아래 3개 컨셉 중 하나를 고르세요. 미리보기는 모두 " + VW + "×" + VH + " 실제 규격을 축소한 것이고, 누르면 크게 볼 수 있습니다. 컨셉마다 로그인·대시보드·메인·목록·상세·등록·확인 창·알림 창·토스트·모달 팝업을 같은 내용으로 그려 비교합니다. 고른 컨셉으로 디자인 시스템이 만들어집니다.</p>" + (SRV && canEdit() ? '<div class="row-actions">' + genBtn("dsc:" + d.systemCode, "AI로 컨셉 다시 제안") + "</div>" : "") + "</div>" +
-      '<div class="concepts">' + cols + "</div>";
+  // ── 디자인 시스템 고르기: ① 프레임 → ② 톤앤매너 → ③ 세부 스타일 · 확정 ──
+  var LIB = DATA.design.lib;
+  state.dsw = state.dsw || {};
+  var DSW_TPL = [["dashboard", "대시보드"], ["list", "목록"], ["form", "등록"], ["login", "로그인"], ["main", "메인"]];
+  function frameById(id) { return LIB.frames.find(function (f) { return f.id === id; }); }
+  function toneById(id) { return LIB.tones.find(function (t) { return t.id === id; }); }
+  function libDs(f, t, style, code) { var c = DesignLib.compose(f, t, style || {}, LIB.fonts); return { tokens: c.tokens, layout: c.layout, components: [], systemCode: code, concept: c }; }
+  function dswKey(p, code) { return p.model.project.code + "|" + code; }
+  function dswOf(p, code, d) {
+    var key = dswKey(p, code), w = state.dsw[key];
+    if (w) return w;
+    var cur = d && d.status === "SELECTED" ? d.proposals.find(function (x) { return x.id === d.selectedId; }) : null;
+    w = state.dsw[key] = { step: 1, frame: cur && cur.frameId || null, tone: cur && cur.toneId || null, style: {}, tpl: null, all: false, open: false };
+    // 지금 디자인이 조합으로 만든 것이면 톤 기본값과 다른 세부 스타일을 이어받는다
+    if (cur && cur.frameId && frameById(cur.frameId) && toneById(cur.toneId)) {
+      var def = DesignLib.compose(frameById(cur.frameId), toneById(cur.toneId), {}, LIB.fonts);
+      LIB.styleOptions.forEach(function (o) { if (o.key !== "font" && d.layout[o.key] && d.layout[o.key] !== def.layout[o.key]) w.style[o.key] = d.layout[o.key]; });
+      w.step = 3;
+    }
+    return w;
+  }
+  function dswTpl(w, prof) { return w.tpl || (prof === "admin" ? "dashboard" : prof === "service" ? "list" : "main"); }
+  function dswThumb(ds, tpl, ctx, title) {
+    var html = Wire.template(ds, tpl, ctx);
+    previews.push({ title: title, html: html, h: VH });
+    return { html: stage(html, { w: VW, h: VH, cap: false }), idx: previews.length - 1 };
+  }
+  function toneSwatch(t) {
+    var c = t.color;
+    return '<span class="dsw-sw">' + [c.primary, c.nav, c.accent, c.bg].map(function (x) { return '<i style="background:' + x + '"></i>'; }).join("") + '<span class="dsw-ser">' + t.series.slice(0, 6).map(function (x) { return '<i style="background:' + x + '"></i>'; }).join("") + "</span></span>";
+  }
+  function renderWizard(p, code, d, ctx) {
+    var s = sysOf(p, code), prof = profileOf(s), w = dswOf(p, code, d), tpl = dswTpl(w, prof);
+    var f = w.frame ? frameById(w.frame) : null, t = w.tone ? toneById(w.tone) : null;
+    var recT = toneById(LIB.recommended[prof][0][1]);
+    var k = esc(code);
+    var stepBtn = function (n, label, sub, val, ok) {
+      return '<button class="dsw-step' + (w.step === n ? " on" : "") + (val ? " done" : "") + '" data-dsw="' + k + "|step|" + n + '"' + (ok ? "" : " disabled") + '><span class="ds-n' + (val ? " ok" : "") + '">' + n + "</span><b>" + label + "</b><small>" + esc(val || sub) + "</small></button>";
+    };
+    var steps = '<nav class="dsw-steps" aria-label="디자인 시스템 고르기 단계">' + stepBtn(1, "프레임", "화면 골격 고르기", f && f.id + " " + f.name, true) + stepBtn(2, "톤앤매너", "색·글꼴·형태 고르기", t && t.id + " " + t.name, !!f) + stepBtn(3, "세부 스타일 · 확정", "표·카드·버튼·밀도", f && t ? "미리보기 · 확정" : "", !!(f && t)) + "</nav>";
+    var tplBar = '<div class="seg" role="group" aria-label="미리보기 화면">' + DSW_TPL.map(function (x) { return '<button data-dsw="' + k + "|tpl|" + x[0] + '" aria-pressed="' + (tpl === x[0]) + '">' + x[1] + "</button>"; }).join("") + "</div>";
+    var allBar = '<div class="seg" role="group" aria-label="보기 범위"><button data-dsw="' + k + '|all|0" aria-pressed="' + !w.all + '">이 시스템 추천</button><button data-dsw="' + k + '|all|1" aria-pressed="' + w.all + '">전체</button></div>';
+    var head = '<div class="dsw-head"><div><span class="eyebrow">' + esc(code + " " + s.name) + " · " + ({ portal: "대국민 포털", service: "신청 서비스", admin: "업무·관리자" }[prof]) + '</span><h2>디자인 시스템 고르기</h2><p class="hint">프레임(화면 골격) → 톤앤매너(색·글꼴·형태) → 세부 스타일 순서로 고릅니다. 모든 미리보기는 ' + VW + "×" + VH + " 실제 규격을 축소한 것이고, ‘크게 보기’로 원래 크기를 볼 수 있습니다.</p></div>" +
+      '<div class="dsw-hact">' + (d && d.status === "SELECTED" ? '<button class="btn-sm" data-dsw="' + k + '|close|">닫기</button>' : "") + genBtn("dsc:" + code, "AI로 컨셉 제안") + "</div></div>";
+    var body = "";
+    if (w.step === 1) {
+      // 추천 조합 — 바로 정하기 / 세부 조정. 기존·AI 제안(프레임 조합이 아닌 컨셉)은 따로 묶는다
+      var pickCard = function (c, own) {
+        var th = dswThumb({ tokens: c.tokens, layout: c.layout, components: [], systemCode: code }, tpl, ctx, c.id + ". " + c.name);
+        var act = !SRV || !canEdit() ? "" : own ? actBtn("ds-select", "이 컨셉으로 정하기", code + "|" + c.id, "btn-sm btn-primary") : '<button class="btn-sm btn-primary" data-dsw="' + k + "|compose|" + esc(c.frameId + "," + c.toneId) + '">이 조합으로 정하기</button>';
+        var edit = c.frameId ? '<button class="btn-sm" data-dsw="' + k + "|tune|" + esc(c.frameId + "," + c.toneId) + '">세부 조정</button>' : "";
+        return '<figure class="dsw-card"><div class="dsw-th">' + th.html + '</div><figcaption><b><span class="cid">' + esc(c.frameId ? c.frameId + "×" + c.toneId : c.id) + "</span>" + esc(c.name) + '</b><span class="hint">' + esc(c.fit) + '</span><span class="dsw-acts"><button class="btn-sm" data-preview="' + th.idx + '">크게 보기</button>' + edit + act + "</span></figcaption></figure>";
+      };
+      var recs = LIB.recommended[prof].map(function (r) { return DesignLib.compose(frameById(r[0]), toneById(r[1]), {}, LIB.fonts); });
+      var own = d && d.proposals ? d.proposals.filter(function (x) { return !x.frameId; }) : [];
+      body += '<section class="section"><h2>추천 조합 <small>시스템 성격에 맞춘 프레임 × 톤 ' + recs.length + "개 · 바로 정하거나 ‘세부 조정’으로 이어서 고르세요</small>" + tplBar + '</h2><div class="dsw-grid picks">' + recs.map(function (c) { return pickCard(c, false); }).join("") + "</div></section>";
+      if (own.length) body += '<section class="section"><h2>기존 · AI 제안 컨셉 <small>' + own.length + "개 · 프레임 조합이 아닌 컨셉</small></h2><div class=\"dsw-grid picks\">" + own.map(function (c) { return pickCard(c, true); }).join("") + "</div></section>";
+      var frames = LIB.frames.filter(function (x) { return w.all || x.profiles.indexOf(prof) >= 0; });
+      body += '<section class="section"><h2>① 프레임 <small>' + frames.length + "종 · 화면 골격: 메뉴 위치 · 헤더 · 제목 · 검색 영역 · 콘텐츠 폭 — 미리보기 톤: " + esc((t || recT).name) + "</small>" + allBar + tplBar + '</h2><div class="dsw-grid">' + frames.map(function (fr) {
+        var th = dswThumb(libDs(fr, t || recT, w.style, code), tpl, ctx, fr.id + " " + fr.name);
+        return '<figure class="dsw-card' + (w.frame === fr.id ? " sel" : "") + '"><div class="dsw-pick" role="button" tabindex="0" data-dsw="' + k + "|frame|" + fr.id + '" aria-pressed="' + (w.frame === fr.id) + '"><div class="dsw-th">' + th.html + '</div><figcaption><b><span class="cid">' + fr.id + "</span>" + esc(fr.name) + (fr.profiles.indexOf(prof) >= 0 ? ' <span class="pill DESIGNED">추천</span>' : "") + "</b>" +
+          (fr.ref ? '<span class="dsw-ref">참고: ' + esc(fr.ref) + "</span>" : "") + '<span class="hint">' + esc(fr.summary) + "</span></figcaption></div>" + '<button class="btn-sm dsw-zoom" data-preview="' + th.idx + '">크게 보기</button></figure>';
+      }).join("") + "</div></section>";
+    } else if (w.step === 2) {
+      var tones = LIB.tones.filter(function (x) { return w.all || x.profiles.indexOf(prof) >= 0; });
+      body += '<section class="section"><h2>② 톤앤매너 <small>' + tones.length + "종 · 프레임 " + esc(f.id + " " + f.name) + "에 입혀 비교합니다</small>" + allBar + tplBar + '</h2><div class="dsw-grid">' + tones.map(function (to) {
+        var th = dswThumb(libDs(f, to, w.style, code), tpl, ctx, f.id + " × " + to.id + " " + to.name);
+        return '<figure class="dsw-card' + (w.tone === to.id ? " sel" : "") + '"><div class="dsw-pick" role="button" tabindex="0" data-dsw="' + k + "|tone|" + to.id + '" aria-pressed="' + (w.tone === to.id) + '"><div class="dsw-th">' + th.html + '</div><figcaption><b><span class="cid">' + to.id + "</span>" + esc(to.name) + (to.profiles.indexOf(prof) >= 0 ? ' <span class="pill DESIGNED">추천</span>' : "") + "</b>" + toneSwatch(to) +
+          '<span class="hint">' + esc(to.summary) + "</span>" + (to.ref ? '<span class="dsw-ref">참고: ' + esc(to.ref) + "</span>" : "") + "</figcaption></div>" + '<button class="btn-sm dsw-zoom" data-preview="' + th.idx + '">크게 보기</button></figure>';
+      }).join("") + '</div><div class="row-actions"><button class="btn-sm" data-dsw="' + k + '|step|1">← 프레임 다시 고르기</button></div></section>';
+    } else {
+      var ds = libDs(f, t, w.style, code), c = ds.concept;
+      var opts = LIB.styleOptions.map(function (o) {
+        var curV = o.key === "font" ? (w.style.font || "") : c.layout[o.key];
+        return '<div class="dsw-opt"><span>' + esc(o.label) + '</span><div class="seg sm" role="group" aria-label="' + esc(o.label) + '">' + (o.key === "font" ? '<button data-dsw="' + k + '|style|font=" aria-pressed="' + !w.style.font + '">톤 기본</button>' : "") + o.options.map(function (x) {
+          return '<button data-dsw="' + k + "|style|" + o.key + "=" + x[0] + '" aria-pressed="' + (curV === x[0]) + '">' + esc(x[1]) + "</button>";
+        }).join("") + "</div></div>";
+      }).join("") + '<div class="dsw-opt"><span>모서리</span><div class="seg sm" role="group" aria-label="모서리">' + [["", "톤 기본 " + t.radius + "px"], ["0", "0"], ["4", "4"], ["8", "8"], ["12", "12"], ["16", "16"]].map(function (x) {
+        return '<button data-dsw="' + k + "|style|radius=" + x[0] + '" aria-pressed="' + (x[0] === "" ? w.style.radius == null : w.style.radius === Number(x[0])) + '">' + x[1] + "</button>";
+      }).join("") + "</div></div>";
+      var big = dswThumb(ds, tpl, ctx, c.name);
+      var others = DSW_TPL.filter(function (x) { return x[0] !== tpl; }).map(function (x) {
+        var th = dswThumb(ds, x[0], ctx, c.name + " · " + x[1]);
+        return '<figure class="thumb"><div class="thumb-in" role="button" tabindex="0" data-preview="' + th.idx + '" aria-label="' + x[1] + ' 크게 보기">' + th.html + "</div><figcaption>" + x[1] + "</figcaption></figure>";
+      }).join("");
+      var styleArgs = Object.keys(w.style).filter(function (x) { return w.style[x] != null && w.style[x] !== ""; }).map(function (x) { return x + "=" + w.style[x]; });
+      var confirm = SRV ? (canEdit() ? '<button class="btn-primary" data-dsw="' + k + '|confirm|">이 디자인 시스템으로 ' + (d && d.status === "SELECTED" ? "바꾸기" : "확정") + "</button>" : '<span class="hint">작업자 이상만 확정할 수 있습니다</span>') :
+        copyBox("planning -p " + p.model.project.code + " design compose " + code + " " + f.id + " " + t.id + (styleArgs.length ? " --style " + styleArgs.join(" ") : ""));
+      body += '<section class="section"><h2>③ 세부 스타일 · 확정 <small>' + esc(f.id + " " + f.name + " × " + t.id + " " + t.name) + "</small>" + tplBar + '</h2><div class="dsw-final"><div class="dsw-opts box pad"><h3>세부 스타일</h3><p class="hint">비워 두면 톤앤매너 기본값을 씁니다. 바꾸면 미리보기에 바로 반영됩니다.</p>' + opts +
+        (Object.keys(w.style).length ? '<button class="btn-sm" data-dsw="' + k + '|reset|">톤 기본값으로 되돌리기</button>' : "") + '</div><div class="dsw-big"><div class="dsw-th big">' + big.html + '</div><div class="dsw-acts"><button class="btn-sm" data-preview="' + big.idx + '">크게 보기</button></div>' +
+        swatches(c.tokens) + layoutChips(c.layout) + '<div class="thumbs">' + others + "</div>" +
+        '<div class="row-actions"><button class="btn-sm" data-dsw="' + k + '|step|2">← 톤앤매너 다시 고르기</button><span class="sp"></span>' + confirm + "</div></div></div></section>";
+    }
+    return '<div class="dsw box">' + head + steps + "</div>" + body;
+  }
+  function dswAct(code, act, val) {
+    var p = P(), d = designOf(p, code), w = dswOf(p, code, d);
+    if (act === "step") w.step = Number(val);
+    else if (act === "tpl") w.tpl = val;
+    else if (act === "all") w.all = val === "1";
+    else if (act === "frame") { w.frame = val; w.step = 2; }
+    else if (act === "tone") { w.tone = val; w.step = 3; }
+    else if (act === "tune") { var ft = val.split(","); w.frame = ft[0]; w.tone = ft[1]; w.style = {}; w.step = 3; }
+    else if (act === "style") {
+      var kv = val.split("="), key = kv[0], v = kv[1];
+      if (v === "" || v == null) delete w.style[key];
+      else w.style[key] = key === "radius" ? Number(v) : v;
+    } else if (act === "reset") w.style = {};
+    else if (act === "open") { w.open = true; }
+    else if (act === "close") { w.open = false; }
+    else if (act === "compose" || act === "confirm") {
+      var ft2 = act === "compose" ? val.split(",") : [w.frame, w.tone], style = act === "compose" ? {} : w.style;
+      var run = function () { w.open = false; return cmd({ op: "design.compose", systemCode: code, frameId: ft2[0], toneId: ft2[1], style: style }).catch(function (e) { w.open = true; render(); throw e; }); };
+      if (d && d.status === "SELECTED") confirmAct("디자인 시스템 바꾸기", code + " 디자인 시스템을 " + ft2[0] + " × " + ft2[1] + " 조합으로 바꿉니다. 조정해 둔 컴포넌트 스타일은 초기화되고, 디자인 개정이 올라가 완료된 화면설계서가 ‘재검토 필요’가 됩니다. 프레임 편집기로 그린 컴포넌트와 추가 컴포넌트는 그대로 둡니다.", "바꾸기", run);
+      else run().catch(function (e) { toast(e.message, "err"); });
+      return;
+    }
+    render();
   }
 
   // ── 디자인 시스템: 섹션별 조정 · 이미지 댓글 ─────
@@ -1974,7 +2079,7 @@
       '<div class="ds-grid3">' + box("간격·그리드", "spacing", '<div class="gridviz">' + gridCols + '</div><p class="hint">' + t.grid.columns + "단 · 최대 폭 " + t.grid.maxWidth + "px · 단 간격 " + t.grid.gutter + "px · 기본 간격 " + t.spacing + "px</p>", "예: 콘텐츠 최대 폭을 1280px로") +
       box("모서리·그림자", "shape", '<div class="radii">' + ["sm", "md", "lg"].map(function (k) { return '<span style="border-radius:' + t.radius[k] + "px;box-shadow:" + (t.shadow === "none" ? "none" : "0 2px 8px rgba(0,0,0,.12)") + '">' + k + " " + t.radius[k] + "px</span>"; }).join("") + '</div><p class="hint">그림자: ' + ({ none: "없음", soft: "약하게", strong: "강하게" }[t.shadow]) + "</p>", "예: 모서리를 조금 더 둥글게") +
       box("컨트롤", "control", '<p class="hint">입력·버튼 높이 ' + t.control.height + "px · 목록 행 높이 " + t.control.rowHeight + "px · 굵은 글자 " + t.font.weightBold + "</p>", "예: 목록 행 높이를 44px로") + "</div>";
-    var rules = '<div class="box twrap"><table><tbody>' + Object.keys(LAYOUT_LABEL).map(function (k) { return "<tr><th>" + LAYOUT_LABEL[k][0] + "</th><td>" + LAYOUT_LABEL[k][1][L[k]] + "</td></tr>"; }).join("") + "</tbody></table></div>" + secTune(code, "layout", "예: 페이지네이션에 목록 개수 선택을 넣고, 버튼을 둥글게");
+    var rules = '<div class="box twrap"><table><tbody>' + Object.keys(LAYOUT_LABEL).filter(function (k) { return L[k] != null; }).map(function (k) { return "<tr><th>" + LAYOUT_LABEL[k][0] + "</th><td>" + (LAYOUT_LABEL[k][1][L[k]] || L[k]) + "</td></tr>"; }).join("") + "</tbody></table></div>" + secTune(code, "layout", "예: 페이지네이션에 목록 개수 선택을 넣고, 버튼을 둥글게");
     var icons = '<div class="box icons">' + d.icons.map(function (n) { return '<div class="icon"><span style="color:' + c.primary + '">' + Wire.icon(n, 22) + '</span><b>' + esc(Wire.iconLabel[n] || n) + '</b><span class="mono">' + esc(n) + "</span></div>"; }).join("") + "</div>";
     var cats = {};
     d.components.forEach(function (x) { (cats[x.category] = cats[x.category] || []).push(x); });
@@ -3099,7 +3204,8 @@
   /** 저장소 기준 디자인 시스템 (미세조정 패치는 항상 이것을 기준으로 한다) */
   function baseDesign(p, code) { return p.base.design.systems.find(function (d) { return d.systemCode === code && d.status === "SELECTED"; }); }
   /** 디자인 패치에서 적용할 수 없는 값을 빼낸다 → { patch, dropped[] } */
-  var LAYOUT_ALLOWED = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
+  var LAYOUT_ALLOWED = {};
+  Object.keys(DATA.design.lib.layoutLabels).forEach(function (k) { LAYOUT_ALLOWED[k] = Object.keys(DATA.design.lib.layoutLabels[k][1]); });
   function sanitizeDsPatch(out, d, scope) {
     var hex = /^#[0-9A-Fa-f]{6}$/, dropped = [], o = JSON.parse(JSON.stringify(out || {}));
     var sc = scope ? scopeInfo(scope) : null, inScope = function (pth) { return !sc || sc.allowed.some(function (a) { return pth === a || pth.indexOf(a + ".") === 0; }); };
@@ -3837,7 +3943,7 @@
       '<ol class="cl-steps"><li><button class="btn-sm" data-gclaude>① 프롬프트 복사 · claude.ai 열기</button><span class="hint">' + (sel ? "v" + sel.n + " 결과와 위 ‘고칠 내용’까지 함께 복사합니다" : "위 ‘추가 지시’와 기능 명세까지 함께 복사합니다") + "</span>" + (sel ? ' <button class="btn-sm" data-gnew title="이전 결과를 넣지 않고 처음부터 만드는 프롬프트로 바꿉니다">처음부터 다시</button>' : "") + "</li>" +
       '<li><span class="hint">claude.ai 새 대화에 붙여 넣고 보냅니다. Opus 등 원하는 모델을 고를 수 있습니다.</span></li>' +
       '<li><label class="gen-label" for="gen-paste">② Claude 답을 그대로 붙여 넣기</label><textarea id="gen-paste" rows="4" placeholder="Claude가 준 답 전체(```json … ``` 포함)를 붙여 넣으세요"></textarea><button class="btn-primary" data-gpaste>붙여 넣은 결과를 새 버전으로</button></li></ol>' +
-      '<p class="hint">Claude Pro·Max 구독 로그인을 다른 서비스에 연결하는 것은 Anthropic 정책상 허용되지 않아, 구독은 이렇게 복사·붙여넣기로 씁니다. 버튼 한 번으로 만들려면 AI 설정에 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
+      '<p class="hint">버튼 한 번으로 만들려면 내 AI 설정에 ‘Claude 구독 토큰’(터미널에서 <code class="mono">claude setup-token</code>으로 발급) 또는 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
   }
   function copyText(text, btn, okLabel) {
     var old = btn.textContent;
@@ -4069,7 +4175,7 @@
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && layer) { if (layer.busy && layer.ctl) layer.ctl.abort(); closeLayer(); return; }
     if (ev.key === "Enter" && ev.target.dataset && ev.target.dataset.stin) { ev.preventDefault(); var bt = ev.target.parentNode.querySelector("[data-strun]"); if (bt) bt.click(); return; }
-    var pv = ev.target.closest && ev.target.closest("[data-preview][role=button], [data-review][role=button], [data-flowedit][role=button]");
+    var pv = ev.target.closest && ev.target.closest("[data-preview][role=button], [data-review][role=button], [data-flowedit][role=button], [data-dsw][role=button]");
     if (pv && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); pv.click(); }
   });
 
@@ -4077,7 +4183,7 @@
   // 로그인한 사람의 프로젝트만 서버에서 받아 오고, 편집은 서버 명령(API)으로 한다. 권한: OWNER 운영자 · EDITOR 작업자 · VIEWER 열람자
   var ME = null, CFG = {}, INVITES = [], MY_AI = null;
   var ROLE_LABEL = { OWNER: "운영자", EDITOR: "작업자", VIEWER: "열람자" };
-  var PROVIDER_LABEL = { anthropic: "Anthropic (Claude API)", "openai-compatible": "OpenAI 호환 API · 로컬 LLM" };
+  var PROVIDER_LABEL = { anthropic: "Anthropic (Claude API)", "claude-code": "Claude 구독 (Claude Code 토큰)", "openai-compatible": "OpenAI 호환 API · 로컬 LLM" };
   var SOURCE_LABEL = { project: "프로젝트 설정", personal: "내 개인 설정", server: "서버 기본 설정" };
   function enc(s) { return encodeURIComponent(s); }
   function api(method, url, body, signal) {
@@ -4546,10 +4652,11 @@
     ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
     gemini: { label: "Gemini", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "AIza… (필수)", hint: "Google AI Studio(aistudio.google.com/apikey)에서 API 키를 발급받아 넣으세요. 무료 사용량이 있는 키도 발급됩니다. 구글 계정 로그인(OAuth)이나 Gemini 구독으로는 API를 호출할 수 없어 키 방식만 지원합니다." },
     "gemini-oauth": { label: "Gemini · Google OAuth", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", oauth: true, key: "", hint: "내 Google Cloud 프로젝트의 OAuth 클라이언트로 Google 계정에 로그인해 Gemini API를 호출합니다. 사용량과 요금은 그 Google Cloud 프로젝트 기준입니다(Gemini 구독 아님). 아래 준비 단계를 따라 하세요." },
-    anthropic: { label: "Claude (API 키)", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API로 바로 생성합니다(추론·스트리밍 사용, 기본 모델 claude-opus-5). 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude Pro·Max 구독 로그인은 Anthropic 정책상 다른 서비스에 연결할 수 없습니다 — 구독으로 만들려면 AI 생성 창의 ‘Claude 구독(claude.ai)으로 만들기’로 복사·붙여넣기 하세요." },
+    anthropic: { label: "Claude (API 키)", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API로 바로 생성합니다(추론·스트리밍 사용, 기본 모델 claude-opus-5). 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude Pro·Max 구독으로 만들려면 ‘Claude 구독 토큰’ 연결(내 AI 설정)을 쓰세요." },
+    "claude-code": { label: "Claude 구독 토큰", provider: "claude-code", baseUrl: "", personal: true, key: "sk-ant-oat01-… (claude setup-token 으로 발급)", models: ["claude-opus-5-5"], hint: "Claude Pro·Max 구독으로 생성합니다. 이 서비스가 도는 서버의 Claude Code CLI(claude -p)를 내 토큰(CLAUDE_CODE_OAUTH_TOKEN)으로 실행해 모델을 부릅니다. 사용량은 내 구독 한도에서 차감됩니다." },
     custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
   };
-  var PRESET_ORDER = ["anthropic", "nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "custom"];
+  var PRESET_ORDER = ["anthropic", "claude-code", "nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "custom"];
   var GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
   function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
   function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
@@ -4589,8 +4696,8 @@
         var isDef = set.active && set.active.conn === c.id && set.active.model === m, key = scope + "|" + c.id + "|" + m;
         return '<li class="' + (isDef ? "on" : "") + '"><span class="mono">' + esc(m) + "</span>" + (isDef ? '<span class="pill DESIGNED">기본</span>' : manage ? actBtn("ai-default", "기본으로", key) : "") + (canTest ? actBtn("ai-test", "확인", key) : "") + "</li>";
       }).join("");
-      return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : "OpenAI 호환") + "</span>" +
-        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">' + (c.oauth ? (c.oauth.connected ? "Google 연결됨" + (c.oauth.email ? " · " + esc(c.oauth.email) : "") : '<b class="warn-t">Google 연결 필요</b>') : "키 " + (c.hasKey ? "저장됨" : "없음")) + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
+      return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : c.provider === "claude-code" ? "Claude 구독" : "OpenAI 호환") + "</span>" +
+        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">' + (c.oauth ? (c.oauth.connected ? "Google 연결됨" + (c.oauth.email ? " · " + esc(c.oauth.email) : "") : '<b class="warn-t">Google 연결 필요</b>') : (c.provider === "claude-code" ? "토큰 " : "키 ") + (c.hasKey ? "저장됨" : "없음")) + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
         '<ul class="models">' + models + "</ul>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-edit", "편집 · 모델 추가", scope + "|" + c.id) + actBtn("ai-conn-del", "삭제", scope + "|" + c.id, "btn-sm danger") + "</div>" : "") + "</article>";
     }).join("") + "</div>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-add", "+ 연결 추가", scope) + "</div>" : "");
   }
@@ -4621,12 +4728,12 @@
 
   // 연결 추가·편집 레이어: 종류 고르기 → 주소·키(선택) → 모델 불러오기 → 여러 개 고르기 → 저장
   function openConn(scope, conn) {
-    var preset = conn ? conn.preset || (conn.provider === "anthropic" ? "anthropic" : "custom") : "nvidia";
+    var preset = conn ? conn.preset || (conn.provider === "anthropic" ? "anthropic" : conn.provider === "claude-code" ? "claude-code" : "custom") : "nvidia";
     var ps = AI_PRESETS[preset];
     openLayer({ kind: "aiconn", ac: {
       scope: scope, id: conn ? conn.id : null, preset: preset, hasKey: conn ? conn.hasKey : false,
       label: conn ? conn.label : ps.label, baseUrl: conn ? conn.baseUrl || "" : ps.baseUrl, apiKey: "", clearKey: false, maxTokens: conn && conn.maxTokens ? String(conn.maxTokens) : "",
-      models: conn ? conn.models.slice() : ps.oauth ? [GEMINI_DEFAULT_MODEL] : [], fetched: [], filter: "", busy: false, err: "",
+      models: conn ? conn.models.slice() : ps.oauth ? [GEMINI_DEFAULT_MODEL] : (ps.models || []).slice(), fetched: [], filter: "", busy: false, err: "",
       oauth: conn && conn.oauth ? conn.oauth : null, cid: conn && conn.oauth && conn.oauth.clientId || "", csec: "", pid: conn && conn.oauth && conn.oauth.projectId || ""
     } });
   }
@@ -4647,7 +4754,7 @@
   /** 모델 불러오기 결과 — 성공/실패와 원인·해결 방법·요청 정보 */
   function acProbeBox() {
     var ac = layer.ac, r = ac.probe;
-    if (ac.busy) return '<div class="ac-probe busy" role="status"><b>불러오는 중…</b><span>최대 20초 · GET ' + esc((ac.baseUrl || "").replace(/\/$/, "") + "/models") + "</span></div>";
+    if (ac.busy) return '<div class="ac-probe busy" role="status"><b>불러오는 중…</b><span>' + (AI_PRESETS[ac.preset].provider === "claude-code" ? "서버의 Claude Code CLI 확인 중 · claude --version" : "최대 20초 · GET " + esc((ac.baseUrl || "").replace(/\/$/, "") + "/models")) + "</span></div>";
     if (!r) return "";
     var meta = [r.url ? "GET " + r.url : "", r.status ? "HTTP " + r.status : "", r.code ? r.code : "", r.ms != null ? (r.ms / 1000).toFixed(1) + "초" : ""].filter(Boolean).join(" · ");
     if (r.ok) return '<div class="ac-probe ok" role="status"><b>✓ 불러오기 성공 — 모델 ' + r.models.length + "개</b>" + (meta ? '<span class="mono">' + esc(meta) + "</span>" : "") + "<span>아래 목록에서 쓸 모델을 체크하세요.</span></div>";
@@ -4667,23 +4774,32 @@
     }).join("") + (rows.length > 300 ? '<p class="hint">' + (rows.length - 300) + "개 더 — 검색어로 좁혀 주세요</p>" : "") : '<p class="hint">' + (ac.fetched.length ? "검색 결과가 없습니다" : "‘모델 불러오기’를 누르면 이 연결에서 쓸 수 있는 모델이 나옵니다") + "</p>";
   }
   function renderConnLayer() {
-    var ac = layer.ac, ps = AI_PRESETS[ac.preset], anth = ps.provider === "anthropic";
-    var presets = '<div class="seg" role="group" aria-label="연결 종류">' + PRESET_ORDER.map(function (k) { return '<button data-acpreset="' + k + '" aria-pressed="' + (ac.preset === k) + '">' + AI_PRESETS[k].label + "</button>"; }).join("") + "</div>";
+    var ac = layer.ac, ps = AI_PRESETS[ac.preset], anth = ps.provider === "anthropic", cc = ps.provider === "claude-code";
+    var presets = '<div class="seg" role="group" aria-label="연결 종류">' + PRESET_ORDER.filter(function (k) { return ac.scope !== "project" || !AI_PRESETS[k].personal || k === ac.preset; }).map(function (k) { return '<button data-acpreset="' + k + '" aria-pressed="' + (ac.preset === k) + '">' + AI_PRESETS[k].label + "</button>"; }).join("") + "</div>";
     var chips = acChips();
     return '<header class="layer-h"><div><span class="eyebrow">' + (ac.scope === "project" ? "프로젝트 AI 연결 · 운영자" : "내 AI 연결") + '</span><h2 id="layer-t">' + (ac.id ? "연결 편집" : "연결 추가") + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
-      '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" +
+      '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" + (cc ? ccBlock(ac) : "") +
       '<div class="ac-grid"><div class="fm-row"><label for="ac-label">연결 이름</label><input id="ac-label" type="text" value="' + esc(ac.label) + '" maxlength="60"></div>' +
-      (ps.oauth ? "" : '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>' +
-      '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>") +
-      '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 8192)</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="8192"></div></div>' +
+      (ps.oauth ? "" : (cc ? "" : '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>') +
+      '<div class="fm-row"><label for="ac-key">' + (cc ? "구독 토큰" : "API 키") + " " + (anth || cc ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 " + (cc ? "토큰" : "키") + " 지우기</label>" : "") + "</div>") +
+      '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 ' + (cc ? "32000" : "8192") + ')</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="' + (cc ? "32000" : "8192") + '"></div></div>' +
       (ps.oauth ? oauthBlock(ac) : "") +
       '<div class="ac-models"><div class="ac-mh"><b>모델</b><span class="hint">여러 개 골라 저장해 두면 드롭다운으로 바로 바꿀 수 있습니다</span><span class="sp"></span><button class="btn-sm" data-acfetch' + (ac.busy ? " disabled" : "") + ">" + (ac.busy ? "불러오는 중…" : "모델 불러오기") + "</button></div>" +
       acProbeBox() + '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
       (ac.fetched.length ? '<input id="ac-filter" type="search" placeholder="모델 검색 (예: llama, qwen, 70b)" value="' + esc(ac.filter) + '" autocomplete="off">' : "") + '<div id="ac-list" class="ac-list">' + acList() + "</div>" +
       '<div class="ac-manual"><input id="ac-manual" type="text" placeholder="목록에 없으면 모델 이름을 직접 입력" autocomplete="off"><button class="btn-sm" data-acadd>추가</button></div></div>' +
       '<p class="gen-err" role="alert"' + (ac.err ? "" : " hidden") + ">" + esc(ac.err) + "</p>" +
-      '<p class="hint">키는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다.' + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
+      '<p class="hint">' + (cc ? "토큰" : "키") + "는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다." + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
       '<footer class="layer-f"><span class="hint" id="ac-count">고른 모델 ' + ac.models.length + '개</span><span class="sp"></span><button class="btn-sm" data-close-layer>취소</button><button class="btn-primary" data-acsave' + (ac.busy ? " disabled" : "") + ">저장</button></footer>";
+  }
+  /** Claude 구독 토큰: 발급 방법 (claude setup-token → CLAUDE_CODE_OAUTH_TOKEN) */
+  function ccBlock(ac) {
+    var cmd = "claude setup-token";
+    return '<div class="ac-oauth"><b>구독 토큰 발급</b><ol class="ac-steps">' +
+      "<li>내 PC 터미널에 Claude Code를 설치합니다 (<code class=\"mono\">npm install -g @anthropic-ai/claude-code</code>).</li>" +
+      '<li>아래 명령을 실행하면 브라우저가 열리고 Claude 계정(Pro·Max)으로 OAuth 로그인합니다.<div class="ac-uri"><code class="mono">' + cmd + '</code><button class="btn-sm" data-accopy="' + cmd + '">복사</button></div></li>' +
+      "<li>터미널에 나온 장기 토큰 <code class=\"mono\">sk-ant-oat01-…</code>을 아래 ‘구독 토큰’ 칸에 붙여 넣고 저장합니다. 서버는 호출할 때마다 이 토큰을 <code class=\"mono\">CLAUDE_CODE_OAUTH_TOKEN</code> 환경변수로 넘겨 Claude Code를 실행합니다.</li></ol>" +
+      '<p class="hint">이 서비스를 실행하는 서버에 Claude Code CLI가 설치돼 있어야 합니다(‘모델 불러오기’로 확인). 구독 토큰은 본인만 쓰는 것이 전제라 <b>내 AI 설정에만</b> 넣을 수 있고, 프로젝트 공용 연결에는 Claude API 키를 쓰세요. 토큰이 유출되면 claude.ai 설정에서 연결을 해제하고 새로 발급하세요.</p></div>';
   }
   /** Google Cloud OAuth: 준비 단계 안내, 클라이언트 정보 입력, 연결 상태 */
   function oauthBlock(ac) {
@@ -4740,6 +4856,7 @@
       if (old.provider !== ps.provider) { ac.hasKey = false; ac.fetched = []; }
       ac.preset = b.dataset.acpreset; ac.err = "";
       if (ps.oauth && !ac.models.length) ac.models = [GEMINI_DEFAULT_MODEL];
+      if (ps.models && old.provider !== ps.provider) ac.models = ps.models.slice();
       renderLayer(); return true;
     }
     if (b.hasAttribute("data-acfetch")) {
@@ -5187,6 +5304,8 @@
     if (sbx) { var sxa = sbx.getAttribute("data-sbx").split("|"); sbExport(sxa[0], sxa[1], sxa[2] || null, sbx, sxa[3] || "pc"); return; }
     var svb = target.closest && target.closest("[data-sbview]");
     if (svb) { var sva = svb.getAttribute("data-sbview").split("|"); state.sbView[sva[0]] = sva[1]; state.sbZoom[sva[0]] = 1; if (layer && layer.kind === "sbfull") renderLayer(); else render(); return; }
+    var dwz = target.closest && target.closest("[data-dsw]");
+    if (dwz && !dwz.disabled) { var dwa = dwz.getAttribute("data-dsw").split("|"); dswAct(dwa[0], dwa[1], dwa.slice(2).join("|")); return; }
     var dst = target.closest && target.closest("[data-dstab]");
     if (dst) { var dsa = dst.getAttribute("data-dstab").split("|"); state.dsTab[dsa[0]] = dsa[1]; render(); return; }
     var dpk = target.closest && target.closest("[data-dspick]");

@@ -482,7 +482,7 @@ export async function createApp(opts: AppOptions): Promise<{ handle: Handler; ac
       project: acc.aiSetPublic(await acc.aiSet("project", p.code!), role === "OWNER"),
       personal: acc.aiSetPublic(await acc.aiSet("personal", c.user!.id), true),
       choice: await acc.choiceOf(p.code!, c.user!.id),
-      serverDefault: acc.hasServerAi(),
+      serverDefault: !!(await acc.serverAiFor(c.user!.id)),
       effective: await acc.aiSource(p.code!, c.user!.id),
       canManage: role === "OWNER",
     };

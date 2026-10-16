@@ -119,17 +119,17 @@ describe("AI 생성 프롬프트", () => {
 describe("생성 결과 반영", () => {
   it("디자인 미세조정: 개정이 오르고 이력이 남고, 이 디자인을 쓰는 화면이 모두 재검토 대상이 된다", async () => {
     const m = await fresh();
-    const r = applyDesignPatch(m, "ADM", { summary: "진한 파랑·둥근 버튼", tokens: { color: { primary: "#123A8C" } }, layout: { button: "rounded" } }, { instruction: "더 진하게" });
+    const r = applyDesignPatch(m, "ADM", { summary: "진한 파랑·알약 버튼", tokens: { color: { primary: "#123A8C" } }, layout: { button: "pill" } }, { instruction: "더 진하게" });
     const d = m.design.systems.find((x) => x.systemCode === "ADM")!;
     expect(d.revision).toBe(2);
     expect(d.tokens!.color.primary).toBe("#123A8C");
-    expect(d.tokens!.color.accent).toBe("#0F8A6C"); // 안 바꾼 값은 유지
-    expect(d.history.at(-1)).toMatchObject({ rev: 2, note: "진한 파랑·둥근 버튼", instruction: "더 진하게" });
-    expect(r.changes).toEqual(["tokens.color.primary: #2257A8 → #123A8C", "layout.button: square → rounded"]);
+    expect(d.tokens!.color.accent).toBe("#E5484D"); // 안 바꾼 값은 유지
+    expect(d.history.at(-1)).toMatchObject({ rev: 2, note: "진한 파랑·알약 버튼", instruction: "더 진하게" });
+    expect(r.changes).toEqual(["tokens.color.primary: #3461E0 → #123A8C", "layout.button: rounded → pill"]);
     expect(r.affectedScreens.sort()).toEqual(["ADM_INF_HIS_010", "ADM_INF_REV_010"]);
     expect(screensNeedingReview(m).map((x) => x.screenId).sort()).toEqual(["ADM_INF_HIS_010", "ADM_INF_REV_010"]);
     expect(() => applyDesignPatch(m, "ADM", { tokens: { color: { primary: "blue" } } })).toThrow();
-    expect(() => applyDesignPatch(m, "ADM", { layout: { button: "rounded" } })).toThrow("바뀐 내용이 없습니다");
+    expect(() => applyDesignPatch(m, "ADM", { layout: { button: "pill" } })).toThrow("바뀐 내용이 없습니다");
   });
 
   it("화면설계서 생성 결과는 디자인 시스템에 있는 컴포넌트만 쓰고(없는 것은 글로만), 현재 디자인 개정을 기록한다", async () => {

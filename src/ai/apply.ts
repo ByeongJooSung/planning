@@ -9,6 +9,7 @@
  *            이 디자인 시스템을 쓰는 화면설계서·프로토타입은 컴포넌트 단위로 한꺼번에 다시 그려진다.
  */
 import { z } from "zod";
+import { LAYOUT_OPTIONS } from "../design/library.js";
 import {
   ComponentSpec,
   DesignComponent,
@@ -498,7 +499,7 @@ function readableOn(bg: string): string {
   return contrast("#FFFFFF", bg) >= contrast("#1E2124", bg) ? "#FFFFFF" : "#1E2124";
 }
 
-const FONT_OK = /Noto Sans KR|Gothic A1|IBM Plex Sans KR|Nanum Gothic|Malgun Gothic|sans-serif/;
+const FONT_OK = /Pretendard|Noto Sans KR|Gothic A1|IBM Plex Sans KR|Nanum|Malgun Gothic|sans-serif/;
 
 /** 컨셉 하나를 검증·보정한다. 빠진 값은 기준 컨셉에서 채우고, 접근성 대비가 모자란 글자색은 고친다 */
 function cleanConcept(raw: unknown, base: DesignConcept, id: string, notes: string[]): DesignConcept | null {
@@ -515,8 +516,9 @@ function cleanConcept(raw: unknown, base: DesignConcept, id: string, notes: stri
   if (typeof t.spacing !== "number" || t.spacing <= 0 || t.spacing > 64) delete t.spacing;
   const tokens = DesignTokens.parse(deepMerge(base.tokens, t));
   const rawLayout = isObj(raw.layout) ? raw.layout : {};
+  // AI 컨셉은 기준 조합의 프레임과 다를 수 있으므로 프레임 ID는 남기지 않는다
   const layout = LayoutRules.parse(
-    Object.fromEntries(Object.entries(base.layout).map(([k, def]) => [k, (LAYOUT_OPTIONS[k] ?? []).includes(String(rawLayout[k])) ? rawLayout[k] : def])),
+    Object.fromEntries(Object.keys(LAYOUT_OPTIONS).map((k) => [k, (LAYOUT_OPTIONS[k] ?? []).includes(String(rawLayout[k])) ? rawLayout[k] : (base.layout as Record<string, unknown>)[k]])),
   );
   // 접근성: 글자·배경 대비
   const c = tokens.color;
@@ -535,7 +537,6 @@ function cleanConcept(raw: unknown, base: DesignConcept, id: string, notes: stri
   const str1 = (v: unknown, d: string) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : d);
   return DesignConcept.parse({ id, name: str1(raw.name, `${base.name} 변형`).slice(0, 30), summary: str1(raw.summary, base.summary), fit: str1(raw.fit, base.fit), tokens, layout });
 }
-const LAYOUT_OPTIONS: Record<string, string[]> = { nav: ["top", "top-mega", "side"], logo: ["left", "center"], search: ["header", "hero", "panel"], list: ["table", "card"], pagination: ["numbered", "numbered-size", "more"], button: ["square", "rounded", "pill"], density: ["comfortable", "compact"], footer: ["full", "simple", "none"] };
 
 /** AI가 제안한 컨셉을 반영한다. 선택 전에는 제안 전체를 대체(A·B·C), 이미 선택했으면 후보로만 추가(현재 디자인 유지) */
 export function applyConcepts(m: Model, systemCode: string, output: unknown): ApplyResult {

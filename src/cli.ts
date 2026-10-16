@@ -9,7 +9,8 @@ import { buildGenPrompts, fillDsPrompt, REFINE_INSTRUCTION } from "./ai/generate
 import { fillSpecPrompt, specDraft } from "./ai/spec.js";
 import { scopeOf } from "./design/catalog.js";
 import { buildPrompts } from "./ai/prompts.js";
-import { addDesignComponent, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
+import { addDesignComponent, composeDesign, getSystemDesign, proposeDesign, selectDesign } from "./design/ops.js";
+import { FRAMES, TONES, STYLE_OPTIONS } from "./design/library.js";
 import { search } from "./knowledge/search.js";
 import { addKnowledgeFile, loadChunks, removeKnowledgeFile } from "./knowledge/store.js";
 import { suggestTasks } from "./project/suggest.js";
@@ -477,11 +478,33 @@ gen.command("review").description("디자인 변경 뒤 다시 검토할 화면"
 const design = program.command("design").description("시스템별 디자인 시스템");
 design
   .command("propose <system>")
-  .description("컨셉 3종 제안")
+  .description("시스템 성격에 맞는 추천 조합(프레임 × 톤) 제안")
   .action(async (code: string) => {
     const d = await mutate((m) => proposeDesign(m, code));
-    for (const c of d.proposals) console.log(`${c.id}. ${c.name} — ${c.summary}\n   어울리는 경우: ${c.fit}`);
-    console.log(`\n선택: planning design select ${code} <A|B|C>`);
+    for (const c of d.proposals) console.log(`${c.id}. ${c.name} (${c.frameId} × ${c.toneId})\n   어울리는 경우: ${c.fit}`);
+    console.log(`\n선택: planning design select ${code} <A|B|…>  · 직접 조합: planning design compose ${code} <F01~> <T01~>`);
+  });
+design
+  .command("frames")
+  .description("프레임(화면 골격) 목록")
+  .action(() => {
+    for (const f of FRAMES) console.log(`${f.id}  ${f.name}  [${f.profiles.join(", ")}]${f.ref ? `  참고: ${f.ref}` : ""}\n     ${f.summary}`);
+  });
+design
+  .command("tones")
+  .description("톤앤매너 목록")
+  .action(() => {
+    for (const t of TONES) console.log(`${t.id}  ${t.name}  ${t.color.primary}  [${t.keywords.join(" · ")}]\n     ${t.summary}`);
+  });
+design
+  .command("compose <system> <frame> <tone>")
+  .description("프레임 × 톤앤매너 × 세부 스타일로 디자인 시스템 만들기")
+  .option("--style <pairs...>", `세부 스타일 key=value (${STYLE_OPTIONS.map((o) => o.key).join(", ")})`)
+  .action(async (code: string, frame: string, tone: string, o: { style?: string[] }) => {
+    const style = Object.fromEntries((o.style ?? []).map((p) => p.split("=") as [string, string]).map(([k, v]) => [k, k === "radius" ? Number(v) : v]));
+    const d = await mutate((m) => composeDesign(m, code, frame, tone, style));
+    const c = d.proposals.find((p) => p.id === d.selectedId)!;
+    console.log(`${code} 디자인 시스템: ${c.id} ${c.name} · 컴포넌트 ${d.components.length}개`);
   });
 design
   .command("select <system> <concept>")
@@ -535,24 +558,26 @@ program
 
 program
   .command("serve")
-  .description("웹 서비스 실행 — 회원가입·로그인, 프로젝트 멤버 초대, 편집, AI 생성 (환경변수 PORT, HOST, PLANNING_SECRET, ANTHROPIC_API_KEY)")
+  .description("웹 서비스 실행 — 회원가입·로그인, 프로젝트 멤버 초대, 편집, AI 생성 (환경변수 PORT, HOST, PLANNING_SECRET, ANTHROPIC_API_KEY 또는 CLAUDE_CODE_OAUTH_TOKEN, PLANNING_AI_MODEL)")
   .option("--port <n>", "포트", process.env.PORT ?? "8080")
   .option("--host <h>", "주소", process.env.HOST ?? "0.0.0.0")
   .option("--closed-signup", "초대받은 이메일만 가입 (첫 가입자는 예외)")
   .action(async (o) => {
     const { root } = program.opts<{ root: string }>();
     const { createLocalApp } = await import("./server/app.js");
-    const key = process.env.ANTHROPIC_API_KEY;
+    const { serverAiFromEnv } = await import("./server/ai.js");
+    const serverAi = serverAiFromEnv();
     const app = await createLocalApp({
       root,
       secret: process.env.PLANNING_SECRET,
       openSignup: !(o.closedSignup || process.env.PLANNING_SIGNUP === "closed"),
       admins: (process.env.PLANNING_ADMINS ?? "").split(",").map((x) => x.trim()).filter(Boolean),
       secureCookie: process.env.COOKIE_SECURE === "1" ? true : undefined,
-      serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
+      serverAi,
     });
     app.server.listen(Number(o.port), o.host, () => {
       console.log(`Planning Studio 서비스: http://${o.host === "0.0.0.0" ? "localhost" : o.host}:${o.port}  (데이터: ${path.resolve(root)})`);
+      if (serverAi?.provider === "claude-code") console.log(`서버 기본 AI: Claude 구독 토큰(CLAUDE_CODE_OAUTH_TOKEN) · ${serverAi.model} — 토큰 주인 본인 사용 전제라 서비스 관리자 계정에만 적용됩니다. 다른 멤버는 내 AI 설정에 각자 토큰이나 API 키를 넣으세요.`);
       if (!process.env.PLANNING_SECRET) console.log("PLANNING_SECRET 이 없어 .service/secret.key 로 AI 키를 암호화합니다. 운영 환경에서는 환경변수로 지정하세요.");
     });
   });

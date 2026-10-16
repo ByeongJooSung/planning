@@ -3,8 +3,9 @@
 요구사항에서 출발해 서비스 기획 산출물(기획안 → 정보구조도 → 다이어그램 → 스토리보드 → 프로토타입)을 프로젝트 단위로 만들고 관리하는 도구입니다.
 
 ## 문서
-- [PRD (제품 요구사항 정의서)](docs/PRD.md)
-- [작업 계획서](docs/WORK_PLAN.md)
+- [PRD v1.2 (제품 요구사항 정의서)](docs/PRD.md) — 4단계 워크플로(RFP 분석 → 태스크 정의 → 디자인 시스템 → 기획 산출물), 앞 단계 생략, 프로젝트 유형 프로파일, 조직 공통 자산, 릴리스 계획
+- [PRD v0.7 (이전 판)](docs/PRD-v0.7.md) — 현행 도구의 상세 기능 명세. v1.0과 ADR·작업 계획서가 참조
+- [작업 계획서](docs/WORK_PLAN.md) — PRD v0.7 기준
 - [ADR-001 P0 기반 구조 결정](docs/decisions/ADR-001-p0-foundation.md)
 - [ADR-002 참조자료·Task 자동 생성·디자인 시스템·뷰어](docs/decisions/ADR-002-knowledge-design-viewer.md)
 - [ADR-003 웹 서비스 — 계정·프로젝트 멤버·AI 호출 설정](docs/decisions/ADR-003-web-service.md)
@@ -15,7 +16,7 @@
 - 요구사항 추적표(RTM): 요구사항별 / 요구사항 × 시스템 / 화면 역추적, 단계별 누락·근거 없는 산출물 검사
 - 참조자료 지식베이스: 파일 올리기·색인·검색 (txt, md, csv, json, html, eml, docx, pdf)
 - 요구사항 등록 시 시스템별 Task 자동 생성(규칙 기반) 또는 수동 생성
-- 시스템별 디자인 시스템: 컨셉 3종 제안 → 선택 → 생성 → 컴포넌트 추가
+- 시스템별 디자인 시스템: 추천 조합 6종 또는 ① 프레임(화면 골격 10종: 상단 메뉴·메가 메뉴·사이드·헤더+사이드·레일 등) → ② 톤앤매너(20종: 정부 블루·네이비 업무 등) → ③ 세부 스타일(표 머리·통계 카드·탭·검색 영역·버튼·밀도·글꼴 등)로 고르고 대시보드·목록·상세·등록·메인·로그인 미리보기로 확인 → 생성 → 컴포넌트 추가 · CLI `design frames` / `design tones` / `design compose <시스템> <프레임> <톤> --style 키=값`
 - 뷰어: 프로젝트 목록 → 프로젝트 상세 → Task 상세(플로우·화면설계서·프로토타입), 통합 산출물
 - 설계 화면 실제 규격(1920×1080) 고정 배치 후 축소 표시 — 줄바꿈 없음
 - AI 요청: 화면설계서·정보구조도·프로토타입·디자인 시스템별 Figma 그리기 / Claude 요청 프롬프트(참조 URL·참조자료 근거 포함)
@@ -58,7 +59,7 @@
 - 화면설계서 캔버스: 확대·축소, 설명 번호를 끌어 옮기면 위치 저장(연결선 표시), 번호를 누르면 설명 행 강조
 - 디자인 시스템 조정: 섹션별(색상·글꼴·간격·모서리·컨트롤·레이아웃·템플릿·컴포넌트) 프롬프트, 이미지 클릭 핀·번호 라벨 댓글로 수정 요청, 전역 프롬프트는 새 컴포넌트용. 누적 적용·되돌리기
 
-- 웹 서비스: 회원가입·로그인, 프로젝트를 만든 사람이 운영자 — 공동 작업자 초대(작업자·열람자·운영자), 화면에서 바로 편집, 프로젝트별·개인별 AI 호출 설정(Claude API 또는 로컬 LLM·OpenAI 호환 API, 키는 암호화·비공개)
+- 웹 서비스: 회원가입·로그인, 프로젝트를 만든 사람이 운영자 — 공동 작업자 초대(작업자·열람자·운영자), 화면에서 바로 편집, 프로젝트별·개인별 AI 호출 설정(Claude API, Claude 구독 토큰(Claude Code), 로컬 LLM·OpenAI 호환 API, 키는 암호화·비공개)
 
 ## 웹 서비스로 실행
 ```bash
@@ -76,16 +77,26 @@ PLANNING_SECRET=<긴 임의 문자열> node dist/cli.js --root /srv/planning ser
 | `PLANNING_SIGNUP=closed` | 초대받은 이메일만 가입 |
 | `PLANNING_ADMINS` | 서비스 관리자 이메일(쉼표 구분). 첫 가입자는 항상 관리자 — 계정 관리 화면에서 회원 목록·삭제 |
 | `ANTHROPIC_API_KEY`, `PLANNING_AI_MODEL` | 선택: 서버 기본 AI (프로젝트·개인 설정이 없을 때, 기본 모델 claude-opus-5) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | 선택: `ANTHROPIC_API_KEY`가 없을 때 Claude 구독 토큰(`claude setup-token`으로 발급)으로 서버 기본 AI — 서버의 Claude Code CLI로 호출, 기본 모델 claude-opus-5-5. 토큰 주인 본인 사용이 전제라 **서비스 관리자 계정에만** 적용 |
+| `PLANNING_CLAUDE_BIN` | 선택: Claude Code CLI 실행 파일 경로 (기본 PATH의 `claude`) |
 | `PUBLIC_URL` | 초대 링크 주소 (프록시 뒤에서) |
 | `COOKIE_SECURE=1` | HTTPS 뒤에서 Secure 쿠키 |
 
 **AI 연결** — 프로젝트 → 설정 → AI 설정(프로젝트 공통, 운영자가 관리) 또는 내 계정(개인). 연결을 여러 개 저장하고 드롭다운으로 바로 바꿉니다.
-1. **+ 연결 추가** → 종류 선택: **NVIDIA**(`https://integrate.api.nvidia.com/v1`, 키 `nvapi-…`), **LM Studio**(`http://<주소>:1234/v1`, 키 없음), Ollama, Anthropic, 직접 입력(OpenAI 호환)
+1. **+ 연결 추가** → 종류 선택: **Claude 구독 토큰**(내 계정에서만, 아래), **NVIDIA**(`https://integrate.api.nvidia.com/v1`, 키 `nvapi-…`), **LM Studio**(`http://<주소>:1234/v1`, 키 없음), Ollama, Anthropic, 직접 입력(OpenAI 호환)
 2. API 키는 선택(Anthropic만 필수) → **모델 불러오기** → 쓸 모델을 여러 개 체크(목록에 없으면 직접 입력) → 저장
 3. 운영자는 모델 옆 **기본으로**로 프로젝트 기본을 정하고, 멤버는 **나만 바꾸기** 드롭다운이나 AI 생성 창의 드롭다운으로 자기만 바꿉니다.
 - 키는 암호화 저장·화면에 다시 안 보임. 프로젝트 연결의 주소·키는 멤버에게 안 보이고 이름·모델만 보입니다.
 - 인터넷 배포(Vercel)에서는 `localhost`에 닿지 않습니다. LM Studio·Ollama는 외부에서 접속 가능한 주소(포트 포워딩, cloudflared·ngrok 터널)를 넣거나, 같은 네트워크에서 `planning serve`로 띄우세요.
 - 최대 출력 토큰은 연결마다 정할 수 있고(기본 8192), 모델이 그 값을 거부하면 빼고 다시 보냅니다.
+
+**Claude 구독 토큰(Claude Code)으로 생성** — Claude Pro·Max 구독으로 AI 생성을 돌립니다.
+1. 내 PC 터미널: `npm install -g @anthropic-ai/claude-code` → `claude setup-token` → 브라우저 OAuth 로그인 → 장기 토큰 `sk-ant-oat01-…` 발급
+2. 내 계정 → **+ 연결 추가** → **Claude 구독 토큰** → 토큰 붙여 넣기 → **모델 불러오기**(서버의 Claude Code CLI 설치 확인) → 저장
+3. 생성할 때마다 서버가 `claude -p --output-format json --tools ""`를 빈 작업 폴더·전용 HOME에서 실행하고, 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수로만 넘깁니다(서버의 `ANTHROPIC_API_KEY` 등은 넘기지 않음). 사용량은 내 구독 한도에서 차감됩니다.
+- 이 서비스를 실행하는 서버에 Claude Code CLI가 있어야 합니다(`planning serve`). Vercel 같은 서버리스 배포에서는 쓸 수 없습니다.
+- 구독 토큰은 본인만 쓰는 것이 전제라 **개인 연결에만** 넣을 수 있습니다. 여러 멤버가 함께 쓰는 프로젝트 연결에는 Claude API 키를 쓰세요.
+- 토큰이 만료·폐기되면 생성 때 “토큰이 올바르지 않거나 만료” 안내가 나옵니다 → `claude setup-token`으로 다시 발급해 연결을 편집하세요.
 
 **화면설계서 엑셀 양식(기관 제출용)** — 화면설계서 화면의 **엑셀 양식** 버튼, 대시보드 산출물 내려받기의 **xlsx**, 패키지(zip)에 포함. 시트는 화면 목록(시스템·ID·메뉴 위치·유형·템플릿·항목 수·작성/작업 상태·연결 Task·요구사항 ID·요구 반영 n/m), 시스템별 Description 상세(No·항목·유형·UI 컴포넌트·기획/고객 설명·옵션·유효성·안내 메시지·이동 화면), 기능 요구사항 반영 현황(요구 줄별 반영 여부·항목 번호·판정 근거)입니다.
 

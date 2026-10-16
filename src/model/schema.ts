@@ -449,7 +449,18 @@ export const DesignTokens = z.object({
     warning: Hex,
     danger: Hex,
     info: Hex,
+    /** 메뉴에서 선택된 항목 배경·글자 (없으면 primary·onPrimary) */
+    navActive: Hex.optional(),
+    onNavActive: Hex.optional(),
+    /** 상단 바(헤더) 배경·글자 — 좌측 메뉴 + 상단 바 프레임에서 쓴다 (없으면 surface·text) */
+    header: Hex.optional(),
+    onHeader: Hex.optional(),
+    /** 표 머리 배경·글자 (없으면 표 머리 스타일에 따라 계산) */
+    tableHead: Hex.optional(),
+    onTableHead: Hex.optional(),
   }),
+  /** 통계 카드·차트 계열 색 (그라데이션 카드는 이 순서로 칠한다) */
+  series: z.array(Hex).max(8).optional(),
   font: z.object({
     family: z.string(),
     /** 크기(px): display h1 h2 h3 body small caption */
@@ -471,9 +482,17 @@ export const DesignTokens = z.object({
   shadow: z.enum(["none", "soft", "strong"]),
 });
 
+/**
+ * 화면 골격(셸)
+ *  top 상단 메뉴 · top-mega 상단 메가메뉴 · side 좌측 메뉴(로고·사용자 정보가 메뉴 안) ·
+ *  side-header 좌측 메뉴 + 상단 바 · header-side 전체 폭 헤더 + 그 아래 좌측 메뉴 · rail 아이콘 레일 + 상단 바
+ */
+export const NAV_SHELLS = ["top", "top-mega", "side", "side-header", "header-side", "rail"] as const;
 export const LayoutRules = z.object({
-  /** GNB: 상단 / 상단 메가메뉴 / 좌측 사이드 */
-  nav: z.enum(["top", "top-mega", "side"]),
+  /** 프레임 ID (디자인 라이브러리 F01~) — 프레임 × 톤으로 만든 디자인일 때 */
+  frame: z.string().optional(),
+  /** GNB: 상단 / 상단 메가메뉴 / 좌측 메뉴 계열 (NAV_SHELLS) */
+  nav: z.enum(NAV_SHELLS),
   logo: z.enum(["left", "center"]),
   /** 검색 영역: 헤더 안 / 첫 화면 큰 검색 / 목록 위 조건 패널 */
   search: z.enum(["header", "hero", "panel"]),
@@ -482,6 +501,18 @@ export const LayoutRules = z.object({
   button: z.enum(["square", "rounded", "pill"]),
   density: z.enum(["comfortable", "compact"]),
   footer: z.enum(["full", "simple", "none"]),
+  /** 표 머리: 진한 면(흰 글자) / 옅은 면 / 선만 */
+  tableHead: z.enum(["dark", "tint", "line"]).optional(),
+  /** 요약 수치 카드: 그라데이션 / 위 색띠 / 흰 카드 / 아이콘 */
+  stat: z.enum(["gradient", "topline", "plain", "icon"]).optional(),
+  /** 탭: 밑줄 / 채움 / 상자 */
+  tabs: z.enum(["line", "fill", "box"]).optional(),
+  /** 검색 조건 영역: 조건 표(항목명 칸) / 카드 / 한 줄 */
+  searchStyle: z.enum(["table", "card", "inline"]).optional(),
+  /** 상단 메뉴형의 헤더 색: 흰 바탕(light) / 톤의 메뉴 색(nav) */
+  headerFill: z.enum(["light", "nav"]).optional(),
+  /** 좌측 메뉴 선택 표시: 면 채움 / 왼쪽 막대 */
+  navMark: z.enum(["fill", "bar"]).optional(),
 });
 
 export const DesignConcept = z.object({
@@ -492,6 +523,9 @@ export const DesignConcept = z.object({
   fit: z.string(),
   tokens: DesignTokens,
   layout: LayoutRules,
+  /** 프레임 × 톤으로 만든 컨셉이면 그 출처 */
+  frameId: z.string().optional(),
+  toneId: z.string().optional(),
 });
 
 // ── 프레임(피그마식) 컴포넌트 ──────────────────────────────────────────
