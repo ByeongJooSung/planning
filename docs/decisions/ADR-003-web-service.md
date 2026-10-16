@@ -42,8 +42,9 @@
 - 호출 방법 두 가지:
   - `anthropic`: Claude API(`@anthropic-ai/sdk`, 기본 모델 `claude-opus-5`, adaptive thinking, 스트리밍으로 받아 `finalMessage()`).
   - `openai-compatible`: `/chat/completions`를 여는 로컬 LLM(Ollama·LM Studio·vLLM) 또는 외부 호환 API. 주소·모델·키(선택)를 넣는다.
+  - `claude-code` (v3): Claude 구독 토큰(`claude setup-token`으로 발급한 `sk-ant-oat01-…`). 구독 토큰은 Claude Code 전용 자격이라 Messages API를 직접 부르지 않고, 서버의 Claude Code CLI를 `claude -p --output-format json --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence`로 실행하며 토큰은 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수로만 넘긴다(빈 작업 폴더·전용 HOME, 서버의 다른 자격·설정·MCP·CLAUDE.md 차단). 토큰 주인 본인 사용이 전제라 **개인 연결에만** 저장하고, 환경변수 `CLAUDE_CODE_OAUTH_TOKEN` 서버 기본은 서비스 관리자에게만 적용한다. 서버리스(Vercel)에서는 쓰지 않는다.
 - **연결 여러 개**(v2): 프로젝트·개인마다 연결(주소·키·저장한 모델 목록) 여러 개와 기본 연결·모델을 둔다. 연결을 저장할 때 `GET {주소}/models`(Anthropic은 Models API)로 목록을 불러와 고른다. 멤버는 프로젝트마다 쓸 연결·모델을 골라 바꿀 수 있다(`aiChoice`, 자기에게만 적용). 예전 단일 설정은 연결 하나로 읽는다.
-- 설정 위치와 우선순위 (v2: 멤버가 고른 연결·모델이 가장 먼저): (멤버가 “내 개인 설정 사용”을 켠 프로젝트) 개인 → **프로젝트 설정(운영자가 등록, 멤버 공통 기본값)** → 개인 → 서버 기본(`ANTHROPIC_API_KEY`).
+- 설정 위치와 우선순위 (v2: 멤버가 고른 연결·모델이 가장 먼저): (멤버가 “내 개인 설정 사용”을 켠 프로젝트) 개인 → **프로젝트 설정(운영자가 등록, 멤버 공통 기본값)** → 개인 → 서버 기본(`ANTHROPIC_API_KEY`, 없으면 `CLAUDE_CODE_OAUTH_TOKEN` — 관리자 전용).
 - 키는 AES-256-GCM으로 암호화해 저장한다. 암호화 키는 `PLANNING_SECRET`(없으면 `.service/secret.key`, 0600). **API 응답에는 키가 절대 들어가지 않고**(“저장됨” 여부만), 프로젝트 설정의 주소도 운영자에게만 보인다. 멤버는 호출 방법과 모델 이름만 본다. 키를 비우고 저장하면 기존 키를 유지한다.
 - AI 생성은 작업자 이상만 부를 수 있다(비용). 결과 JSON은 코드 블록·설명·`<think>` 블록이 섞여도 첫 JSON을 꺼내 읽고, 형식이 틀리면 화면의 검사 결과로 보여 준다.
 

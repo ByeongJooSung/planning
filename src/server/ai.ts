@@ -1,16 +1,29 @@
 /**
- * AI 호출 — 프로젝트·개인·서버 기본 설정에 따라 Anthropic API 또는 OpenAI 호환 API(로컬 LLM 포함)를 부른다.
+ * AI 호출 — 프로젝트·개인·서버 기본 설정에 따라 Anthropic API, Claude 구독 토큰(Claude Code CLI) 또는 OpenAI 호환 API(로컬 LLM 포함)를 부른다.
  * 결과는 생성 프롬프트가 요구한 JSON으로 읽어 돌려준다.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { AiProbe, AiResolved } from "./accounts.js";
 import { HttpError, type OAuthCreds } from "./accounts.js";
 import { createHash } from "node:crypto";
+import { callClaudeCode, CLAUDE_CODE_DEFAULT_MODEL, CLAUDE_CODE_MODELS, claudeVersion } from "./claude-code.js";
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type AiInputMessages = string | Turn[];
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5";
+
+/**
+ * 서버 기본 AI (환경변수) — ANTHROPIC_API_KEY 가 있으면 API 키, 없고 CLAUDE_CODE_OAUTH_TOKEN 이 있으면 구독 토큰(Claude Code CLI).
+ * 구독 토큰은 토큰 주인 본인 사용이 전제라 서비스 관리자에게만 서버 기본으로 쓴다. 모델은 PLANNING_AI_MODEL.
+ */
+export function serverAiFromEnv(env: NodeJS.ProcessEnv = process.env, o: { claudeCode?: boolean } = {}) {
+  const model = env.PLANNING_AI_MODEL?.trim();
+  if (env.ANTHROPIC_API_KEY) return { provider: "anthropic" as const, model: model || DEFAULT_ANTHROPIC_MODEL, apiKey: env.ANTHROPIC_API_KEY };
+  const token = env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+  if (token && o.claudeCode !== false) return { provider: "claude-code" as const, model: model || CLAUDE_CODE_DEFAULT_MODEL, apiKey: token, adminsOnly: true };
+  return null;
+}
 const SYSTEM = [
   "당신은 공공·대국민 서비스 구축 사업에서 10년 넘게 일한 수석 서비스 기획자입니다. 정보구조도, 화면설계서(스토리보드), 프로세스 플로우, 디자인 시스템, 테스트 케이스를 실제 납품 수준으로 만듭니다.",
   "- 근거: 요구사항 원문·기능 명세·참조자료에 있는 정책·수치·문구를 우선 쓰고, 없는 것은 지어내지 말고 ‘확인 필요’로 표시합니다.",
@@ -118,7 +131,11 @@ const REPAIR_PROMPT =
 export async function callAi(cfg: AiResolved, input: AiInputMessages, opts: { signal?: AbortSignal; json?: boolean; repair?: boolean } = {}): Promise<AiResult> {
   const turns = toTurns(input);
   const call = (t: Turn[]) =>
-    cfg.provider === "anthropic" ? callAnthropic(cfg, t, opts.signal) : cfg.oauth || cfg.needsOauth ? callGeminiNative(cfg, t, opts.signal) : callOpenAiCompatible(cfg, t, opts.signal);
+    cfg.provider === "anthropic"
+      ? callAnthropic(cfg, t, opts.signal)
+      : cfg.provider === "claude-code"
+        ? callClaudeCode({ token: cfg.apiKey ?? "", model: cfg.model, system: SYSTEM, turns: t, maxTokens: cfg.maxTokens, signal: opts.signal })
+        : cfg.oauth || cfg.needsOauth ? callGeminiNative(cfg, t, opts.signal) : callOpenAiCompatible(cfg, t, opts.signal);
   const text = await call(turns);
   if (opts.json === false) return { text, output: null, model: cfg.model };
   const first = extractJson(text);
@@ -231,6 +248,13 @@ export function describeNetError(e: unknown, host: string): { code?: string; err
 export async function probeModels(p: AiProbe, env: NodeJS.ProcessEnv = process.env): Promise<ModelProbe> {
   const t0 = Date.now();
   const done = (r: Omit<ModelProbe, "ms">): ModelProbe => ({ ...r, ms: Date.now() - t0 });
+  if (p.provider === "claude-code") {
+    // 구독 토큰은 모델 목록 API가 없다 — CLI 설치만 확인하고 고를 수 있는 모델을 보여 준다
+    const url = "claude --version";
+    const v = await claudeVersion();
+    if (!v.ok) return done({ ok: false, models: [], url, error: v.error, hint: "이 서비스를 실행하는 서버에 Claude Code CLI가 있어야 합니다: ‘npm install -g @anthropic-ai/claude-code’ (또는 PLANNING_CLAUDE_BIN 에 경로 지정). Vercel 같은 서버리스 배포에서는 쓸 수 없습니다. 목록 없이도 모델 이름을 직접 입력해 저장할 수 있습니다." });
+    return done({ ok: true, models: CLAUDE_CODE_MODELS, url: `${url} → ${v.version}` });
+  }
   if (p.provider === "anthropic") {
     const url = `${(p.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "")}/v1/models`;
     if (!p.apiKey) return done({ ok: false, models: [], url, error: "Anthropic은 API 키가 있어야 모델 목록을 불러올 수 있습니다", hint: "console.anthropic.com 에서 발급한 sk-ant-… 키를 넣으세요." });

@@ -3943,7 +3943,7 @@
       '<ol class="cl-steps"><li><button class="btn-sm" data-gclaude>① 프롬프트 복사 · claude.ai 열기</button><span class="hint">' + (sel ? "v" + sel.n + " 결과와 위 ‘고칠 내용’까지 함께 복사합니다" : "위 ‘추가 지시’와 기능 명세까지 함께 복사합니다") + "</span>" + (sel ? ' <button class="btn-sm" data-gnew title="이전 결과를 넣지 않고 처음부터 만드는 프롬프트로 바꿉니다">처음부터 다시</button>' : "") + "</li>" +
       '<li><span class="hint">claude.ai 새 대화에 붙여 넣고 보냅니다. Opus 등 원하는 모델을 고를 수 있습니다.</span></li>' +
       '<li><label class="gen-label" for="gen-paste">② Claude 답을 그대로 붙여 넣기</label><textarea id="gen-paste" rows="4" placeholder="Claude가 준 답 전체(```json … ``` 포함)를 붙여 넣으세요"></textarea><button class="btn-primary" data-gpaste>붙여 넣은 결과를 새 버전으로</button></li></ol>' +
-      '<p class="hint">Claude Pro·Max 구독 로그인을 다른 서비스에 연결하는 것은 Anthropic 정책상 허용되지 않아, 구독은 이렇게 복사·붙여넣기로 씁니다. 버튼 한 번으로 만들려면 AI 설정에 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
+      '<p class="hint">버튼 한 번으로 만들려면 내 AI 설정에 ‘Claude 구독 토큰’(터미널에서 <code class="mono">claude setup-token</code>으로 발급) 또는 Claude API 키(console.anthropic.com)를 등록하세요.</p></details>';
   }
   function copyText(text, btn, okLabel) {
     var old = btn.textContent;
@@ -4183,7 +4183,7 @@
   // 로그인한 사람의 프로젝트만 서버에서 받아 오고, 편집은 서버 명령(API)으로 한다. 권한: OWNER 운영자 · EDITOR 작업자 · VIEWER 열람자
   var ME = null, CFG = {}, INVITES = [], MY_AI = null;
   var ROLE_LABEL = { OWNER: "운영자", EDITOR: "작업자", VIEWER: "열람자" };
-  var PROVIDER_LABEL = { anthropic: "Anthropic (Claude API)", "openai-compatible": "OpenAI 호환 API · 로컬 LLM" };
+  var PROVIDER_LABEL = { anthropic: "Anthropic (Claude API)", "claude-code": "Claude 구독 (Claude Code 토큰)", "openai-compatible": "OpenAI 호환 API · 로컬 LLM" };
   var SOURCE_LABEL = { project: "프로젝트 설정", personal: "내 개인 설정", server: "서버 기본 설정" };
   function enc(s) { return encodeURIComponent(s); }
   function api(method, url, body, signal) {
@@ -4652,10 +4652,11 @@
     ollama: { label: "Ollama", provider: "openai-compatible", baseUrl: "http://localhost:11434/v1", key: "보통 비움", hint: "ollama serve 주소의 /v1. 인터넷 배포 서비스에서 쓰려면 외부 접속 가능한 주소가 필요합니다." },
     gemini: { label: "Gemini", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", key: "AIza… (필수)", hint: "Google AI Studio(aistudio.google.com/apikey)에서 API 키를 발급받아 넣으세요. 무료 사용량이 있는 키도 발급됩니다. 구글 계정 로그인(OAuth)이나 Gemini 구독으로는 API를 호출할 수 없어 키 방식만 지원합니다." },
     "gemini-oauth": { label: "Gemini · Google OAuth", provider: "openai-compatible", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", oauth: true, key: "", hint: "내 Google Cloud 프로젝트의 OAuth 클라이언트로 Google 계정에 로그인해 Gemini API를 호출합니다. 사용량과 요금은 그 Google Cloud 프로젝트 기준입니다(Gemini 구독 아님). 아래 준비 단계를 따라 하세요." },
-    anthropic: { label: "Claude (API 키)", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API로 바로 생성합니다(추론·스트리밍 사용, 기본 모델 claude-opus-5). 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude Pro·Max 구독 로그인은 Anthropic 정책상 다른 서비스에 연결할 수 없습니다 — 구독으로 만들려면 AI 생성 창의 ‘Claude 구독(claude.ai)으로 만들기’로 복사·붙여넣기 하세요." },
+    anthropic: { label: "Claude (API 키)", provider: "anthropic", baseUrl: "", key: "sk-ant-… (필수)", hint: "Claude API로 바로 생성합니다(추론·스트리밍 사용, 기본 모델 claude-opus-5). 주소는 비워 두면 기본 주소를 씁니다. console.anthropic.com 에서 API 키를 발급받아 넣으세요. Claude Pro·Max 구독으로 만들려면 ‘Claude 구독 토큰’ 연결(내 AI 설정)을 쓰세요." },
+    "claude-code": { label: "Claude 구독 토큰", provider: "claude-code", baseUrl: "", personal: true, key: "sk-ant-oat01-… (claude setup-token 으로 발급)", models: ["claude-opus-5-5"], hint: "Claude Pro·Max 구독으로 생성합니다. 이 서비스가 도는 서버의 Claude Code CLI(claude -p)를 내 토큰(CLAUDE_CODE_OAUTH_TOKEN)으로 실행해 모델을 부릅니다. 사용량은 내 구독 한도에서 차감됩니다." },
     custom: { label: "직접 입력", provider: "openai-compatible", baseUrl: "", key: "필요하면 입력", hint: "OpenAI 호환 /v1 주소 (vLLM, OpenRouter, Together, 사내 게이트웨이 등)" }
   };
-  var PRESET_ORDER = ["anthropic", "nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "custom"];
+  var PRESET_ORDER = ["anthropic", "claude-code", "nvidia", "gemini", "gemini-oauth", "lmstudio", "ollama", "custom"];
   var GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
   function aiBase(scope) { return scope === "project" ? "/api/projects/" + enc(P().model.project.code) + "/ai" : "/api/me/ai"; }
   function aiSetOf(scope) { return scope === "project" ? (aiCache.project || { conns: [], active: null }) : (MY_AI || { conns: [], active: null }); }
@@ -4695,8 +4696,8 @@
         var isDef = set.active && set.active.conn === c.id && set.active.model === m, key = scope + "|" + c.id + "|" + m;
         return '<li class="' + (isDef ? "on" : "") + '"><span class="mono">' + esc(m) + "</span>" + (isDef ? '<span class="pill DESIGNED">기본</span>' : manage ? actBtn("ai-default", "기본으로", key) : "") + (canTest ? actBtn("ai-test", "확인", key) : "") + "</li>";
       }).join("");
-      return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : "OpenAI 호환") + "</span>" +
-        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">' + (c.oauth ? (c.oauth.connected ? "Google 연결됨" + (c.oauth.email ? " · " + esc(c.oauth.email) : "") : '<b class="warn-t">Google 연결 필요</b>') : "키 " + (c.hasKey ? "저장됨" : "없음")) + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
+      return '<article class="box conn"><div class="conn-h"><b>' + esc(c.label) + '</b><span class="tag">' + esc(c.preset && AI_PRESETS[c.preset] ? AI_PRESETS[c.preset].label : c.provider === "anthropic" ? "Anthropic" : c.provider === "claude-code" ? "Claude 구독" : "OpenAI 호환") + "</span>" +
+        (c.baseUrl ? '<span class="hint mono">' + esc(c.baseUrl) + "</span>" : "") + '<span class="sp"></span><span class="hint">' + (c.oauth ? (c.oauth.connected ? "Google 연결됨" + (c.oauth.email ? " · " + esc(c.oauth.email) : "") : '<b class="warn-t">Google 연결 필요</b>') : (c.provider === "claude-code" ? "토큰 " : "키 ") + (c.hasKey ? "저장됨" : "없음")) + (c.maxTokens ? " · 최대 " + c.maxTokens + "토큰" : "") + "</span></div>" +
         '<ul class="models">' + models + "</ul>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-edit", "편집 · 모델 추가", scope + "|" + c.id) + actBtn("ai-conn-del", "삭제", scope + "|" + c.id, "btn-sm danger") + "</div>" : "") + "</article>";
     }).join("") + "</div>" + (manage ? '<div class="row-actions">' + actBtn("ai-conn-add", "+ 연결 추가", scope) + "</div>" : "");
   }
@@ -4727,12 +4728,12 @@
 
   // 연결 추가·편집 레이어: 종류 고르기 → 주소·키(선택) → 모델 불러오기 → 여러 개 고르기 → 저장
   function openConn(scope, conn) {
-    var preset = conn ? conn.preset || (conn.provider === "anthropic" ? "anthropic" : "custom") : "nvidia";
+    var preset = conn ? conn.preset || (conn.provider === "anthropic" ? "anthropic" : conn.provider === "claude-code" ? "claude-code" : "custom") : "nvidia";
     var ps = AI_PRESETS[preset];
     openLayer({ kind: "aiconn", ac: {
       scope: scope, id: conn ? conn.id : null, preset: preset, hasKey: conn ? conn.hasKey : false,
       label: conn ? conn.label : ps.label, baseUrl: conn ? conn.baseUrl || "" : ps.baseUrl, apiKey: "", clearKey: false, maxTokens: conn && conn.maxTokens ? String(conn.maxTokens) : "",
-      models: conn ? conn.models.slice() : ps.oauth ? [GEMINI_DEFAULT_MODEL] : [], fetched: [], filter: "", busy: false, err: "",
+      models: conn ? conn.models.slice() : ps.oauth ? [GEMINI_DEFAULT_MODEL] : (ps.models || []).slice(), fetched: [], filter: "", busy: false, err: "",
       oauth: conn && conn.oauth ? conn.oauth : null, cid: conn && conn.oauth && conn.oauth.clientId || "", csec: "", pid: conn && conn.oauth && conn.oauth.projectId || ""
     } });
   }
@@ -4753,7 +4754,7 @@
   /** 모델 불러오기 결과 — 성공/실패와 원인·해결 방법·요청 정보 */
   function acProbeBox() {
     var ac = layer.ac, r = ac.probe;
-    if (ac.busy) return '<div class="ac-probe busy" role="status"><b>불러오는 중…</b><span>최대 20초 · GET ' + esc((ac.baseUrl || "").replace(/\/$/, "") + "/models") + "</span></div>";
+    if (ac.busy) return '<div class="ac-probe busy" role="status"><b>불러오는 중…</b><span>' + (AI_PRESETS[ac.preset].provider === "claude-code" ? "서버의 Claude Code CLI 확인 중 · claude --version" : "최대 20초 · GET " + esc((ac.baseUrl || "").replace(/\/$/, "") + "/models")) + "</span></div>";
     if (!r) return "";
     var meta = [r.url ? "GET " + r.url : "", r.status ? "HTTP " + r.status : "", r.code ? r.code : "", r.ms != null ? (r.ms / 1000).toFixed(1) + "초" : ""].filter(Boolean).join(" · ");
     if (r.ok) return '<div class="ac-probe ok" role="status"><b>✓ 불러오기 성공 — 모델 ' + r.models.length + "개</b>" + (meta ? '<span class="mono">' + esc(meta) + "</span>" : "") + "<span>아래 목록에서 쓸 모델을 체크하세요.</span></div>";
@@ -4773,23 +4774,32 @@
     }).join("") + (rows.length > 300 ? '<p class="hint">' + (rows.length - 300) + "개 더 — 검색어로 좁혀 주세요</p>" : "") : '<p class="hint">' + (ac.fetched.length ? "검색 결과가 없습니다" : "‘모델 불러오기’를 누르면 이 연결에서 쓸 수 있는 모델이 나옵니다") + "</p>";
   }
   function renderConnLayer() {
-    var ac = layer.ac, ps = AI_PRESETS[ac.preset], anth = ps.provider === "anthropic";
-    var presets = '<div class="seg" role="group" aria-label="연결 종류">' + PRESET_ORDER.map(function (k) { return '<button data-acpreset="' + k + '" aria-pressed="' + (ac.preset === k) + '">' + AI_PRESETS[k].label + "</button>"; }).join("") + "</div>";
+    var ac = layer.ac, ps = AI_PRESETS[ac.preset], anth = ps.provider === "anthropic", cc = ps.provider === "claude-code";
+    var presets = '<div class="seg" role="group" aria-label="연결 종류">' + PRESET_ORDER.filter(function (k) { return ac.scope !== "project" || !AI_PRESETS[k].personal || k === ac.preset; }).map(function (k) { return '<button data-acpreset="' + k + '" aria-pressed="' + (ac.preset === k) + '">' + AI_PRESETS[k].label + "</button>"; }).join("") + "</div>";
     var chips = acChips();
     return '<header class="layer-h"><div><span class="eyebrow">' + (ac.scope === "project" ? "프로젝트 AI 연결 · 운영자" : "내 AI 연결") + '</span><h2 id="layer-t">' + (ac.id ? "연결 편집" : "연결 추가") + '</h2></div><button class="x" data-close-layer aria-label="닫기">✕</button></header>' +
-      '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" +
+      '<div class="fm ac">' + presets + '<p class="hint">' + ps.hint + "</p>" + (cc ? ccBlock(ac) : "") +
       '<div class="ac-grid"><div class="fm-row"><label for="ac-label">연결 이름</label><input id="ac-label" type="text" value="' + esc(ac.label) + '" maxlength="60"></div>' +
-      (ps.oauth ? "" : '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>' +
-      '<div class="fm-row"><label for="ac-key">API 키 ' + (anth ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 키 지우기</label>" : "") + "</div>") +
-      '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 8192)</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="8192"></div></div>' +
+      (ps.oauth ? "" : (cc ? "" : '<div class="fm-row"><label for="ac-url">API 주소' + (anth ? " (선택)" : "") + '</label><input id="ac-url" type="url" value="' + esc(ac.baseUrl) + '" placeholder="' + esc(ps.baseUrl || "https://…/v1") + '"></div>') +
+      '<div class="fm-row"><label for="ac-key">' + (cc ? "구독 토큰" : "API 키") + " " + (anth || cc ? '<em class="fm-req">필수</em>' : '<span class="hint">(선택)</span>') + '</label><input id="ac-key" type="password" autocomplete="new-password" value="' + esc(ac.apiKey) + '" placeholder="' + esc(ac.hasKey ? "저장됨 — 바꿀 때만 입력" : ps.key) + '">' + (ac.hasKey ? '<label class="fm-check"><input type="checkbox" id="ac-clear"' + (ac.clearKey ? " checked" : "") + "> 저장한 " + (cc ? "토큰" : "키") + " 지우기</label>" : "") + "</div>") +
+      '<div class="fm-row"><label for="ac-max">최대 출력 토큰 <span class="hint">(선택, 기본 ' + (cc ? "32000" : "8192") + ')</span></label><input id="ac-max" type="text" inputmode="numeric" value="' + esc(ac.maxTokens) + '" placeholder="' + (cc ? "32000" : "8192") + '"></div></div>' +
       (ps.oauth ? oauthBlock(ac) : "") +
       '<div class="ac-models"><div class="ac-mh"><b>모델</b><span class="hint">여러 개 골라 저장해 두면 드롭다운으로 바로 바꿀 수 있습니다</span><span class="sp"></span><button class="btn-sm" data-acfetch' + (ac.busy ? " disabled" : "") + ">" + (ac.busy ? "불러오는 중…" : "모델 불러오기") + "</button></div>" +
       acProbeBox() + '<div class="ac-chips" id="ac-chips">' + chips + "</div>" +
       (ac.fetched.length ? '<input id="ac-filter" type="search" placeholder="모델 검색 (예: llama, qwen, 70b)" value="' + esc(ac.filter) + '" autocomplete="off">' : "") + '<div id="ac-list" class="ac-list">' + acList() + "</div>" +
       '<div class="ac-manual"><input id="ac-manual" type="text" placeholder="목록에 없으면 모델 이름을 직접 입력" autocomplete="off"><button class="btn-sm" data-acadd>추가</button></div></div>' +
       '<p class="gen-err" role="alert"' + (ac.err ? "" : " hidden") + ">" + esc(ac.err) + "</p>" +
-      '<p class="hint">키는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다.' + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
+      '<p class="hint">' + (cc ? "토큰" : "키") + "는 서버에 암호화해 저장하고 화면에 다시 보여 주지 않습니다." + (ac.scope === "project" ? " 멤버에게는 연결 이름과 모델 이름만 보입니다." : "") + "</p></div>" +
       '<footer class="layer-f"><span class="hint" id="ac-count">고른 모델 ' + ac.models.length + '개</span><span class="sp"></span><button class="btn-sm" data-close-layer>취소</button><button class="btn-primary" data-acsave' + (ac.busy ? " disabled" : "") + ">저장</button></footer>";
+  }
+  /** Claude 구독 토큰: 발급 방법 (claude setup-token → CLAUDE_CODE_OAUTH_TOKEN) */
+  function ccBlock(ac) {
+    var cmd = "claude setup-token";
+    return '<div class="ac-oauth"><b>구독 토큰 발급</b><ol class="ac-steps">' +
+      "<li>내 PC 터미널에 Claude Code를 설치합니다 (<code class=\"mono\">npm install -g @anthropic-ai/claude-code</code>).</li>" +
+      '<li>아래 명령을 실행하면 브라우저가 열리고 Claude 계정(Pro·Max)으로 OAuth 로그인합니다.<div class="ac-uri"><code class="mono">' + cmd + '</code><button class="btn-sm" data-accopy="' + cmd + '">복사</button></div></li>' +
+      "<li>터미널에 나온 장기 토큰 <code class=\"mono\">sk-ant-oat01-…</code>을 아래 ‘구독 토큰’ 칸에 붙여 넣고 저장합니다. 서버는 호출할 때마다 이 토큰을 <code class=\"mono\">CLAUDE_CODE_OAUTH_TOKEN</code> 환경변수로 넘겨 Claude Code를 실행합니다.</li></ol>" +
+      '<p class="hint">이 서비스를 실행하는 서버에 Claude Code CLI가 설치돼 있어야 합니다(‘모델 불러오기’로 확인). 구독 토큰은 본인만 쓰는 것이 전제라 <b>내 AI 설정에만</b> 넣을 수 있고, 프로젝트 공용 연결에는 Claude API 키를 쓰세요. 토큰이 유출되면 claude.ai 설정에서 연결을 해제하고 새로 발급하세요.</p></div>';
   }
   /** Google Cloud OAuth: 준비 단계 안내, 클라이언트 정보 입력, 연결 상태 */
   function oauthBlock(ac) {
@@ -4846,6 +4856,7 @@
       if (old.provider !== ps.provider) { ac.hasKey = false; ac.fetched = []; }
       ac.preset = b.dataset.acpreset; ac.err = "";
       if (ps.oauth && !ac.models.length) ac.models = [GEMINI_DEFAULT_MODEL];
+      if (ps.models && old.provider !== ps.provider) ac.models = ps.models.slice();
       renderLayer(); return true;
     }
     if (b.hasAttribute("data-acfetch")) {

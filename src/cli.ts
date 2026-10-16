@@ -558,24 +558,26 @@ program
 
 program
   .command("serve")
-  .description("웹 서비스 실행 — 회원가입·로그인, 프로젝트 멤버 초대, 편집, AI 생성 (환경변수 PORT, HOST, PLANNING_SECRET, ANTHROPIC_API_KEY)")
+  .description("웹 서비스 실행 — 회원가입·로그인, 프로젝트 멤버 초대, 편집, AI 생성 (환경변수 PORT, HOST, PLANNING_SECRET, ANTHROPIC_API_KEY 또는 CLAUDE_CODE_OAUTH_TOKEN, PLANNING_AI_MODEL)")
   .option("--port <n>", "포트", process.env.PORT ?? "8080")
   .option("--host <h>", "주소", process.env.HOST ?? "0.0.0.0")
   .option("--closed-signup", "초대받은 이메일만 가입 (첫 가입자는 예외)")
   .action(async (o) => {
     const { root } = program.opts<{ root: string }>();
     const { createLocalApp } = await import("./server/app.js");
-    const key = process.env.ANTHROPIC_API_KEY;
+    const { serverAiFromEnv } = await import("./server/ai.js");
+    const serverAi = serverAiFromEnv();
     const app = await createLocalApp({
       root,
       secret: process.env.PLANNING_SECRET,
       openSignup: !(o.closedSignup || process.env.PLANNING_SIGNUP === "closed"),
       admins: (process.env.PLANNING_ADMINS ?? "").split(",").map((x) => x.trim()).filter(Boolean),
       secureCookie: process.env.COOKIE_SECURE === "1" ? true : undefined,
-      serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
+      serverAi,
     });
     app.server.listen(Number(o.port), o.host, () => {
       console.log(`Planning Studio 서비스: http://${o.host === "0.0.0.0" ? "localhost" : o.host}:${o.port}  (데이터: ${path.resolve(root)})`);
+      if (serverAi?.provider === "claude-code") console.log(`서버 기본 AI: Claude 구독 토큰(CLAUDE_CODE_OAUTH_TOKEN) · ${serverAi.model} — 토큰 주인 본인 사용 전제라 서비스 관리자 계정에만 적용됩니다. 다른 멤버는 내 AI 설정에 각자 토큰이나 API 키를 넣으세요.`);
       if (!process.env.PLANNING_SECRET) console.log("PLANNING_SECRET 이 없어 .service/secret.key 로 AI 키를 암호화합니다. 운영 환경에서는 환경변수로 지정하세요.");
     });
   });

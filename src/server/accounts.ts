@@ -17,13 +17,15 @@
 import { z } from "zod";
 import { decrypt, deriveKey, encrypt, hashPassword, newId, newToken, sha256, verifyPassword } from "./crypto.js";
 import type { Kv } from "./kv.js";
+import { CLAUDE_CODE_TOKEN } from "./claude-code.js";
 
 export const ROLES = ["OWNER", "EDITOR", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
 const RANK: Record<Role, number> = { VIEWER: 0, EDITOR: 1, OWNER: 2 };
 export const atLeast = (role: Role | null | undefined, need: Role) => !!role && RANK[role] >= RANK[need];
 
-export const AI_PROVIDERS = ["anthropic", "openai-compatible"] as const;
+/** claude-code: Claude 구독 토큰(‘claude setup-token’)으로 Claude Code CLI 실행 — 개인 연결 전용 */
+export const AI_PROVIDERS = ["anthropic", "openai-compatible", "claude-code"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
 
 const AiStored = z.object({
@@ -195,7 +197,7 @@ export interface AccountsOptions {
   /** 서비스 관리자 이메일 (없으면 첫 가입자만 관리자) */
   admins?: string[];
   /** 서버 기본 AI (환경변수 ANTHROPIC_API_KEY 등) — 프로젝트·개인 설정이 없을 때 */
-  serverAi?: Omit<AiResolved, "source"> | null;
+  serverAi?: (Omit<AiResolved, "source"> & { adminsOnly?: boolean }) | null;
   now?: () => Date;
 }
 
@@ -521,6 +523,12 @@ export class Accounts {
     if (input.clearKey) keyEnc = undefined;
     if (!isG && input.apiKey && String(input.apiKey).trim()) keyEnc = encrypt(this.key, String(input.apiKey).trim());
     if (provider === "anthropic" && !keyEnc) throw new HttpError(400, "Anthropic은 API 키가 필요합니다");
+    if (provider === "claude-code") {
+      // 구독 토큰은 토큰 주인 본인 사용이 전제 — 여러 멤버가 함께 쓰는 프로젝트 연결에는 넣지 않는다
+      if (scope === "project") throw new HttpError(400, "Claude 구독 토큰은 내 계정의 AI 설정(개인 연결)에만 넣을 수 있습니다. 프로젝트 공용 연결에는 Claude API 키를 쓰세요");
+      if (input.apiKey && String(input.apiKey).trim() && !CLAUDE_CODE_TOKEN.test(String(input.apiKey).trim())) throw new HttpError(400, "Claude 구독 토큰 형식이 아닙니다. 터미널에서 ‘claude setup-token’을 실행해 받은 sk-ant-oat01-… 토큰을 넣으세요");
+      if (!keyEnc) throw new HttpError(400, "Claude 구독 토큰이 필요합니다 (‘claude setup-token’으로 발급한 sk-ant-oat01-…)");
+    }
     const models = [...new Set((input.models ?? []).map((m) => String(m).trim()).filter(Boolean))].slice(0, 50).map((m) => m.slice(0, 200));
     if (!models.length) throw new HttpError(400, "모델을 하나 이상 고르거나 입력하세요");
     const mt = input.maxTokens === null || input.maxTokens === "" || input.maxTokens === undefined ? undefined : Number(input.maxTokens);
@@ -638,7 +646,18 @@ export class Accounts {
       const r = use(personal, personal.active, "personal");
       if (r) return r;
     }
-    return use(proj, proj.active, "project") ?? use(personal, personal.active, "personal") ?? (this.opts.serverAi ? { source: "server", ...this.opts.serverAi, label: "서버 기본" } : null);
+    return use(proj, proj.active, "project") ?? use(personal, personal.active, "personal") ?? (await this.serverAiFor(userId));
+  }
+  /** 서버 기본 AI — 구독 토큰(adminsOnly)은 토큰 주인인 서비스 관리자에게만 쓴다 */
+  async serverAiFor(userId: string): Promise<AiResolved | null> {
+    const s = this.opts.serverAi;
+    if (!s) return null;
+    const { adminsOnly, ...cfg } = s;
+    if (adminsOnly) {
+      const u = await this.getUser(userId);
+      if (!u || !(await this.isAdmin(u))) return null;
+    }
+    return { source: "server", ...cfg, label: "서버 기본" };
   }
   /** 어떤 연결·모델이 쓰이는지 (비밀값 없이) */
   async aiSource(project: string | null, userId: string) {

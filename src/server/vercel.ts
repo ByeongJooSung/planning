@@ -6,6 +6,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { serverAiFromEnv } from "./ai.js";
 import { createApp, type Handler } from "./app.js";
 import { newToken } from "./crypto.js";
 import { UpstashKv, type Kv } from "./kv.js";
@@ -30,7 +31,6 @@ async function secretOf(kv: Kv): Promise<string> {
 async function build(): Promise<Handler> {
   const kv = UpstashKv.fromEnv()!;
   const repo = new KvRepo(kv);
-  const key = process.env.ANTHROPIC_API_KEY;
   const { handle } = await createApp({
     kv,
     repo,
@@ -38,7 +38,8 @@ async function build(): Promise<Handler> {
     openSignup: process.env.PLANNING_SIGNUP !== "closed",
     admins: (process.env.PLANNING_ADMINS ?? "").split(",").map((x) => x.trim()).filter(Boolean),
     maxUploadMb: 3, // Vercel 함수 요청 본문 한도 4.5MB (base64 포함)
-    serverAi: key ? { provider: "anthropic", model: process.env.PLANNING_AI_MODEL ?? "claude-opus-5", apiKey: key } : null,
+    // 서버리스에는 Claude Code CLI 가 없어 구독 토큰은 쓰지 않는다
+    serverAi: serverAiFromEnv(process.env, { claudeCode: false }),
     init: async () => {
       // 저장소가 비어 있으면 샘플 프로젝트를 한 번 넣는다 (첫 가입자가 운영자가 된다)
       if (process.env.SEED_EXAMPLES === "0") return;
